@@ -32,7 +32,7 @@ local FLOWER_COLORS = {
 
 local WORLD_HALF_LENGTH = 300 -- along Z, past the furthest bay slot
 local FENCE_X = 62 -- picket fences either side of the bay strip
-local ROAD_X = -30 -- the entrance side: animals walk in along this road
+local ROAD_X = GameConfig.RoadX -- the entrance side: animals walk in along this road
 
 local rng = Random.new(20261022)
 local folder: Folder
@@ -139,7 +139,7 @@ end
 local function buildRoad()
 	part({
 		Name = "Road",
-		Size = Vector3.new(9, 0.2, WORLD_HALF_LENGTH * 2),
+		Size = Vector3.new(GameConfig.RoadWidth, 0.2, WORLD_HALF_LENGTH * 2),
 		Position = Vector3.new(ROAD_X, 0.1, 0),
 		Color = ROAD,
 		Material = Enum.Material.Ground,
@@ -288,8 +288,8 @@ local function buildGapDecor()
 	end
 	local z = -WORLD_HALF_LENGTH + 10
 	while z < WORLD_HALF_LENGTH - 10 do
-		if not insideBaySlot(ROAD_X - 9, z, 2) then
-			hayBale(Vector3.new(ROAD_X - 8.5, 0, z), rng:NextNumber(0, math.pi))
+		if not insideBaySlot(ROAD_X - 7, z, 2) then
+			hayBale(Vector3.new(ROAD_X - 6.5, 0, z), rng:NextNumber(0, math.pi))
 		end
 		z += rng:NextNumber(18, 32)
 	end

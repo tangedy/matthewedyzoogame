@@ -103,7 +103,12 @@ export type NameplateInfo = {
 }
 
 local function hex(color: Color3): string
-	return string.format("#%02X%02X%02X", math.round(color.R * 255), math.round(color.G * 255), math.round(color.B * 255))
+	return string.format(
+		"#%02X%02X%02X",
+		math.round(color.R * 255),
+		math.round(color.G * 255),
+		math.round(color.B * 255)
+	)
 end
 
 local function escapeRich(text: string): string

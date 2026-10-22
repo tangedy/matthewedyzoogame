@@ -94,7 +94,8 @@ local function refresh()
 	if nextTool then
 		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextTool.Name}`
-		gainLabel.Text = `Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){unlocksText(nextTool.Tier)}`
+		gainLabel.Text =
+			`Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){unlocksText(nextTool.Tier)}`
 		buyButton.Visible = true
 		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
 		local affordable = coins >= nextTool.Price

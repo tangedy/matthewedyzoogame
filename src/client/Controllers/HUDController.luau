@@ -21,7 +21,7 @@ local HUDController = {}
 local BAR_COLOR = Color3.fromRGB(90, 200, 255)
 local BAR_DONE_COLOR = Color3.fromRGB(90, 255, 90)
 
-local PROGRESS_HEIGHT = 46
+local PROGRESS_HEIGHT = 74 -- clean bar, reward line, then the Tension patience row (y 50)
 
 local gui: ScreenGui
 local cashLabel: TextLabel
@@ -450,8 +450,8 @@ function HUDController.init(initial: Types.InitialState)
 			barStroke.Color = Color3.new(0, 0, 0):Lerp(Color3.fromRGB(255, 255, 255), pulse * 0.35)
 		end
 	end)
-	Remotes.event("WashCompleted").OnClientEvent:Connect(
-		function(jobId: string, reward: number, coins: number, discoveryBonus: number?)
+	Remotes.event("WashCompleted").OnClientEvent
+		:Connect(function(jobId: string, reward: number, coins: number, discoveryBonus: number?)
 			if jobId == currentJobId then
 				setProgress(1, true)
 			end
@@ -459,8 +459,7 @@ function HUDController.init(initial: Types.InitialState)
 			cashLabel.Text = UIStyle.formatMoney(coins)
 			playPayout(reward, discoveryBonus or 0)
 			refreshToast()
-		end
-	)
+		end)
 end
 
 return HUDController

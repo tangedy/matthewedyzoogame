@@ -79,7 +79,14 @@ local function ensureStand(bay: Model): Model?
 	stand.Name = "AutoCollectStand"
 	local base = floor.Position + Vector3.new(-floor.Size.X / 2 - 6, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
 
-	local function kiosk(name: string, promptName: string, title: string, price: string, color: Color3, offset: Vector3): BasePart
+	local function kiosk(
+		name: string,
+		promptName: string,
+		title: string,
+		price: string,
+		color: Color3,
+		offset: Vector3
+	): BasePart
 		local counter = Instance.new("Part")
 		counter.Name = name
 		counter.Anchored = true
@@ -114,8 +121,22 @@ local function ensureStand(bay: Model): Model?
 		return counter
 	end
 
-	kiosk("TimedCounter", "TimedPrompt", "2 HOURS", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.new(0, 0, -4.2))
-	kiosk("ForeverCounter", "ForeverPrompt", "FOREVER", `{pass.Robux} ROBUX`, Color3.fromRGB(230, 170, 40), Vector3.new(0, 0, 4.2))
+	kiosk(
+		"TimedCounter",
+		"TimedPrompt",
+		"2 HOURS",
+		`{product.Robux} ROBUX`,
+		Color3.fromRGB(70, 190, 90),
+		Vector3.new(0, 0, -4.2)
+	)
+	kiosk(
+		"ForeverCounter",
+		"ForeverPrompt",
+		"FOREVER",
+		`{pass.Robux} ROBUX`,
+		Color3.fromRGB(230, 170, 40),
+		Vector3.new(0, 0, 4.2)
+	)
 	stand.Parent = zoo
 	return stand
 end
@@ -278,6 +299,19 @@ local function buyProduct(player: Player, product: Product)
 	if product.Kind == "AutoCollect" and MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey) then
 		MonetizationState.notify(player, "You already own Auto-Collect Forever!", false)
 		return
+	end
+	if product.Kind == "Truck" then
+		-- Only while the truck is parked at their zoo; remember exactly what they're buying, so a
+		-- receipt that lands after the truck drives off still delivers that animal.
+		local data = PlayerDataService.get(player)
+		local truck = data and data.Extra.Truck
+		local offer = if typeof(truck) == "table" then truck.Offer else nil
+		if typeof(offer) ~= "table" or (tonumber(offer.Expires) or 0) < os.time() then
+			MonetizationState.notify(player, "The delivery truck has already left!", false)
+			return
+		end
+		truck.Bought = { Species = offer.Species, Mutation = offer.Mutation }
+		PlayerDataService.markDirty(player)
 	end
 	if product.Kind == "Limited" then
 		if not (product.Species and AnimalConfig.Animals[product.Species]) then
@@ -483,6 +517,13 @@ local function connectHooks()
 	end)
 
 	-- From the Tension feature, once per wash when patience drops under 20%.
+	-- The delivery truck's prompt (DeliveryTruck feature) asks to buy its animal.
+	Hooks.on("TruckBuyRequested", function(player: Player)
+		local product = MonetizationConfig.ProductsByKey.TruckAnimal
+		if product then
+			buyProduct(player, product)
+		end
+	end)
 	Hooks.on("PatienceLow", function(player: any, _jobId: any, _fraction: any)
 		if isPlayer(player) then
 			offer(player, "CalmTreat", "CalmTreat")

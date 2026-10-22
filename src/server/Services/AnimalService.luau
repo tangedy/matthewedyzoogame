@@ -121,17 +121,23 @@ function AnimalService.buildZooAnimal(animalKey: string, mutationKey: string): M
 	return model
 end
 
--- A small copy of the animal riding above the carrier's head, welded so it follows them.
-function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, head: BasePart): Model
+-- The animal in the player's left hand at full size, tipped nose-up at Cache.CarryTilt degrees,
+-- its rear resting at the hand. Welded to the root part (not the hand) so the walk animation
+-- doesn't swing a cow around.
+function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, hand: BasePart): Model
 	local model = AnimalService.buildZooAnimal(animalKey, mutationKey)
 	model.Name = "CarriedAnimal"
-	local _, size = model:GetBoundingBox()
-	local largest = math.max(size.X, size.Y, size.Z)
-	if largest > GameConfig.Cache.CarryMaxSize then
-		model:ScaleTo(GameConfig.Cache.CarryMaxSize / largest)
-	end
+	local character = hand.Parent :: Model
+	local anchor = (character:FindFirstChild("HumanoidRootPart") or hand) :: BasePart
 	local root = model.PrimaryPart :: BasePart
-	model:PivotTo(head.CFrame * CFrame.new(0, head.Size.Y / 2 + 0.3, 0))
+
+	local boxCFrame, size = model:GetBoundingBox()
+	local center = model:GetPivot():PointToObjectSpace(boxCFrame.Position)
+	local rear = center + Vector3.new(0, -size.Y / 2, size.Z / 2) -- rear-bottom, model space (faces -Z)
+	local grip = anchor.CFrame * CFrame.new(-1.6, -0.6, -1.2) -- where the left hand holds it
+	local tilt = CFrame.Angles(math.rad(GameConfig.Cache.CarryTilt), 0, 0)
+	model:PivotTo(CFrame.new(grip.Position) * anchor.CFrame.Rotation * tilt * CFrame.new(-rear))
+
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.Anchored = false
@@ -148,10 +154,10 @@ function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, h
 		end
 	end
 	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = head
+	weld.Part0 = anchor
 	weld.Part1 = root
 	weld.Parent = root
-	model.Parent = head.Parent
+	model.Parent = character
 	return model
 end
 

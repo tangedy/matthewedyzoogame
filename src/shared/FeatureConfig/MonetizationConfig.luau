@@ -15,7 +15,7 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck"
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	Seconds: number?, -- AutoCollect: play-time added per purchase
 	Color: Color3,
@@ -178,6 +178,18 @@ local products: { Product } = {
 		Kind = "CleanNow",
 		Color = GOLD,
 		Hidden = true,
+	},
+	{
+		Key = "TruckAnimal",
+		Id = 0,
+		Robux = 200,
+		DisplayName = "Delivery Truck Animal",
+		Description = "The high-rarity animal on the delivery truck parked at your zoo.",
+		Tab = "Boosts",
+		Order = 98,
+		Kind = "Truck",
+		Color = GOLD,
+		Hidden = true, -- sold from the truck's prompt (DeliveryTruck feature), not a shop card
 	},
 	{
 		Key = "LimitedAxolotl",

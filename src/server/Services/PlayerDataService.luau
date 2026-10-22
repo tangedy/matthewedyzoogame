@@ -28,6 +28,7 @@ export type CachedAnimal = {
 	Id: string,
 	Species: string,
 	Mutation: string,
+	Paid: boolean?, -- bought with Robux (truck, limited): never pushed out of the cache
 }
 
 export type OwnedAnimal = {
@@ -235,12 +236,18 @@ local function sanitize(raw: any): SavedData
 
 	if typeof(raw.Cache) == "table" then
 		for _, animal in raw.Cache do
-			if #data.Cache >= GameConfig.Cache.Slots then
+			-- One extra: an animal that was being carried when the player left is still listed.
+			if #data.Cache >= GameConfig.Cache.Slots + 1 then
 				break
 			end
 			local species, mutation = validAnimal(animal)
 			if species and mutation then
-				table.insert(data.Cache, { Id = animal.Id, Species = species, Mutation = mutation })
+				table.insert(data.Cache, {
+					Id = animal.Id,
+					Species = species,
+					Mutation = mutation,
+					Paid = if animal.Paid == true then true else nil,
+				})
 			end
 		end
 	end
@@ -248,7 +255,8 @@ local function sanitize(raw: any): SavedData
 	-- Guide and clean-power teases. Missing fields (saves from before they existed) follow
 	-- progress already on the profile, so a zoo that's underway doesn't replay the arrows
 	-- or get a surprise 10th-animal Legendary.
-	local guideSteps = { Wash = true, Pickup = true, Place = true, Collect = true, Upgrade = true, Repeat = true, Done = true }
+	local guideSteps =
+		{ Wash = true, Pickup = true, Place = true, Collect = true, Upgrade = true, Repeat = true, Done = true }
 	if guideSteps[raw.GuideStep] then
 		data.GuideStep = raw.GuideStep
 	else

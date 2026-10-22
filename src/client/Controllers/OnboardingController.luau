@@ -1,5 +1,5 @@
 -- Contextual onboarding, fired by triggers instead of up-front menus:
---   * First cycle: a rainbow trail of arrows on the ground — wash, pick up, stable, collect,
+--   * First cycle: a trail of arrows on the ground — wash, pick up, stable, collect,
 --     hose stand, then back to the next animal. The server remembers the step.
 --   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
 --   * Empty zoo: "Pick me up!" over the cache, then "Place here!" over the first pen while
@@ -25,14 +25,8 @@ local OnboardingController = {}
 local FONT = UIStyle.Font
 local BANNER_SECONDS = 7
 
-local GUIDE_TEXT = {
-	Wash = "Follow the arrows — wash the animal!",
-	Pickup = "Follow the arrows — pick up your animal!",
-	Place = "Follow the arrows — bring it to your stable!",
-	Collect = "Follow the arrows — collect the cash!",
-	Upgrade = "Follow the arrows — check hose upgrades!",
-	Repeat = "Follow the arrows — wash the next one!",
-}
+local ARROW_COLOR = Color3.fromRGB(255, 205, 40)
+local ARROW_GLOW = Color3.fromRGB(255, 255, 220)
 
 local ARROW_COUNT = 14
 local ARROW_SPACING = 3.6
@@ -57,7 +51,6 @@ local zooCount = 0
 local cacheCount = 0
 local carrying = false
 local bannerToken = 0
-local guideLabel: TextLabel
 local trailFolder: Folder
 type GuideArrow = { Parts: { BasePart }, Offsets: { CFrame } }
 
@@ -101,8 +94,8 @@ local function hideArrow(arrow: GuideArrow)
 	end
 end
 
--- A chevron head (two blades meeting at a point) plus a narrow tail, flat on the ground.
--- lookAt faces the point, so the arrow aims along the trail.
+-- A chevron head (two blades meeting at the tip, -Z) plus a short tail, flat on the ground.
+-- The arrow's CFrame looks along the trail, so the tip points at the target.
 local function makeArrow(parent: Instance): GuideArrow
 	local arrow: GuideArrow = { Parts = {}, Offsets = {} }
 	local function piece(size: Vector3, offset: CFrame)
@@ -119,16 +112,17 @@ local function makeArrow(parent: Instance): GuideArrow
 		table.insert(arrow.Parts, created)
 		table.insert(arrow.Offsets, offset)
 	end
-	local angle = math.rad(36)
-	local length = 1.7
+	local angle = math.rad(40)
+	local length = 1.9
 	local half = length / 2
-	local tip = -0.95
-	local blade = Vector3.new(0.55, 0.12, length)
+	local tip = -1.0
+	local blade = Vector3.new(0.6, 0.14, length)
 	local flank = math.sin(angle) * half
 	local along = tip + math.cos(angle) * half
-	piece(blade, CFrame.new(-flank, 0, along) * CFrame.Angles(0, angle, 0))
-	piece(blade, CFrame.new(flank, 0, along) * CFrame.Angles(0, -angle, 0))
-	piece(Vector3.new(0.28, 0.12, 1.05), CFrame.new(0, 0, 0.78))
+	-- Each blade runs from the tip back and outward: the left one is turned -angle, the right +angle.
+	piece(blade, CFrame.new(-flank, 0, along) * CFrame.Angles(0, -angle, 0))
+	piece(blade, CFrame.new(flank, 0, along) * CFrame.Angles(0, angle, 0))
+	piece(Vector3.new(0.42, 0.14, 1.1), CFrame.new(0, 0, along + 0.55))
 	return arrow
 end
 
@@ -215,7 +209,8 @@ local function updateTrail()
 		table.insert(ignore, animal)
 	end
 	params.FilterDescendantsInstances = ignore
-	local hueShift = os.clock() * 0.18
+	-- A bright pulse runs along the trail toward the target.
+	local wave = (os.clock() * 6) % (count + 3)
 	for i = 1, ARROW_COUNT do
 		local arrow = arrows[i]
 		if i > count then
@@ -229,7 +224,8 @@ local function updateTrail()
 		local bob = math.sin(os.clock() * 3 + i * 0.7) * 0.05
 		local pos = Vector3.new(point.X, y + 0.14 + bob, point.Z)
 		local cf = CFrame.lookAt(pos, pos + direction)
-		local color = Color3.fromHSV((i / count + hueShift) % 1, 0.85, 1)
+		local glow = math.max(0, 1 - math.abs(i - wave) / 1.5)
+		local color = ARROW_COLOR:Lerp(ARROW_GLOW, glow)
 		for index, piece in arrow.Parts do
 			piece.CFrame = cf * arrow.Offsets[index]
 			piece.Color = color
@@ -240,11 +236,6 @@ end
 
 local function applyGuide(step: string)
 	guideStep = step
-	local text = GUIDE_TEXT[step]
-	if guideLabel then
-		guideLabel.Visible = text ~= nil
-		guideLabel.Text = text or ""
-	end
 	if step ~= "Upgrade" then
 		nextAdvanceAt = 0
 	end
@@ -277,8 +268,6 @@ local function showBanner(text: string)
 end
 
 local function hideShopHint()
-	stationMarker.Enabled = false
-	stationMarker.Adornee = nil :: any
 	banner.Visible = false
 	bannerToken += 1
 end
@@ -289,14 +278,7 @@ local function checkShopHint()
 		return
 	end
 	shopHintShownForTier[tier] = true
-	local bay = bayModel()
-	local station = bay and bay:FindFirstChild("UpgradeStation")
-	local counter = station and station:FindFirstChild("Counter")
-	if counter and counter:IsA("BasePart") then
-		stationMarker.Adornee = counter
-		stationMarker.Enabled = true
-	end
-	showBanner(`You can afford the {nextTool.Name}! Visit the HOSE UPGRADES stand.`)
+	showBanner(`You can afford the {nextTool.Name}! Visit the UPGRADE stand.`)
 end
 
 -- Until the first animal is in a pen: point at the cache, then at pen 1 while carrying.
@@ -360,14 +342,6 @@ local function buildGui()
 	pad.PaddingBottom = UDim.new(0, 6)
 	pad.Parent = banner
 
-	guideLabel = banner:Clone()
-	guideLabel.Name = "Guide"
-	guideLabel.Position = UDim2.new(0.5, 0, 0, 248)
-	guideLabel.AnchorPoint = Vector2.new(0.5, 0)
-	guideLabel.BackgroundColor3 = Color3.fromRGB(255, 120, 190)
-	guideLabel.Visible = false
-	guideLabel.Parent = gui
-
 	trailFolder = Instance.new("Folder")
 	trailFolder.Name = "GuideTrail"
 	trailFolder.Parent = Workspace
@@ -376,7 +350,7 @@ local function buildGui()
 	end
 
 	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
-	stationMarker = makeMarker("Upgrade!", Color3.fromRGB(255, 220, 90))
+	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
 	cacheMarker = makeMarker("Pick me up!", Color3.fromRGB(110, 200, 255))
 	penMarker = makeMarker("Place here!", Color3.fromRGB(90, 255, 90))
 end
@@ -438,6 +412,14 @@ function OnboardingController.init(initial: Types.InitialState)
 		local bob = Vector3.new(0, 4 + math.sin(os.clock() * 4) * 0.4, 0)
 		animalMarker.StudsOffset = bob
 		stationMarker.StudsOffset = bob + Vector3.new(0, 2, 0)
+		-- Always over your own upgrade stand (the stand has no static sign).
+		if not stationMarker.Adornee or not stationMarker.Adornee:IsDescendantOf(Workspace) then
+			local bay = bayModel()
+			local station = bay and bay:FindFirstChild("UpgradeStation")
+			local counter = station and station:FindFirstChild("Counter")
+			stationMarker.Adornee = if counter and counter:IsA("BasePart") then counter else nil :: any
+			stationMarker.Enabled = stationMarker.Adornee ~= nil
+		end
 		cacheMarker.StudsOffset = bob + Vector3.new(0, 3, 0)
 		penMarker.StudsOffset = bob
 		updateTrail()

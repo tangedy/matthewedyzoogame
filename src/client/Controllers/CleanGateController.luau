@@ -64,7 +64,11 @@ local function refresh()
 	local rarity = RarityConfig.ByKey[rarityKey]
 	local name = if rarity then rarity.DisplayName else rarityKey
 	title.Text = `{name} is too dirty!`
-	title.TextColor3 = if not rarity or rarity.Key == "Secret" or rarity.Rainbow then Color3.new(1, 1, 1) else rarity.Color
+	title.TextColor3 = if not rarity
+			or rarity.Key == "Secret"
+			or rarity.Rainbow
+		then Color3.new(1, 1, 1)
+		else rarity.Color
 	local need = CleanPower.required(rarityKey)
 	local have = hosePower()
 	local hose = CleanPower.hoseName(rarityKey)
@@ -125,7 +129,8 @@ local function build()
 	body.TextSize = 18
 
 	local leave = button("Let it go", Color3.fromRGB(88, 98, 120), Color3.new(1, 1, 1), 0.27)
-	local clean = button(`Clean Now · {product.Robux} R$`, Color3.fromRGB(255, 196, 48), Color3.fromRGB(40, 28, 8), 0.73)
+	local clean =
+		button(`Clean Now · {product.Robux} R$`, Color3.fromRGB(255, 196, 48), Color3.fromRGB(40, 28, 8), 0.73)
 	leave.Activated:Connect(function()
 		if os.clock() < nextClickAt then
 			return

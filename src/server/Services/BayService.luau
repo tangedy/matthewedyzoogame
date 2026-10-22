@@ -1,8 +1,8 @@
 -- Bay assignment, ownership, and the per-bay animal lifecycle:
---   [CacheFull ->] Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
+--   Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
 -- Bays are built when a player is given a slot and destroyed when they leave. After a wash
--- the animal walks into the bay's cache (Departing). While the cache is full, no new animal
--- walks in (CacheFull) until the owner places or sells one.
+-- the animal walks into the bay's one-slot cache (Departing). An animal still waiting there
+-- leaves when the next wash finishes, so the line never stops.
 --
 -- BayService owns job state. Each owned bay runs one thread that walks the state machine;
 -- releasing the bay cancels that thread and disposes of whatever the job left behind.
@@ -119,14 +119,6 @@ local function announce(owner: Player, animalKey: string, mutationKey: string)
 end
 
 local function runOneJob(bay: Bay, owner: Player)
-	-- Hold the line while the cache is full; the owner has to place or sell first.
-	if not ZooService.cacheHasRoom(owner) then
-		setState(bay, "CacheFull")
-		while not ZooService.cacheHasRoom(owner) do
-			task.wait(0.5)
-		end
-	end
-
 	setState(bay, "Empty")
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
@@ -221,23 +213,17 @@ local function runOneJob(bay: Bay, owner: Player)
 		end
 		if EconomyService.awardWash(owner, job.Reward + bonus) then
 			local updated = EconomyService.getProfile(owner)
-			washCompleted:FireClient(
-				owner,
-				jobId,
-				job.Reward + bonus,
-				if updated then updated.Coins else 0,
-				bonus
-			)
+			washCompleted:FireClient(owner, jobId, job.Reward + bonus, if updated then updated.Coins else 0, bonus)
 		end
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
 		GuideService.onWashCompleted(owner)
 	end
 	AnimalService.celebrate(model)
 
-	-- Walk into the cache. Room was checked before this animal walked in, and only this
-	-- thread adds to the cache, so it still fits.
+	-- Walk into the cache. The animal still waiting there (if any) leaves to make room,
+	-- unless it was bought with Robux, in which case this one walks off instead.
 	setState(bay, "Departing")
-	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey)
+	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey, { Evict = true })
 	if record and slot then
 		local pos = model:GetPivot().Position
 		local facing = (slot.Position - pos) * Vector3.new(1, 0, 1)
