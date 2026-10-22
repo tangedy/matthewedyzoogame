@@ -1,7 +1,6 @@
 -- Zoo client side:
 --   * keeps other players' pen/cache/expand prompts out of reach (only your bay's work),
---   * shows what you're carrying and what to do with it,
---   * nudges you when the cache is full,
+--   * shows what you're carrying, with Put Down / Sell buttons (Q / X on keyboard),
 --   * animates every rainbow label (Zoo God tier, Rainbow mutation).
 
 local CollectionService = game:GetService("CollectionService")
@@ -9,6 +8,7 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -25,6 +25,7 @@ local OWN_PROMPTS = {
 	PickupPrompt = 10,
 	SellPrompt = 10,
 	ExpandPrompt = 10,
+	TruckPrompt = 12, -- the delivery truck parks under your bay model
 }
 
 local myBay: string? = nil
@@ -34,6 +35,8 @@ local carryName: TextLabel
 local carryRarity: TextLabel
 local carryHint: TextLabel
 local cacheHint: TextLabel
+local carrySellButton: TextButton
+local carryAction = Remotes.event("CarryAction")
 local touchCluster: Frame
 local pickupButton: TextButton
 local pickupLabel: TextLabel
@@ -82,7 +85,7 @@ local function buildGui()
 	carryBanner = Instance.new("Frame")
 	carryBanner.AnchorPoint = Vector2.new(0.5, 1)
 	carryBanner.Position = UDim2.new(0.5, 0, 1, -190)
-	carryBanner.Size = UDim2.fromOffset(420, 96)
+	carryBanner.Size = UDim2.fromOffset(420, 150)
 	carryBanner.BackgroundTransparency = 1
 	carryBanner.Visible = false
 	carryBanner.Parent = gui
@@ -105,6 +108,39 @@ local function buildGui()
 	carryHint = line(4, 22)
 	carryHint.TextColor3 = Color3.fromRGB(255, 230, 120)
 	carryHint.Text = "Take it to a pen: Place or Swap"
+
+	-- Or decide right here: put it back in the cache, or sell it.
+	local row = Instance.new("Frame")
+	row.LayoutOrder = 5
+	row.Size = UDim2.new(1, 0, 0, 52)
+	row.BackgroundTransparency = 1
+	row.Parent = carryBanner
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	rowLayout.Padding = UDim.new(0, 12)
+	rowLayout.Parent = row
+	local function carryButton(text: string, color: Color3, action: string): TextButton
+		local button = Instance.new("TextButton")
+		button.Size = UDim2.fromOffset(170, 44)
+		button.BackgroundColor3 = color
+		button.AutoButtonColor = true
+		button.Parent = row
+		UIStyle.text(button)
+		UIStyle.border(button, 3)
+		button.Text = text
+		local pad = Instance.new("UIPadding")
+		pad.PaddingTop = UDim.new(0, 6)
+		pad.PaddingBottom = UDim.new(0, 6)
+		pad.Parent = button
+		button.Activated:Connect(function()
+			carryAction:FireServer(action)
+		end)
+		return button
+	end
+	carryButton("PUT DOWN", Color3.fromRGB(80, 160, 255), "drop")
+	carrySellButton = carryButton("SELL", Color3.fromRGB(255, 120, 60), "sell")
 
 	cacheHint = Instance.new("TextLabel")
 	cacheHint.AnchorPoint = Vector2.new(0.5, 1)
@@ -324,6 +360,7 @@ local function onCarry(info: Types.CarryInfo?)
 	if info then
 		carryName.Text = info.Label
 		UIStyle.rarity(carryRarity, info.Rarity)
+		carrySellButton.Text = "SELL " .. UIStyle.formatMoney(info.SellValue or 0)
 		carryBanner.Visible = true
 		cacheHint.Visible = false
 	else
@@ -340,13 +377,7 @@ local function onBay(bay: Types.BaySnapshot?)
 		myBay = bay.BayName
 		applyAllPrompts()
 	end
-	local holding = carryBanner.Visible
-	cacheHint.Visible = bay.State == "CacheFull" and not holding
-	if cacheHint.Visible then
-		cacheHint.Text = if touchMode
-			then "Cache full! Pick up an animal and put it in a pen, or hold Sell."
-			else "Cache full! Pick up an animal (E) and put it in a pen, or hold F to sell."
-	end
+	cacheHint.Visible = false
 end
 
 function ZooController.init(initial: Types.InitialState)
@@ -372,7 +403,10 @@ function ZooController.init(initial: Types.InitialState)
 		if input.UserInputState ~= Enum.UserInputState.Begin then
 			return
 		end
-		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		if
+			input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1
+		then
 			return
 		end
 		local prompt = activeSell
@@ -385,7 +419,10 @@ function ZooController.init(initial: Types.InitialState)
 		prompt:InputHoldBegin()
 	end)
 	sellButton.InputEnded:Connect(function(input: InputObject)
-		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		if
+			input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1
+		then
 			return
 		end
 		releaseSell()
@@ -415,6 +452,16 @@ function ZooController.init(initial: Types.InitialState)
 	end)
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(onBay)
 	Remotes.event("CarryChanged").OnClientEvent:Connect(onCarry)
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or not carryBanner.Visible then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Q then
+			carryAction:FireServer("drop")
+		elseif input.KeyCode == Enum.KeyCode.X then
+			carryAction:FireServer("sell")
+		end
+	end)
 
 	ProximityPromptService.PromptShown:Connect(function(prompt: ProximityPrompt)
 		if touchMode and cachePrompt(prompt) then

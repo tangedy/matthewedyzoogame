@@ -183,7 +183,17 @@ end
 function VariantBanner.start(gui: ScreenGui)
 	build(gui)
 	folder = ReplicatedStorage:WaitForChild("LiveOpsState")
-	for _, name in { "VariantEventTitle", "VariantEventEndsAt", "VariantEventNextTitle", "VariantEventNextAt", "MudStormActive", "MudStormEndsAt", "MudStormNextAt" } do
+	for _, name in
+		{
+			"VariantEventTitle",
+			"VariantEventEndsAt",
+			"VariantEventNextTitle",
+			"VariantEventNextAt",
+			"MudStormActive",
+			"MudStormEndsAt",
+			"MudStormNextAt",
+		}
+	do
 		folder:GetAttributeChangedSignal(name):Connect(refresh)
 	end
 	refresh()

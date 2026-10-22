@@ -132,7 +132,7 @@ local function buildUpgradeStation(base: Vector3, parent: Instance)
 			Parent = station,
 		})
 	end
-	billboardLabel(counter, "HOSE UPGRADES", Vector3.new(0, 6.5, 0), Vector2.new(200, 40))
+	-- No static sign: the owner's client floats a bobbing "UPGRADE!" over this counter.
 	local prompt = makePrompt("UpgradePrompt", "Upgrade Hose", 0, counter)
 	prompt.ObjectText = "Hose Shop"
 
@@ -255,7 +255,7 @@ local function buildZoo(center: Vector3, padTop: number, bay: Model)
 		if stroke then
 			stroke.Thickness = 1.25
 		end
-		;(status.Parent :: Instance).Name = "Status"
+		(status.Parent :: Instance).Name = "Status"
 		pen.Parent = zoo
 	end
 
@@ -318,7 +318,7 @@ function WorldBuilder.buildBay(index: number): Model
 		local pos = Vector3.new(center.X + x, padTop, center.Z)
 		return CFrame.lookAt(pos, pos + Vector3.xAxis)
 	end
-	makeMarker("Entrance", laneCFrame(-halfLength - 6), bay)
+	makeMarker("Entrance", laneCFrame(GameConfig.RoadX - center.X), bay) -- on the road
 	makeMarker("WashPosition", laneCFrame(0), bay)
 	makeMarker("Exit", laneCFrame(halfLength + 6), bay)
 

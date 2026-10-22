@@ -64,7 +64,11 @@ local function refresh()
 	local rarity = RarityConfig.ByKey[rarityKey]
 	local name = if rarity then rarity.DisplayName else rarityKey
 	title.Text = `{name} is too dirty!`
-	title.TextColor3 = if not rarity or rarity.Key == "Secret" or rarity.Rainbow then Color3.new(1, 1, 1) else rarity.Color
+	title.TextColor3 = if not rarity
+			or rarity.Key == "Secret"
+			or rarity.Rainbow
+		then Color3.new(1, 1, 1)
+		else rarity.Color
 	local have = hosePower()
 	local need = CleanPower.required(rarityKey)
 	local hose = CleanPower.hoseName(rarityKey)
@@ -74,9 +78,7 @@ local function refresh()
 	cleanButton.Text = `Clean Now · {offer.Robux} R$`
 	local powerLine = `Needs {CleanPower.format(need)} clean power. Your hose has {CleanPower.format(have)}.`
 	local above = if steps == 1 then "1 rarity above" else `{steps} rarities above`
-	local priceLine = if steps > 0
-		then `\n{above} the next one you can't wash, so this is {offer.Robux} R$.`
-		else ""
+	local priceLine = if steps > 0 then `\n{above} the next one you can't wash, so this is {offer.Robux} R$.` else ""
 	if hose then
 		body.Text = `{powerLine}\nThe {hose} can wash this. Let it go, or clean it now.{priceLine}`
 	else

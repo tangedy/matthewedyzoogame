@@ -27,11 +27,13 @@ local player = Players.LocalPlayer
 
 local TensionController = {}
 
-local ROW_Y = 8 -- top of the HUD; the clean meter lives on the animal
-local ROW_WIDTH = 380
-local ROW_HEIGHT = 22 -- y 8..30, under the top bar and clear of the announcement (y 40)
-local MOOD_WIDTH = 104
-local TIMER_WIDTH = 104
+-- The row lives inside the HUD's clean meter billboard above the animal, under the % clean
+-- bar and the reward line (HUDController's PROGRESS_HEIGHT leaves room for it).
+local ROW_Y = 50
+local ROW_WIDTH = 208
+local ROW_HEIGHT = 22
+local MOOD_WIDTH = 70
+local TIMER_WIDTH = 56
 local GAP = 6
 local MAX_FLING_SPEED = 250
 local MAX_RAGDOLL_SECONDS = 3
@@ -132,7 +134,11 @@ local function buildGui()
 	row.Size = UDim2.fromOffset(ROW_WIDTH, ROW_HEIGHT)
 	row.BackgroundTransparency = 1
 	row.Visible = false
-	row.Parent = gui
+	-- Under the clean meter (HUDController's "CleanProgress" billboard over the animal).
+	-- Falls back to the top of the screen if the meter isn't there.
+	local board = player:WaitForChild("PlayerGui"):WaitForChild("CleanProgress", 10)
+	local meter = board and board:FindFirstChild("CleanProgress")
+	row.Parent = meter or gui
 	rowScale = Instance.new("UIScale")
 	rowScale.Parent = row
 

@@ -4,8 +4,12 @@ local GameConfig = {
 	-- World
 	-- Bays are built only while a player owns one, at fixed slots; BayCount caps how many.
 	BayCount = 8, -- set the place's Max Players to match (Game Settings > Places)
-	BaySpacing = 70,
+	BaySpacing = 70, -- slots alternate +Z/-Z from the origin: 8 bays span z -262..262
 	BayPadSize = Vector3.new(44, 1, 34),
+	-- The dirt road runs along Z west of every zoo (pens reach x -43.5). Animals walk down it,
+	-- then turn into their bay; the delivery truck parks on it.
+	RoadX = -54,
+	RoadWidth = 9,
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart
@@ -28,7 +32,7 @@ local GameConfig = {
 
 	-- Lifecycle timings (seconds). Kept short so there's almost always an animal to wash:
 	-- about 6 s between finishing one animal and being able to spray the next.
-	ArriveDuration = 2.5,
+	ArriveDuration = 3.5, -- from the road (x -54) to the wash spot
 	DepartDuration = 2,
 	CelebrationDuration = 1.5,
 	NextAnimalDelay = 0.5,
@@ -61,13 +65,13 @@ local GameConfig = {
 		PenRowZ = -25, -- pen centres, relative to the bay centre
 	},
 
-	-- Cache: every washed animal waits here until the owner picks it up and carries it to a pen.
-	-- While the cache is full, no new animal walks in.
+	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
+	-- If it's still waiting when the next wash finishes, it leaves (paid animals never do).
 	Cache = {
-		Slots = 3,
+		Slots = 1, -- the waiting animal leaves when the next wash finishes
 		SlotSpacing = 7,
 		Origin = Vector3.new(8, 0, 9), -- first slot, relative to the bay centre; slots run +X
-		CarryMaxSize = 3.5, -- carried animals are scaled so their largest side is about this
+		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
 	},
 
 	-- Shop

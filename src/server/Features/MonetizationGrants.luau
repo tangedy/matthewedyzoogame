@@ -8,7 +8,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
-local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -60,20 +60,11 @@ end
 
 -- Limited animals --------------------------------------------------------------------------
 
--- A bought animal can join the cache when there's a slot that the bay isn't about to fill:
--- the bay checks for room before an animal walks in and then assumes it still fits, so with
--- one free slot we only deliver while no animal is on its way through the bay.
+-- A bought animal goes straight into the cache, pushing out a free animal waiting there.
+-- It's marked Paid, so a later wash never pushes it out; it only waits if another paid
+-- animal is already in the slot.
 local function canDeliver(player: Player): boolean
-	local data = PlayerDataService.get(player)
-	local snapshot = BayService.getSnapshot(player)
-	if not data or not snapshot then
-		return false
-	end
-	local free = GameConfig.Cache.Slots - #data.Cache
-	if free >= 2 then
-		return true
-	end
-	return free == 1 and (snapshot.State == "Empty" or snapshot.State == "CacheFull")
+	return BayService.getSnapshot(player) ~= nil
 end
 
 local function deliver(player: Player, species: string, mutation: string): boolean
@@ -89,7 +80,7 @@ local function deliver(player: Player, species: string, mutation: string): boole
 		end
 		return false
 	end
-	local record, slot = ZooService.addToCache(player, species, mutation)
+	local record, slot = ZooService.addToCache(player, species, mutation, { Paid = true, Evict = true })
 	if not record then
 		model:Destroy()
 		return false
@@ -172,6 +163,33 @@ local function grantLimited(
 	return true, `You got a Limited {name}! It joins your cache when a slot is free.`
 end
 
+-- The delivery truck's animal: the offer recorded when the purchase was prompted
+-- (data.Extra.Truck.Bought, written by Monetization), delivered like a limited.
+local function grantTruck(player: Player): (boolean, string?)
+	local data = PlayerDataService.get(player)
+	local truck = data and data.Extra.Truck
+	local bought = if typeof(truck) == "table" then truck.Bought else nil
+	if typeof(bought) ~= "table" or typeof(bought.Species) ~= "string" or not AnimalConfig.Animals[bought.Species] then
+		return compensate(player, "That truck animal isn't available any more.")
+	end
+	local saved = MonetizationState.saved(player)
+	if not saved then
+		return false, nil
+	end
+	local mutation = if typeof(bought.Mutation) == "string" and MutationConfig.ByKey[bought.Mutation]
+		then bought.Mutation
+		else MutationConfig.Default
+	table.insert(saved.PendingAnimals, { Species = bought.Species, Mutation = mutation })
+	truck.Bought = nil
+	PlayerDataService.markDirty(player)
+	Hooks.fire("TruckPurchased", player)
+	local name = AnimalConfig.Animals[bought.Species].DisplayName
+	if MonetizationGrants.deliverPending(player) > 0 then
+		return true, nil -- deliverPending already told them it's in the cache
+	end
+	return true, `You got the {name}! It joins your cache once you've moved the animal there.`
+end
+
 -- Products ------------------------------------------------------------------------------
 
 -- Applies a paid product. Returns whether it was granted (false = try the receipt again later)
@@ -189,6 +207,8 @@ function MonetizationGrants.product(
 	local kind = product.Kind
 	if kind == "Limited" then
 		return grantLimited(player, product, purchaseId, simulated)
+	elseif kind == "Truck" then
+		return grantTruck(player)
 	end
 	if product.OncePerPlayer then
 		saved.Once[product.Key] = true
@@ -217,10 +237,8 @@ function MonetizationGrants.product(
 		return true, `+{UIStyle.formatMoney(amount)}!`
 	elseif kind == "AutoCollect" then
 		local add = product.Seconds or (2 * 3600)
-		local left = math.min(
-			MonetizationGrants.autoCollectLeft(player) + add,
-			MonetizationConfig.AutoCollect.MaxSeconds
-		)
+		local left =
+			math.min(MonetizationGrants.autoCollectLeft(player) + add, MonetizationConfig.AutoCollect.MaxSeconds)
 		saved.AutoCollectLeft = left
 		local session = MonetizationState.peek(player)
 		if session then

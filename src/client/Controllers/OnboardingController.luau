@@ -5,8 +5,8 @@
 --   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
 --   * Empty zoo: "Pick me up!" over the cache, then "Place here!" over the first pen while
 --     carrying, until the first animal is in a pen.
---   * First time an upgrade is affordable: a banner plus a marker over the bay's upgrade stand,
---     shown until the player opens the shop (once per tier per session).
+--   * The upgrade stand always carries an UPGRADE! marker. The first time an upgrade is
+--     affordable, a banner appears until the player opens the shop (once per tier per session).
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -292,8 +292,6 @@ local function showBanner(text: string)
 end
 
 local function hideShopHint()
-	stationMarker.Enabled = false
-	stationMarker.Adornee = nil :: any
 	banner.Visible = false
 	bannerToken += 1
 end
@@ -304,14 +302,7 @@ local function checkShopHint()
 		return
 	end
 	shopHintShownForTier[tier] = true
-	local bay = bayModel()
-	local station = bay and bay:FindFirstChild("UpgradeStation")
-	local counter = station and station:FindFirstChild("Counter")
-	if counter and counter:IsA("BasePart") then
-		stationMarker.Adornee = counter
-		stationMarker.Enabled = true
-	end
-	showBanner(`You can afford the {nextTool.Name}! Visit the HOSE UPGRADES stand.`)
+	showBanner(`You can afford the {nextTool.Name}! Visit the UPGRADE stand.`)
 end
 
 -- Until the first animal is in a pen: point at the cache, then at pen 1 while carrying.
@@ -410,7 +401,7 @@ local function buildGui()
 	end
 
 	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
-	stationMarker = makeMarker("Upgrade!", Color3.fromRGB(255, 220, 90))
+	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
 	cacheMarker = makeMarker("Pick me up!", Color3.fromRGB(110, 200, 255))
 	penMarker = makeMarker("Place here!", Color3.fromRGB(90, 255, 90))
 end
@@ -472,6 +463,14 @@ function OnboardingController.init(initial: Types.InitialState)
 		local bob = Vector3.new(0, 4 + math.sin(os.clock() * 4) * 0.4, 0)
 		animalMarker.StudsOffset = bob
 		stationMarker.StudsOffset = bob + Vector3.new(0, 2, 0)
+		-- Always over your own upgrade stand (the stand has no static sign).
+		if not stationMarker.Adornee or not stationMarker.Adornee:IsDescendantOf(Workspace) then
+			local bay = bayModel()
+			local station = bay and bay:FindFirstChild("UpgradeStation")
+			local counter = station and station:FindFirstChild("Counter")
+			stationMarker.Adornee = if counter and counter:IsA("BasePart") then counter else nil :: any
+			stationMarker.Enabled = stationMarker.Adornee ~= nil
+		end
 		cacheMarker.StudsOffset = bob + Vector3.new(0, 3, 0)
 		penMarker.StudsOffset = bob
 		updateTrail(dt)

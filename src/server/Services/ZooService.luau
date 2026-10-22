@@ -97,6 +97,25 @@ local function findCached(data: PlayerDataService.SavedData, id: string): (Cache
 	return nil, nil
 end
 
+-- Cache records that are waiting in a slot (not the one being carried), oldest first.
+-- Slot i shows waiting[i].
+local function waitingRecords(zoo: Zoo, data: PlayerDataService.SavedData): { CachedAnimal }
+	local waiting = {}
+	for _, record in data.Cache do
+		if record.Id ~= zoo.CarriedId then
+			table.insert(waiting, record)
+		end
+	end
+	return waiting
+end
+
+local function removeCached(data: PlayerDataService.SavedData, id: string)
+	local _, index = findCached(data, id)
+	if index then
+		table.remove(data.Cache, index)
+	end
+end
+
 local function animalInPen(data: PlayerDataService.SavedData, pen: number): (OwnedAnimal?, number?)
 	for i, animal in data.Animals do
 		if animal.Pen == pen then
@@ -164,6 +183,7 @@ local function sendCarry(player: Player)
 			Rarity = AnimalConfig.Animals[carried.Species].Rarity,
 			Mutation = carried.Mutation,
 			IncomePerSecond = ZooService.income(carried.Species, carried.Mutation),
+			SellValue = ZooService.sellValue(carried.Species, carried.Mutation),
 		})
 	else
 		carryChanged:FireClient(player, nil)
@@ -238,20 +258,21 @@ local function refreshPens(player: Player)
 	end
 end
 
--- Cache: each record sits in the slot matching its position; the carried one leaves a gap.
+-- Cache: waiting animals fill the slots in order; the carried one isn't in a slot.
 local function refreshCache(player: Player)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	if not zoo or not data then
 		return
 	end
+	local list = waitingRecords(zoo, data)
 	for i = 1, GameConfig.Cache.Slots do
 		local slot = cacheSlot(zoo, i)
 		if not slot then
 			continue
 		end
-		local record = data.Cache[i]
-		local waiting = record ~= nil and record.Id ~= zoo.CarriedId
+		local record = list[i]
+		local waiting = record ~= nil
 		local pickup = slot:FindFirstChild("PickupPrompt") :: ProximityPrompt?
 		local sell = slot:FindFirstChild("SellPrompt") :: ProximityPrompt?
 		if pickup then
@@ -315,10 +336,39 @@ local function dropCarry(player: Player)
 	zoo.CarriedId = nil
 end
 
--- Back in the cache (the carrier died or respawned).
+-- Pushes the oldest waiting animal out of the cache so a new one fits. Paid animals are never
+-- pushed out. Returns false if nothing could make room.
+local function makeCacheRoom(player: Player): boolean
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
+		return false
+	end
+	local list = waitingRecords(zoo, data)
+	if #list < GameConfig.Cache.Slots then
+		return true
+	end
+	for _, record in list do
+		if not record.Paid then
+			removeCached(data, record.Id)
+			local model = zoo.CacheModels[record.Id]
+			if model then
+				zoo.CacheModels[record.Id] = nil
+				AnimalService.poof(model)
+			end
+			PlayerDataService.markDirty(player)
+			return true
+		end
+	end
+	return false
+end
+
+-- Back in the cache (the carrier died or respawned, or chose Put Down). If the slot is taken,
+-- the waiting animal leaves to make room for the one that was chosen.
 local function returnCarryToCache(player: Player)
 	local zoo = zoos[player]
 	local record = carriedRecord(player)
+	makeCacheRoom(player) -- while it's still carried, so it can't push itself out
 	dropCarry(player)
 	if zoo and record and not zoo.CacheModels[record.Id] then
 		buildCacheModel(zoo, record)
@@ -331,11 +381,12 @@ local function pickUp(player: Player, slotIndex: number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local character = player.Character
-	local head = character and character:FindFirstChild("Head") :: BasePart?
-	if not zoo or not data or zoo.CarriedId or not head then
+	local hand = character
+		and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")) :: BasePart?
+	if not zoo or not data or zoo.CarriedId or not hand then
 		return
 	end
-	local record = data.Cache[slotIndex]
+	local record = waitingRecords(zoo, data)[slotIndex]
 	if not record then
 		return
 	end
@@ -345,7 +396,7 @@ local function pickUp(player: Player, slotIndex: number)
 		zoo.CacheModels[record.Id] = nil
 	end
 	zoo.CarriedId = record.Id
-	zoo.CarryModel = AnimalService.buildCarryModel(record.Species, record.Mutation, head)
+	zoo.CarryModel = AnimalService.buildCarryModel(record.Species, record.Mutation, hand)
 	refreshAll(player)
 	GuideService.onPickedUp(player)
 end
@@ -390,6 +441,42 @@ local function placeCarried(player: Player, penIndex: number)
 	GuideService.onPlaced(player)
 end
 
+-- Sells the animal in hand for its sell value.
+local function sellCarried(player: Player)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local record = carriedRecord(player)
+	if not zoo or not data or not record then
+		return
+	end
+	removeCached(data, record.Id)
+	dropCarry(player)
+	local value = ZooService.sellValue(record.Species, record.Mutation)
+	EconomyService.addCoins(player, value)
+	Hooks.fire("AnimalSold", player, record.Species, record.Mutation, value)
+	PlayerDataService.markDirty(player)
+	refreshAll(player)
+end
+
+-- Put Down: back into the cache slot. Refused if the slot holds a paid animal.
+local function putDownCarried(player: Player)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data or not zoo.CarriedId then
+		return
+	end
+	local list = waitingRecords(zoo, data)
+	if #list >= GameConfig.Cache.Slots then
+		for _, record in list do
+			if record.Paid then
+				purchaseResult:FireClient(player, false, "Your cache is full. Place it in a pen or sell it.")
+				return
+			end
+		end
+	end
+	returnCarryToCache(player)
+end
+
 local function sellFromPen(player: Player, penIndex: number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -421,11 +508,11 @@ end
 local function sellFromCache(player: Player, slotIndex: number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
-	local record = data and data.Cache[slotIndex]
-	if not zoo or not data or not record or record.Id == zoo.CarriedId then
+	local record = zoo and data and waitingRecords(zoo, data)[slotIndex]
+	if not zoo or not data or not record then
 		return
 	end
-	table.remove(data.Cache, slotIndex)
+	removeCached(data, record.Id)
 	EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
 	Hooks.fire(
 		"AnimalSold",
@@ -524,22 +611,42 @@ function ZooService.totalIncome(player: Player): number
 end
 
 function ZooService.cacheHasRoom(player: Player): boolean
-	local data = PlayerDataService.get(player)
-	return data ~= nil and #data.Cache < GameConfig.Cache.Slots
-end
-
--- Adds a washed animal to the cache. Returns the record and the slot it should walk to.
-function ZooService.addToCache(player: Player, species: string, mutation: string): (CachedAnimal?, CFrame?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
-	if not zoo or not data or #data.Cache >= GameConfig.Cache.Slots then
+	return zoo ~= nil and data ~= nil and #waitingRecords(zoo, data) < GameConfig.Cache.Slots
+end
+
+-- Adds an animal to the cache. Returns the record and the slot it should walk to.
+-- `options.Evict`: a freshly washed animal pushes out the one waiting (unless that one was
+-- paid for). `options.Paid`: Robux animals, which are never pushed out themselves.
+function ZooService.addToCache(
+	player: Player,
+	species: string,
+	mutation: string,
+	options: { Evict: boolean?, Paid: boolean? }?
+): (CachedAnimal?, CFrame?)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
 		return nil, nil
 	end
-	local record: CachedAnimal = { Id = tostring(data.NextAnimalId), Species = species, Mutation = mutation }
+	local opts: { Evict: boolean?, Paid: boolean? } = options or {}
+	if opts.Evict then
+		makeCacheRoom(player)
+	end
+	if #waitingRecords(zoo, data) >= GameConfig.Cache.Slots then
+		return nil, nil
+	end
+	local record: CachedAnimal = {
+		Id = tostring(data.NextAnimalId),
+		Species = species,
+		Mutation = mutation,
+		Paid = if opts.Paid then true else nil,
+	}
 	data.NextAnimalId += 1
 	table.insert(data.Cache, record)
 	PlayerDataService.markDirty(player)
-	local slot = cacheSlot(zoo, #data.Cache)
+	local slot = cacheSlot(zoo, #waitingRecords(zoo, data))
 	sendZoo(player)
 	return record, slot and slot.CFrame
 end
@@ -610,6 +717,14 @@ function ZooService.attach(player: Player, bay: Model)
 		end
 		for _, record in data.Cache do
 			buildCacheModel(zoo, record)
+		end
+		-- A save can hold one more than fits (an animal carried at leave time).
+		local guard = 0
+		while #waitingRecords(zoo, data) > GameConfig.Cache.Slots and guard < 4 do
+			guard += 1
+			if not makeCacheRoom(player) then
+				break
+			end
 		end
 	end
 
@@ -703,6 +818,23 @@ function ZooService.detach(player: Player)
 end
 
 function ZooService.init()
+	-- Choices while carrying: put it back in the cache, or sell it on the spot.
+	local lastAction: { [Player]: number } = {}
+	Remotes.event("CarryAction").OnServerEvent:Connect(function(player: Player, action: any)
+		local now = os.clock()
+		if (lastAction[player] or 0) > now or (action ~= "drop" and action ~= "sell") then
+			return
+		end
+		lastAction[player] = now + 0.4
+		if action == "sell" then
+			sellCarried(player)
+		else
+			putDownCarried(player)
+		end
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		lastAction[player] = nil
+	end)
 	-- Income: every tick, each penned animal adds its income to its pen's pad.
 	task.spawn(function()
 		while true do

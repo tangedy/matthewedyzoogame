@@ -1,7 +1,6 @@
 -- Shared type definitions.
 
--- CacheFull: no animal walks in until the owner places or sells one from the cache.
-export type BayState = "CacheFull" | "Empty" | "Arriving" | "Washing" | "Completing" | "Departing"
+export type BayState = "Empty" | "Arriving" | "Washing" | "Completing" | "Departing"
 
 export type DirtPatchState = {
 	Id: string,
@@ -38,6 +37,7 @@ export type CarryInfo = {
 	Rarity: string,
 	Mutation: string,
 	IncomePerSecond: number,
+	SellValue: number,
 }
 
 -- Loaded: progress saves. Failed/Locked: playing on a temporary profile that is never saved.

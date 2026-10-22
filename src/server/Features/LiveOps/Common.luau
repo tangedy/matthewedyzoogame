@@ -65,7 +65,9 @@ function Common.state(player: Player): State?
 	-- Seed from washes already finished so a zoo in progress still hits the next pity mark.
 	-- Counted when an animal walks in. Not replicated.
 	local rolled = finite(raw.WashesRolled)
-	raw.WashesRolled = if rolled and rolled >= 0 then math.floor(rolled) else math.floor(finite(data.LifetimeAnimalsWashed) or 0)
+	raw.WashesRolled = if rolled and rolled >= 0
+		then math.floor(rolled)
+		else math.floor(finite(data.LifetimeAnimalsWashed) or 0)
 	return raw :: State
 end
 
