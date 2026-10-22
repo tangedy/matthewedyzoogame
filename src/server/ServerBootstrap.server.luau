@@ -18,10 +18,16 @@ EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
 DevService.init()
 
+local initialStatePending: { [Player]: boolean } = {}
 Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
+	-- One request in flight per player, so spamming can't pile up waiting threads.
+	if initialStatePending[player] then
+		return nil
+	end
+	initialStatePending[player] = true
 	local data = PlayerDataService.waitFor(player, 30)
 	local tool = EconomyService.getTool(player)
-	return {
+	local state = {
 		DataStatus = PlayerDataService.getStatus(player) or "Failed",
 		Coins = if data then data.Coins else 0,
 		ToolTier = if tool then tool.Tier else 1,
@@ -29,6 +35,8 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		Bay = BayService.getSnapshot(player),
 	}
+	initialStatePending[player] = nil
+	return state
 end
 
 local function onPlayerAdded(player: Player)
@@ -54,5 +62,6 @@ for _, player in Players:GetPlayers() do
 end
 
 Players.PlayerRemoving:Connect(function(player)
+	initialStatePending[player] = nil
 	BayService.release(player) -- unfinished washes are never paid
 end)

@@ -82,7 +82,7 @@ local function buildUpgradeStation(base: Vector3, parent: Instance)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Size = UDim2.fromOffset(200, 40)
 	billboard.StudsOffset = Vector3.new(0, 6.5, 0)
-	billboard.MaxDistance = 80
+	billboard.MaxDistance = 40
 	billboard.Parent = counter
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.fromScale(1, 1)
@@ -170,7 +170,7 @@ local function buildBay(index: number, center: Vector3, parent: Instance): Model
 	billboard.Name = "Sign"
 	billboard.Size = UDim2.fromOffset(220, 50)
 	billboard.StudsOffset = Vector3.new(0, 5.5, 0)
-	billboard.MaxDistance = 150
+	billboard.MaxDistance = 60 -- bays are 70 apart, so neighbours' signs don't stack up
 	billboard.Parent = post
 	local label = Instance.new("TextLabel")
 	label.Name = "BayLabel"

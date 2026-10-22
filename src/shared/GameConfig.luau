@@ -13,6 +13,10 @@ local GameConfig = {
 	MaxAcceptedStep = 0.15, -- max seconds of cleaning credited per request
 	SprayRadius = 1.6, -- studs around a body hit that can clean the nearest patch
 
+	-- Touch/gamepad aiming (client only; the server still validates every spray)
+	CenterAimHeight = 0.4, -- reticle height as a fraction of the screen, above the character
+	AimAssistRadius = 0.18, -- snap to a dirty patch within this fraction of the screen's short side
+
 	-- Dirt
 	-- Seconds of continuous on-target spraying a 1.0x animal needs with the tier 1 hose.
 	-- Walking around adds on top; doc target is 30-45 s for the first wash.

@@ -119,6 +119,65 @@ local function setHint(active: boolean)
 	(hintHighlight :: Highlight).Enabled = true
 end
 
+-- Nearest dirty patch to the reticle in screen space, within AimAssistRadius, that the
+-- server's own ray from the nozzle would hit (patch itself or the body right next to it).
+local function findAssistTarget(
+	camera: Camera,
+	animal: Model,
+	origin: Vector3,
+	screenPoint: Vector2,
+	params: RaycastParams
+): BasePart?
+	local patches = animal:FindFirstChild("DirtPatches")
+	if not patches then
+		return nil
+	end
+	local viewport = camera.ViewportSize
+	local best: BasePart?, bestDist = nil, math.min(viewport.X, viewport.Y) * GameConfig.AimAssistRadius
+	for _, patch in patches:GetChildren() do
+		if patch:IsA("BasePart") and patch.CanQuery then
+			local projected, onScreen = camera:WorldToViewportPoint(patch.Position)
+			local d = (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude
+			if onScreen and d < bestDist then
+				local toPatch = patch.Position - origin
+				if toPatch.Magnitude <= range then
+					local hit = Workspace:Raycast(origin, toPatch.Unit * range, params)
+					if
+						hit
+						and hit.Instance:IsDescendantOf(animal)
+						and (hit.Position - patch.Position).Magnitude <= GameConfig.SprayRadius
+					then
+						best, bestDist = patch, d
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local HINT_MUD = Color3.fromRGB(92, 64, 40)
+local HINT_GLOW = Color3.fromRGB(255, 200, 60)
+
+-- Remaining mud pulses yellow (local-only change; the server never sets patch color later).
+-- The Highlight also shows patches through the body so hidden ones are easy to find.
+local function pulseHint(animal: Model?)
+	local pulse = 0.5 + 0.5 * math.sin(os.clock() * 5)
+	if hintHighlight then
+		hintHighlight.FillTransparency = 0.55 + 0.25 * pulse
+	end
+	local patches = animal and animal:FindFirstChild("DirtPatches")
+	if not patches then
+		return
+	end
+	for _, patch in patches:GetChildren() do
+		if patch:IsA("BasePart") then
+			patch.Material = Enum.Material.Neon
+			patch.Color = HINT_MUD:Lerp(HINT_GLOW, 0.35 + 0.5 * pulse)
+		end
+	end
+end
+
 local function buildEffects()
 	impactPart = Instance.new("Part")
 	impactPart.Name = "SprayImpact"
@@ -268,24 +327,40 @@ local function onHeartbeat()
 		return
 	end
 
-	-- Where the player is pointing on screen
-	local useCenter = touchHeld
-		or padHeld
-		or isTouchUI()
-		or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-	local screenPoint = if useCenter then camera.ViewportSize / 2 else UserInputService:GetMouseLocation()
-	reticle.Position = UDim2.fromOffset(screenPoint.X, screenPoint.Y)
+	-- Where the player is pointing on screen. Touch and gamepad aim with a fixed reticle placed
+	-- above the character (the camera centers on the character, which would block the view).
+	local shiftLock = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+	local assisted = touchHeld or padHeld or isTouchUI()
+	local viewport = camera.ViewportSize
+	local screenPoint = if assisted
+		then Vector2.new(viewport.X / 2, viewport.Y * GameConfig.CenterAimHeight)
+		elseif shiftLock then viewport / 2
+		else UserInputService:GetMouseLocation()
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = characterExclusions()
 
+	local origin = root.Position + GameConfig.NozzleOffset
+	local animal = currentAnimal()
+
 	local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
 	local camHit = Workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
 	local target = if camHit then camHit.Position else ray.Origin + ray.Direction * 1000
 
+	-- Aim assist (touch/gamepad only): if the reticle isn't on the animal, snap to the nearest
+	-- dirty patch on screen that the hose can actually reach.
+	if assisted and animal and not (camHit and camHit.Instance:IsDescendantOf(animal)) then
+		local assist = findAssistTarget(camera, animal, origin, screenPoint, params)
+		if assist then
+			target = assist.Position
+			local projected = camera:WorldToViewportPoint(assist.Position)
+			screenPoint = Vector2.new(projected.X, projected.Y)
+		end
+	end
+	reticle.Position = UDim2.fromOffset(screenPoint.X, screenPoint.Y)
+
 	-- Same nozzle origin and range check the server uses
-	local origin = root.Position + GameConfig.NozzleOffset
 	local toTarget = target - origin
 	if toTarget.Magnitude < 0.01 then
 		stopEffects()
@@ -295,15 +370,14 @@ local function onHeartbeat()
 	local sprayHit = Workspace:Raycast(origin, direction * range, params)
 	local impact = if sprayHit then sprayHit.Position else origin + direction * range
 
-	local animal = currentAnimal()
 	local onTarget = sprayHit ~= nil and animal ~= nil and sprayHit.Instance:IsDescendantOf(animal)
 	local stroke = reticle:FindFirstChildOfClass("UIStroke")
 	if stroke then
 		stroke.Color = if onTarget then RETICLE_ON_TARGET else RETICLE_IDLE
 	end
 
-	if hintActive and hintHighlight then
-		hintHighlight.FillTransparency = 0.55 + 0.25 * math.sin(os.clock() * 5)
+	if hintActive then
+		pulseHint(animal)
 	end
 
 	if not (mouseHeld or touchHeld or padHeld) then

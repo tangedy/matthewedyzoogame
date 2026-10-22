@@ -44,6 +44,7 @@ local BayService = {}
 
 local bays: { Bay } = {}
 local bayByOwner: { [Player]: Bay } = {}
+local waiting: { Player } = {} -- players who joined while every bay was taken, oldest first
 
 local bayStateChanged = Remotes.event("BayStateChanged")
 local washCompleted = Remotes.event("WashCompleted")
@@ -198,7 +199,10 @@ function BayService.assign(player: Player): boolean
 		end
 	end
 	if not free then
-		warn(`[BayService] No free bay for {player.Name}; raise BayCount or lower Max Players`)
+		if not table.find(waiting, player) then
+			table.insert(waiting, player)
+			warn(`[BayService] No free bay for {player.Name}; queued ({#waiting} waiting)`)
+		end
 		return false
 	end
 	local bay = free :: Bay
@@ -217,6 +221,10 @@ function BayService.assign(player: Player): boolean
 end
 
 function BayService.release(player: Player)
+	local queued = table.find(waiting, player)
+	if queued then
+		table.remove(waiting, queued)
+	end
 	local bay = bayByOwner[player]
 	if not bay then
 		return
@@ -231,6 +239,15 @@ function BayService.release(player: Player)
 	disposeJob(bay) -- unfinished washes are never paid
 	bay.State = "Empty"
 	setLabel(bay)
+
+	-- Hand the freed bay to the longest-waiting player still in the server.
+	while #waiting > 0 do
+		local nextPlayer = table.remove(waiting, 1) :: Player
+		if nextPlayer.Parent then
+			BayService.assign(nextPlayer)
+			break
+		end
+	end
 end
 
 function BayService.getSnapshot(player: Player): Types.BaySnapshot?

@@ -20,7 +20,7 @@ Everything (map, bays, placeholder animals, UI) is created by scripts at runtime
 
 ### Studio settings to change
 
-- **Game Settings → Places → Max Players**: set it to `GameConfig.BayCount` (default 4). Extra players can still join, but they won't get a bay.
+- **Game Settings → Places → Max Players**: set it to `GameConfig.BayCount` (default 4). If more players join, they wait in a queue and get the next bay that frees up.
 - **Game Settings → Security → Enable Studio Access to API Services**: turn this on, and publish the place, to test saving in Studio. Without it, loading fails and you play on a temporary profile that never saves (a red banner says so). Studio saves to its own store (`GameConfig.StudioDataStoreName`), so they never touch live data.
 - Sounds use built-in `rbxasset://` placeholders. Swap in real asset IDs in `GameConfig.Sounds`.
 
@@ -58,8 +58,11 @@ Client controllers:
 ## Status
 
 - **Milestones 1–2:** done and tested in Studio.
-- **Milestone 3** (three animals, hose tiers, shop, saving): implemented, not yet tested in Studio. See [TESTING.md](TESTING.md).
+- **Milestone 3** (three animals, hose tiers, shop, saving): shop and purchases verified in a Studio playtest. Saving still needs a published place to test.
+- **Milestone 4** (multiplayer and mobile): server hardening verified in a solo playtest. A real 2-player test and a phone test are still needed. See [TESTING.md](TESTING.md).
+
+Developer keys (Studio and place owner only): **C** cleans the current animal, **G** grants coins.
 
 The pig, sheep and cow are all in the spawn pool. The first animal each session is always the pig.
 
-**Next, Milestone 4:** the multiplayer and mobile acceptance pass (bay ownership checks, remote abuse, multi-bay performance).
+**Next, Milestone 5:** presentation (better animal assets, improved dirt look, sound and effects, economy tuning).

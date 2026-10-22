@@ -1,6 +1,6 @@
 # Studio test checklist
 
-Milestones 1 and 2 have passed in Studio. Milestone 3 is new and untested. It passes `selene` and the luau-lsp type check, and `rojo build` succeeds, but it hasn't been run in Roblox.
+Milestones 1 and 2 passed in Studio. Claude ran parts of Milestones 3 and 4 in a solo Studio playtest through Studio MCP; those checks are marked ✅ below. The rest still need you: anything that needs saving (a published place), two real players, or a phone.
 
 Watch the **Output** window for `[BayService]` / `[PlayerDataService]` warnings or script errors the whole time.
 
@@ -38,9 +38,10 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] A blue **HOSE UPGRADES** counter with a yellow awning stands next to your spawn pad. Walking up shows an "Upgrade Hose" prompt (E on desktop, a tap button on mobile).
 - [ ] The shop never opens on its own, and spraying never opens it.
 - [ ] The panel shows Current: Basic Hose (Tier 1), Next: Strong Hose, Cleaning speed +50%, and Buy for 150 coins.
-- [ ] Buying with fewer than 150 coins shows "Not enough coins. You need N more." and nothing changes.
-- [ ] Buying with enough coins takes exactly 150. Coins update, the HUD shows "Strong Hose (Tier 2)", the panel moves on to Power Washer (+56%, 600), and the spray beam gets thicker.
-- [ ] Clicking Buy quickly several times charges only once.
+- [x] ✅ Buying with fewer than 150 coins shows "Not enough coins. You need N more." and nothing changes.
+- [x] ✅ Buying with enough coins takes exactly 150, then 600 for Tier 3. Coins and the tool label update. (Not yet checked by eye: the panel text and the thicker beam.)
+- [x] ✅ 5 purchase requests sent at once charge only once.
+- [x] ✅ At Tier 3 the server refuses: "Your hose is already fully upgraded!"
 - [ ] Washing is noticeably faster after upgrading (server-side power).
 - [ ] At Tier 3 the panel says "Your hose is fully upgraded!" and has no Buy button.
 - [ ] Walking more than about 14 studs from the counter closes the panel.
@@ -48,22 +49,33 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] **Failed load can't overwrite data:** turn API Services **off**, then play. The red banner appears. Earn some coins, stop, turn API Services back **on**, then play again. Your earlier saved coins come back, not 0 and not the temporary session's coins.
 - [ ] Pacing: the first upgrade is affordable after a few animals (about 5 washes, 3–4 minutes).
 
-## Early mobile check (pulled forward from Milestone 4)
+## Milestone 4: multiplayer and mobile
 
-Use Studio's **Device emulator** (Test → Device, pick a phone), then a real phone if possible.
+### Server hardening (verified in a solo playtest)
+
+- [x] ✅ CleaningIntent with a fake job ID, NaN, a huge vector, a string, or aimed at the sky: no progress.
+- [x] ✅ 200 requests in one frame count as one. Spamming at 60 Hz cleans no faster than real time (+0.091 per second against a 0.097 maximum at Tier 3).
+- [x] ✅ Spamming completion (10 force-cleans and 20 cleaning requests at once) pays exactly once, 3 rounds in a row. Only one animal is left in the bay afterwards.
+- [x] ✅ When the hint shows (≥85%), the remaining mud pulses yellow (Neon) and the outline shows through the body.
+- [x] ✅ Neighbouring bays' signs no longer pile up on screen (shorter draw distance).
+- [x] ✅ Server ran at about 59 fps with one active bay.
+
+### Two players (Test → Clients and Servers → 2 players)
+
+- [ ] Each player gets their own bay and animal, and they wash independently.
+- [ ] Player 2 spraying player 1's animal does nothing. Player 2 can watch.
+- [ ] When a player leaves, their animal is removed and their sign goes back to "Wash Bay N".
+- [ ] **Queue:** temporarily set `GameConfig.BayCount = 1` and start 2 players. Player 2 sees "All wash bays are taken". When player 1 leaves, player 2 is moved to the bay and an animal arrives.
+- [ ] With 4 players all washing at once, there's no noticeable lag (Shift+F5 shows the frame rate).
+
+### Mobile (Studio Device emulator, then a real phone)
 
 - [ ] A large SPRAY button sits above the jump button and doesn't overlap the thumbstick.
-- [ ] Holding SPRAY sprays toward the center reticle. Rotating the camera with the other thumb aims.
-- [ ] A full wash is comfortable with thumbs only.
+- [ ] The reticle sits above your character (40% down the screen), not on top of it.
+- [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding SPRAY snaps the reticle to the nearest reachable mud patch and cleans it.
+- [ ] Aim assist never snaps to a patch hidden behind the body or out of range.
+- [ ] A full wash is comfortable with thumbs only. Opening the shop with the tap prompt works.
 - [ ] The mud fade looks clear at phone size. This is the doc's #1 technical risk, so note how it feels.
-
-## Quick multiplayer smoke test (optional now, required in Milestone 4)
-
-Use Test → Clients and Servers → 2 players.
-
-- [ ] Each player gets their own bay and animal.
-- [ ] Player 2 spraying player 1's animal does nothing.
-- [ ] When a player leaves, their animal is removed and their sign goes back to "Wash Bay N".
 
 ## Report back
 
