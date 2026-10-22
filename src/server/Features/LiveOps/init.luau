@@ -1,6 +1,7 @@
 -- Retention and live-ops systems, started together by the feature loader:
---   MudStorm     scheduled server-wide Mud Storm (+ developer start/stop)
---   Daily        Daily Dirty Animal (one guaranteed Rare+ walk-in per UTC day)
+--   MudStorm      scheduled server-wide Mud Storm (+ developer start/stop)
+--   VariantEvents rotating Gold Rush / Rainbow Rush / ... (odds in DevParams.json)
+--   Daily         Daily Dirty Animal (one guaranteed Rare+ walk-in per UTC day)
 --   Offline      offline earnings onto the pen pads + the WELCOME BACK popup
 --   Stars        1-5 star zoo rating (bay sign, HUD attribute, announcements)
 --   Leaderboard  native leaderstats and the plaza TOP ZOOS board
@@ -14,7 +15,7 @@ local Offline = require(script.Offline)
 
 local LiveOps = {}
 
-local MODULES = { "MudStorm", "Daily", "Offline", "Stars", "Leaderboard", "Analytics" }
+local MODULES = { "MudStorm", "VariantEvents", "Daily", "Offline", "Stars", "Leaderboard", "Analytics" }
 
 function LiveOps.init()
 	-- Pull-on-start for anything the client may have missed before its controller listened.

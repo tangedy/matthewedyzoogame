@@ -426,6 +426,13 @@ local function connectHooks()
 		return weight
 	end)
 
+	Hooks.modify("VariantOneIn", function(oneIn: number, player: Player, mutation: string): number
+		if mutation ~= "Normal" and typeof(oneIn) == "number" and oneIn > 1 and luckyActive(player) then
+			return math.max(1, math.floor(oneIn / MonetizationConfig.LuckySoap.MutationWeightMultiplier))
+		end
+		return oneIn
+	end)
+
 	-- Registered a frame later so it runs after the NextAnimal modifiers other features add in
 	-- their init: a walk-in replaced by an override wasn't rolled with Lucky Soap, so it mustn't
 	-- use a charge.

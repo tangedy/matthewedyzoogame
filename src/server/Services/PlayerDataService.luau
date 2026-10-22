@@ -44,6 +44,14 @@ export type SavedData = {
 	ToolTier: number,
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
+	-- First-cycle arrow guide. "Done" once they've washed the animal after visiting upgrades.
+	GuideStep: string,
+	-- Walk-ins seen, and the "too dirty to wash" teases scheduled from them.
+	AnimalsSeen: number,
+	TenthLegendaryGiven: boolean,
+	CleanUpgradeCount: number, -- hose tiers gained; the first tease stays Legendary
+	TeaseOrder: number, -- RarityConfig order of the next post-upgrade tease
+	AnimalsUntilTease: number, -- walk-ins left before that tease; 0 means not waiting
 	ZooSize: number,
 	Animals: { OwnedAnimal },
 	Cache: { CachedAnimal },
@@ -78,6 +86,12 @@ local function defaults(): SavedData
 		ToolTier = 1,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
+		GuideStep = "Wash",
+		AnimalsSeen = 0,
+		TenthLegendaryGiven = false,
+		CleanUpgradeCount = 0,
+		TeaseOrder = 4,
+		AnimalsUntilTease = 0,
 		ZooSize = GameConfig.Zoo.StartPens,
 		Animals = {},
 		Cache = {},
@@ -229,6 +243,33 @@ local function sanitize(raw: any): SavedData
 				table.insert(data.Cache, { Id = animal.Id, Species = species, Mutation = mutation })
 			end
 		end
+	end
+
+	-- Guide and clean-power teases. Missing fields (saves from before they existed) follow
+	-- progress already on the profile, so a zoo that's underway doesn't replay the arrows
+	-- or get a surprise 10th-animal Legendary.
+	local guideSteps = { Wash = true, Pickup = true, Place = true, Collect = true, Upgrade = true, Repeat = true, Done = true }
+	if guideSteps[raw.GuideStep] then
+		data.GuideStep = raw.GuideStep
+	else
+		local played = data.LifetimeAnimalsWashed > 0 or #data.Animals > 0 or #data.Cache > 0
+		data.GuideStep = if played then "Done" else "Wash"
+	end
+	if raw.AnimalsSeen == nil then
+		data.AnimalsSeen = data.LifetimeAnimalsWashed
+		data.TenthLegendaryGiven = data.AnimalsSeen >= 10
+	else
+		data.AnimalsSeen = cleanCount(raw.AnimalsSeen)
+		data.TenthLegendaryGiven = raw.TenthLegendaryGiven == true
+	end
+	if raw.CleanUpgradeCount == nil then
+		data.CleanUpgradeCount = math.max(0, data.ToolTier - 1)
+		data.TeaseOrder = math.clamp(4 + math.max(0, data.CleanUpgradeCount - 1), 4, 7)
+		data.AnimalsUntilTease = if data.CleanUpgradeCount >= 1 then 10 else 0
+	else
+		data.CleanUpgradeCount = cleanCount(raw.CleanUpgradeCount)
+		data.TeaseOrder = math.clamp(cleanCount(raw.TeaseOrder), 4, 7)
+		data.AnimalsUntilTease = math.clamp(cleanCount(raw.AnimalsUntilTease), 0, 10)
 	end
 	return data
 end

@@ -15,6 +15,7 @@ local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Services = script.Parent.Parent.Services
 local AnimalService = require(Services.AnimalService)
 local BayService = require(Services.BayService)
+local CleanGateService = require(Services.CleanGateService)
 local CleaningService = require(Services.CleaningService)
 local EconomyService = require(Services.EconomyService)
 local Hooks = require(Services.Hooks)
@@ -227,6 +228,11 @@ function MonetizationGrants.product(
 		end
 		ZooService.collectAll(player)
 		return true, `Auto-Collect for {clock(left)}! Your pens pay themselves.`
+	elseif kind == "CleanNow" then
+		if CleaningService.grantCleanNow(player) then
+			return true, "Cleaned! That animal is spotless."
+		end
+		return true, "Clean Now is ready for the next animal your hose can't wash."
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -260,7 +266,9 @@ local function unlockTopHose(player: Player)
 	local data = PlayerDataService.get(player)
 	local top = #ToolConfig
 	if data and data.ToolTier < top then
+		local previous = data.ToolTier
 		data.ToolTier = top
+		CleanGateService.onTiersGained(player, previous, top)
 		PlayerDataService.saveNow(player)
 		EconomyService.sendTool(player)
 		CleaningService.refreshHose(player)

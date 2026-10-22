@@ -524,6 +524,15 @@ local function stepState(player: Player, state: State, dt: number)
 		end
 	end
 
+	-- Hose isn't strong enough: the player is choosing Let Go or Clean Now. The animal waits.
+	if CleaningService.isBlocked(player) then
+		state.SendIn -= dt
+		if state.SendIn <= 0 then
+			send(state)
+		end
+		return
+	end
+
 	local profile = state.Profile
 	local anim = state.Anim
 	local shaking = anim ~= nil and anim.Kind == "Shake"
@@ -637,6 +646,9 @@ local function onWashStarted(player: Player, info: Hooks.WashInfo)
 	end
 	local data = PlayerDataService.get(player)
 	if not data or data.LifetimeAnimalsWashed < TensionConfig.GraceWashes then
+		return
+	end
+	if CleaningService.isBlocked(player) then
 		return
 	end
 	startState(player, info.JobId, info.Species, info.Mutation, info.Model, info.Bay)

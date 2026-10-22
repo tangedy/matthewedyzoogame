@@ -19,6 +19,8 @@
 --   "WashTimeMultiplier" (mult, player, species, mutation)  -> number (more mud = higher)
 --   "SpawnWeight"        (weight, player, species)          -> number
 --   "MutationWeight"     (weight, player, mutation)         -> number
+--   "MutationPick"       (mutation, player, isFirst)        -> string  final mutation key for a walk-in
+--   "VariantOneIn"       (oneIn, player, mutation)          -> number  1-in-N chance for a variant (lower is likelier)
 --   "NextAnimal"         (nil, player, isFirst)             -> { Species: string, Mutation: string? }?  override a walk-in
 --   "WashReward"         (reward, player, species, mutation) -> number
 --   "IncomeMultiplier"   (mult, player)                     -> number

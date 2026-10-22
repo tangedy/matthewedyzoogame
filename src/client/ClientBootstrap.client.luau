@@ -12,6 +12,7 @@ local CleaningController = require(Controllers.CleaningController)
 local ShopController = require(Controllers.ShopController)
 local DevController = require(Controllers.DevController)
 local OnboardingController = require(Controllers.OnboardingController)
+local CleanGateController = require(Controllers.CleanGateController)
 local ZooController = require(Controllers.ZooController)
 local IndexController = require(Controllers.IndexController)
 local PenCashController = require(Controllers.PenCashController)
@@ -27,6 +28,7 @@ if not ok or typeof(initial) ~= "table" then
 		ToolTier = 1,
 		ToolName = "Basic Hose",
 		TutorialCompleted = false,
+		GuideStep = "Done",
 		Bay = nil,
 	}
 end
@@ -37,6 +39,7 @@ HUDController.init(initial)
 CleaningController.init(initial)
 ShopController.init(initial)
 OnboardingController.init(initial)
+CleanGateController.init(initial)
 ZooController.init(initial)
 IndexController.init(initial)
 PenCashController.init()

@@ -1,6 +1,9 @@
 -- Rarity tiers, following Steal a Brainrot's ladder. Each species belongs to one tier
 -- (AnimalConfig); tiers set the nameplate colour and whether a walk-in is announced.
 -- "Zoo God" is our Brainrot God: an animated rainbow label. Secret is black with a white edge.
+-- RequiredCleaningPower is the hose power (ToolConfig.CleaningPower, after boosts like Super
+-- Soap) needed to wash that tier. A walk-in above the player's power can be let go, or cleaned
+-- with the Clean Now product.
 
 export type Rarity = {
 	Key: string,
@@ -10,6 +13,7 @@ export type Rarity = {
 	StrokeColor: Color3,
 	Rainbow: boolean, -- animated rainbow gradient label (Zoo God)
 	Announce: boolean, -- server-wide announcement when one walks in
+	RequiredCleaningPower: number,
 }
 
 local list: { Rarity } = {
@@ -21,6 +25,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
+		RequiredCleaningPower = 0,
 	},
 	{
 		Key = "Rare",
@@ -30,6 +35,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
+		RequiredCleaningPower = 0,
 	},
 	{
 		Key = "Epic",
@@ -39,6 +45,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
+		RequiredCleaningPower = 0.85, -- Strong Hose (0.9). Basic Hose cannot.
 	},
 	{
 		Key = "Legendary",
@@ -48,6 +55,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
+		RequiredCleaningPower = 1.25, -- Power Washer (1.4). Strong Hose (0.9) cannot.
 	},
 	{
 		Key = "Mythic",
@@ -57,6 +65,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = true,
+		RequiredCleaningPower = 2.15, -- Foam Cannon (2.2). Power Washer cannot.
 	},
 	{
 		Key = "ZooGod",
@@ -66,6 +75,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = true,
 		Announce = true,
+		RequiredCleaningPower = 3.4, -- Fire-Hose Rig (3.5). Foam Cannon cannot.
 	},
 	{
 		Key = "Secret",
@@ -75,6 +85,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(1, 1, 1),
 		Rainbow = false,
 		Announce = true,
+		RequiredCleaningPower = 6, -- above the Fire-Hose Rig (3.5); Super Soap on it (7) can
 	},
 }
 

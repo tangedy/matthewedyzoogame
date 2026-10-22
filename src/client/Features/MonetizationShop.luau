@@ -391,7 +391,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	}, Color3.fromRGB(255, 230, 120))
 
 	for _, product in MonetizationConfig.Products do
-		if not product.OncePerPlayer then -- intro products appear on their full-price card
+		if not product.OncePerPlayer and not product.Hidden then -- intro products appear on their full-price card
 			makeCard(product.Key, product.Tab, product.Order, product.Color)
 		end
 	end

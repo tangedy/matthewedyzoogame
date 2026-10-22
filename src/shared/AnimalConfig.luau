@@ -1,7 +1,9 @@
 -- Animal roster. Each species has a fixed rarity tier (Steal a Brainrot style) and earns
 -- Income cash per second while it lives in one of your pens (times its mutation multiplier).
--- SpawnWeight is relative; RequiredToolTier gates which animals can walk in, so better hoses
--- unlock rarer animals. WashTimeMultiplier scales total dirt relative to BaseWashSeconds.
+-- SpawnWeight is relative. RequiredToolTier and RarityConfig.RequiredCleaningPower both gate
+-- which animals can walk in, so a hose only rolls animals it has the clean power to wash.
+-- Scripted teases (the 10th animal, and one rarity ahead after each upgrade) skip that gate.
+-- WashTimeMultiplier scales total dirt relative to BaseWashSeconds.
 -- Values are tuning proposals, not final economy.
 
 export type AnimalDefinition = {
@@ -60,7 +62,7 @@ local AnimalConfig = {
 		Penguin = animal("Penguin", "Epic", 22, 6, 2, 1.0),
 		Fox = animal("Fox", "Epic", 25, 6, 2, 1.0),
 		-- Legendary
-		Llama = animal("Llama", "Legendary", 55, 2, 2, 1.9),
+		Llama = animal("Llama", "Legendary", 55, 2, 3, 1.9),
 		Zebra = animal("Zebra", "Legendary", 65, 2, 3, 2.2),
 		Horse = animal("Horse", "Legendary", 70, 2, 3, 2.2),
 		Panda = animal("Panda", "Legendary", 80, 2, 3, 2.0),
@@ -77,8 +79,8 @@ local AnimalConfig = {
 		Unicorn = animal("Unicorn", "ZooGod", 1000, 0.15, 5, 2.6),
 		Dragon = animal("Dragon", "ZooGod", 1200, 0.12, 5, 4.2),
 		-- Secret
-		TRex = animal("T-Rex", "Secret", 3000, 0.03, 5, 4.5),
-		Kaiju = animal("Kaiju", "Secret", 5000, 0.02, 5, 5.0),
+		TRex = animal("T-Rex", "Secret", 3000, 0.03, 6, 4.5),
+		Kaiju = animal("Kaiju", "Secret", 5000, 0.02, 6, 5.0),
 	} :: { [string]: AnimalDefinition },
 }
 AnimalConfig.Animals.TRex.TemplateName = "TRex"

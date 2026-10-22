@@ -7,13 +7,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 local DirtRenderer = require(script.Parent.DirtRenderer)
 local Hooks = require(script.Parent.Hooks)
+local MutationPayout = require(script.Parent.MutationPayout)
 
 local AnimalService = {}
 
@@ -45,14 +48,22 @@ local function weightedPick<T>(entries: { T }, weightOf: (T) -> number): T?
 end
 
 -- First animal of a session is deterministic; later ones come from the weighted pool of
--- species the player's hose can handle (better hoses unlock rarer tiers).
+-- species the player's hose has the clean power to wash.
 function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Player?): string
 	if isFirst then
 		return AnimalConfig.FirstAnimal
 	end
+	local tool = ToolConfig[toolTier]
+	local power = if tool then tool.CleaningPower else 0
 	local pool = {}
 	for key, def in AnimalConfig.Animals do
-		if def.RequiredToolTier <= toolTier and AnimalBuilder.has(def.TemplateName) then
+		if
+			def.RequiredToolTier <= toolTier
+			and def.SpawnWeight > 0
+			and not def.Limited
+			and CleanPower.canClean(power, def.Rarity)
+			and AnimalBuilder.has(def.TemplateName)
+		then
 			table.insert(pool, key)
 		end
 	end
@@ -63,20 +74,27 @@ function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Play
 	end) or AnimalConfig.FirstAnimal
 end
 
--- Weighted mutation roll. The first animal of a session is always Normal.
+-- Weighted mutation roll, then LiveOps may replace it (hidden gold/rainbow odds, events).
+-- The very first animal of a brand-new profile stays Normal; that rule lives in the hook.
 function AnimalService.pickMutation(isFirst: boolean, player: Player?): string
-	if isFirst then
-		return MutationConfig.Default
+	local key = MutationConfig.Default
+	if not isFirst then
+		local picked = weightedPick(MutationConfig.List, function(m)
+			return if player then math.max(0, Hooks.apply("MutationWeight", m.Weight, player, m.Key)) else m.Weight
+		end)
+		key = if picked then picked.Key else MutationConfig.Default
 	end
-	local picked = weightedPick(MutationConfig.List, function(m)
-		return if player then math.max(0, Hooks.apply("MutationWeight", m.Weight, player, m.Key)) else m.Weight
-	end)
-	return if picked then picked.Key else MutationConfig.Default
+	if player then
+		local override = Hooks.apply("MutationPick", key, player, isFirst)
+		if typeof(override) == "string" and MutationConfig.ByKey[override] then
+			return override
+		end
+	end
+	return key
 end
 
 local function income(animalKey: string, mutationKey: string): number
-	local m = MutationConfig.ByKey[mutationKey] or MutationConfig.ByKey.Normal
-	return AnimalConfig.Animals[animalKey].Income * m.IncomeMultiplier
+	return AnimalConfig.Animals[animalKey].Income * MutationPayout.multiplier(mutationKey)
 end
 
 local function addNameplate(model: Model, animalKey: string, mutationKey: string, maxDistance: number)

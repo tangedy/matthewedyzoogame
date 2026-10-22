@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -60,18 +61,24 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- "Unlocks Epic animals" for the tiers of species that first walk in at this hose tier.
+-- Rarities this hose can wash that the previous one could not.
 local function unlocksText(toolTier: number): string
-	local tiers: { [string]: boolean } = {}
-	for _, def in AnimalConfig.Animals do
-		if def.RequiredToolTier == toolTier and not def.Limited and def.SpawnWeight > 0 then
-			tiers[def.Rarity] = true
-		end
+	local tool = ToolConfig[toolTier]
+	local prev = ToolConfig[toolTier - 1]
+	if not tool then
+		return ""
 	end
+	local prevPower = if prev then prev.CleaningPower else 0
 	local names = {}
 	for _, rarity in RarityConfig.List do
-		if tiers[rarity.Key] then
-			table.insert(names, rarity.DisplayName)
+		local need = rarity.RequiredCleaningPower
+		if need > prevPower + 1e-4 and CleanPower.canClean(tool.CleaningPower, rarity.Key) then
+			for _, def in AnimalConfig.Animals do
+				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
+					table.insert(names, rarity.DisplayName)
+					break
+				end
+			end
 		end
 	end
 	return if #names > 0 then `, unlocks {table.concat(names, " & ")} animals` else ""
@@ -83,11 +90,11 @@ local function refresh()
 	end
 	local current = ToolConfig[tier] or ToolConfig[1]
 	local nextTool = ToolConfig[tier + 1]
-	currentLabel.Text = `Current: {current.Name} (Tier {current.Tier})`
+	currentLabel.Text = `Current: {current.Name} — clean power {CleanPower.format(current.CleaningPower)}`
 	if nextTool then
 		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextTool.Name}`
-		gainLabel.Text = `Cleaning speed +{gain}%{unlocksText(nextTool.Tier)}`
+		gainLabel.Text = `Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){unlocksText(nextTool.Tier)}`
 		buyButton.Visible = true
 		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
 		local affordable = coins >= nextTool.Price

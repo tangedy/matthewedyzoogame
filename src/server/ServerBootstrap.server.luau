@@ -54,6 +54,7 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		ToolTier = if tool then tool.Tier else 1,
 		ToolName = if tool then tool.Name else "",
 		TutorialCompleted = if data then data.TutorialCompleted else false,
+		GuideStep = if data then data.GuideStep else "Done",
 		Bay = BayService.getSnapshot(player),
 		Zoo = ZooService.getZooSummary(player),
 		Index = if data then data.Index else nil,

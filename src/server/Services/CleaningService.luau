@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -23,6 +24,7 @@ type Job = {
 	Id: string,
 	Owner: Player,
 	Model: Model,
+	Rarity: string,
 	Patches: { [string]: Patch },
 	PatchList: { Patch },
 	TotalWeighted: number,
@@ -36,6 +38,7 @@ export type JobParams = {
 	Model: Model,
 	Patches: { AnimalBuilder.PatchInfo },
 	WashTimeMultiplier: number,
+	Rarity: string,
 	OnComplete: () -> (),
 }
 
@@ -44,6 +47,7 @@ local CleaningService = {}
 local jobs: { [string]: Job } = {}
 local jobByOwner: { [Player]: Job } = {}
 local lastRequestAt: { [Player]: number } = {}
+local cleanNowQueued: { [Player]: boolean } = {} -- paid Clean Now, waiting for an animal they can't wash
 
 local progressChanged = Remotes.event("CleaningProgressChanged")
 
@@ -160,6 +164,11 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 	end
 
 	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
+	-- A rarity above this hose (even with Super Soap) doesn't take dirt. Clean Now or a
+	-- better hose is the way through; letting it go is handled by BayService.
+	if not CleanPower.canClean(power, job.Rarity) then
+		return
+	end
 	for _, patch in hitPatches do
 		patch.RemainingDirt = math.max(0, patch.RemainingDirt - power * step)
 		local fraction = patch.RemainingDirt / patch.InitialDirt
@@ -188,7 +197,35 @@ function CleaningService.init(deps: { getTool: (Player) -> ToolConfig.ToolTier? 
 	Remotes.event("CleaningIntent").OnServerEvent:Connect(onCleaningIntent)
 	Players.PlayerRemoving:Connect(function(player)
 		lastRequestAt[player] = nil
+		cleanNowQueued[player] = nil
 	end)
+end
+
+local function effectivePower(player: Player): number
+	local tool = getTool(player)
+	local base = if tool then tool.CleaningPower else 0
+	return Hooks.apply("CleaningPower", base, player)
+end
+
+-- True while the owner's current wash is a rarity their hose cannot clean.
+function CleaningService.isBlocked(player: Player): boolean
+	local job = jobByOwner[player]
+	if not job or not job.Active then
+		return false
+	end
+	return not CleanPower.canClean(effectivePower(player), job.Rarity)
+end
+
+local function finish(job: Job)
+	job.Active = false
+	for _, patch in job.PatchList do
+		if patch.RemainingDirt > 0 then
+			patch.RemainingDirt = 0
+			DirtRenderer.clear(patch.Part, 1)
+		end
+	end
+	DirtRenderer.setGrime(job.Model, 1)
+	progressChanged:FireClient(job.Owner, job.Id, 1, false)
 end
 
 -- Starts accepting cleaning for a job. Total dirt is set from config so wash time doesn't
@@ -203,6 +240,7 @@ function CleaningService.beginJob(params: JobParams)
 		Id = params.JobId,
 		Owner = params.Owner,
 		Model = params.Model,
+		Rarity = params.Rarity,
 		Patches = {},
 		PatchList = {},
 		TotalWeighted = 0,
@@ -233,16 +271,39 @@ function CleaningService.forceComplete(player: Player): boolean
 	if not job or not job.Active then
 		return false
 	end
-	job.Active = false
-	for _, patch in job.PatchList do
-		if patch.RemainingDirt > 0 then
-			patch.RemainingDirt = 0
-			DirtRenderer.clear(patch.Part, 1)
-		end
-	end
-	DirtRenderer.setGrime(job.Model, 1)
-	progressChanged:FireClient(player, job.Id, 1, false)
+	finish(job)
 	task.spawn(job.OnComplete)
+	return true
+end
+
+-- Finishes the dirt without resuming the bay thread. BayService uses this when Clean Now
+-- was paid before the wash started, so it can fall straight into the payout.
+function CleaningService.completeWithoutResume(player: Player): boolean
+	local job = jobByOwner[player]
+	if not job or not job.Active then
+		return false
+	end
+	finish(job)
+	return true
+end
+
+-- Pays off a blocked wash now, or remembers the purchase until the next one they can't clean.
+-- Returns true when an animal was cleaned immediately.
+function CleaningService.grantCleanNow(player: Player): boolean
+	if CleaningService.isBlocked(player) and CleaningService.forceComplete(player) then
+		cleanNowQueued[player] = nil
+		return true
+	end
+	cleanNowQueued[player] = true
+	return false
+end
+
+-- True once, when a queued Clean Now matches the wash that just became active.
+function CleaningService.pullQueuedClean(player: Player): boolean
+	if not cleanNowQueued[player] or not CleaningService.isBlocked(player) then
+		return false
+	end
+	cleanNowQueued[player] = nil
 	return true
 end
 

@@ -5,8 +5,11 @@
 -- chat, or the LiveOpsDev remote) for testing.
 --
 -- State is replicated through attributes on ReplicatedStorage.LiveOpsState:
---   MudStormActive (bool), MudStormEndsAt (unix), MudStormNextAt (unix, next scheduled start)
--- and announced to features with Hooks "MudStormChanged" (active, endsAt).
+--   MudStormActive (bool) — the sky and the rain follow this, not the client's countdown
+--   MudStormEndsAt, MudStormNextAt — GetServerTimeNow() instants (Common.synced), so every
+--   client counts down the same clock the server used
+-- and announced to features with Hooks "MudStormChanged" (active, endsAt). The schedule
+-- itself stays on os.time() so every server starts the storm together.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -70,9 +73,12 @@ local function evaluate()
 	end
 
 	local folder = Common.stateFolder()
-	folder:SetAttribute("MudStormNextAt", nextStart or 0)
 	local nowActive = newEnd ~= nil
 	local finish = newEnd or 0
+	-- Refresh the synced stamps every check. The schedule stays on os.time(); the
+	-- attributes stay on GetServerTimeNow(), including if those clocks drift apart.
+	folder:SetAttribute("MudStormNextAt", Common.synced(nextStart or 0))
+	folder:SetAttribute("MudStormEndsAt", Common.synced(finish))
 	if nowActive == active and finish == endsAt then
 		return
 	end
@@ -80,7 +86,6 @@ local function evaluate()
 	local stopped = active and not nowActive
 	active = nowActive
 	endsAt = finish
-	folder:SetAttribute("MudStormEndsAt", endsAt)
 	folder:SetAttribute("MudStormActive", active)
 	Hooks.fire("MudStormChanged", active, endsAt)
 	if started then
@@ -178,6 +183,13 @@ function MudStorm.init()
 	end)
 	Hooks.modify("WashTimeMultiplier", function(mult: number): number
 		return if active then mult * Config.WashTimeMultiplier else mult
+	end)
+	-- Everyday gold/rainbow odds (DevParams.json) get likelier. Event rates are not stacked on top.
+	Hooks.modify("VariantOneIn", function(oneIn: number, _player: Player, mutation: string): number
+		if active and mutation ~= MutationConfig.Default and typeof(oneIn) == "number" and oneIn > 1 then
+			return math.max(1, math.floor(oneIn / Config.MutationMultiplier))
+		end
+		return oneIn
 	end)
 
 	Remotes.event("LiveOpsDev").OnServerEvent:Connect(function(player: Player, action: any)

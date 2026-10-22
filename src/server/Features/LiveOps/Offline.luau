@@ -1,8 +1,13 @@
--- Offline earnings. LastSeen (unix seconds) is refreshed every minute while playing and when
--- the player leaves. On the next join, the time away (capped, then passed through the
--- "OfflineSeconds" modifier) earns a fraction of the zoo's income, deposited on the pen pads
--- once the bay and pens exist. The owner gets a "WELCOME BACK!" popup; the client fetches it
--- with LiveOpsSync if it was computed before the client was listening.
+-- Offline earnings. LastSeen (server os.time(), never a client timestamp) is refreshed every
+-- minute while playing and when the player leaves. On the next join, the time away earns a
+-- fraction of the zoo's income onto the pen pads, once the bay exists.
+--
+-- The absence is clamped to MaxSeconds (6 hours; never above HardMaxSeconds). A LastSeen in
+-- the future, or one from before the game existed, pays nothing. If os.time() and
+-- GetServerTimeNow() disagree by more than ClockSkewSeconds, that disagreement is removed
+-- from the payout so a jumped clock can't mint cash. The "OfflineSeconds" hook cannot raise
+-- the result back over the cap. The owner gets a "WELCOME BACK!" popup; the client fetches
+-- it with LiveOpsSync if it was computed before the client was listening.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -37,6 +42,30 @@ local function touch(player: Player)
 	end
 end
 
+local function payCap(): number
+	local configured = if typeof(Config.MaxSeconds) == "number" then Config.MaxSeconds else 0
+	local hard = if typeof(Config.HardMaxSeconds) == "number" then Config.HardMaxSeconds else 24 * 60 * 60
+	return math.clamp(configured, 0, hard)
+end
+
+-- Seconds the player was actually away. Server clocks only; a bad or future LastSeen is zero.
+local function absence(lastSeen: number?): number
+	if typeof(lastSeen) ~= "number" then
+		return 0
+	end
+	local now = Common.now()
+	-- Edited save, or the clock stepped backwards: this is not time they were gone.
+	if lastSeen < Config.EarliestLastSeen or lastSeen > now + Config.ClockSkewSeconds then
+		return 0
+	end
+	local away = now - lastSeen
+	local skew = Common.clockSkew()
+	if skew > Config.ClockSkewSeconds then
+		away -= skew - Config.ClockSkewSeconds
+	end
+	return math.clamp(away, 0, payCap())
+end
+
 local function measure(player: Player)
 	if awaySeconds[player] ~= nil or not player.Parent then
 		return
@@ -45,8 +74,7 @@ local function measure(player: Player)
 	if not state then
 		return
 	end
-	local away = if state.LastSeen then Common.now() - state.LastSeen else 0
-	awaySeconds[player] = math.clamp(away, 0, Config.MaxSeconds)
+	awaySeconds[player] = absence(state.LastSeen)
 	touch(player)
 end
 
@@ -61,12 +89,13 @@ local function payOut(player: Player)
 	end
 	paid[player] = true
 	awaySeconds[player] = nil
-	if seconds < Config.MinSeconds then
-		return
-	end
 	local modified = Hooks.apply("OfflineSeconds", seconds, player)
 	if typeof(modified) == "number" and modified == modified and modified >= 0 and modified < math.huge then
 		seconds = modified
+	end
+	seconds = math.clamp(seconds, 0, payCap())
+	if seconds < Config.MinSeconds then
+		return
 	end
 	local amount = math.floor(ZooService.totalIncome(player) * seconds * Config.Rate)
 	if amount < 1 then

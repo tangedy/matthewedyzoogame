@@ -1,5 +1,7 @@
 -- Mutations rolled for every walk-in, Steal a Brainrot style: a variant look plus an income
--- multiplier. Weights are relative. The index tracks every species x mutation.
+-- multiplier. Weights are relative. Gold and Rainbow weights stay 0: their odds, pity, and
+-- income live in ServerScriptService.Server.DevParams (a JSON file the client never sees).
+-- The index tracks every species x mutation.
 
 export type Mutation = {
 	Key: string,
@@ -27,8 +29,8 @@ local list: { Mutation } = {
 		Key = "Gold",
 		Order = 2,
 		DisplayName = "Gold",
-		Weight = 10,
-		IncomeMultiplier = 1.25,
+		Weight = 0, -- odds are DevParams.json, not this weight
+		IncomeMultiplier = 1.5, -- fallback; DevParams.mutations.Gold.incomeMultiplier wins
 		Color = Color3.fromRGB(255, 200, 40),
 		Rainbow = false,
 		Announce = false,
@@ -47,8 +49,8 @@ local list: { Mutation } = {
 		Key = "Rainbow",
 		Order = 4,
 		DisplayName = "Rainbow",
-		Weight = 0.5,
-		IncomeMultiplier = 10,
+		Weight = 0, -- odds are DevParams.json, not this weight
+		IncomeMultiplier = 2, -- fallback; DevParams.mutations.Rainbow.incomeMultiplier wins
 		Color = Color3.new(1, 1, 1),
 		Rainbow = true,
 		Announce = true,

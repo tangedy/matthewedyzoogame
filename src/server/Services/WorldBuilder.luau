@@ -162,7 +162,12 @@ local function buildCache(center: Vector3, padTop: number, bay: Model)
 		local slot = makeMarker("Slot" .. i, CFrame.lookAt(pos, pos + Vector3.zAxis), cache)
 		slot:SetAttribute("SlotIndex", i)
 		makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false
-		makePrompt("SellPrompt", "Sell", 1, slot, Enum.KeyCode.F).Enabled = false
+		-- Below the pickup prompt, and a hold, so the two labels don't draw on top of each other.
+		local sell = makePrompt("SellPrompt", "Sell", 1.5, slot, Enum.KeyCode.F)
+		-- Positive Y shifts the billboard up. Negative puts Sell under Pick up.
+		sell.UIOffset = Vector2.new(0, -110)
+		sell.GamepadKeyCode = Enum.KeyCode.ButtonY
+		sell.Enabled = false
 	end
 	cache.Parent = bay
 end
@@ -245,8 +250,12 @@ local function buildZoo(center: Vector3, padTop: number, bay: Model)
 		glow.Parent = pad
 		CollectionService:AddTag(pad, "CollectPad") -- PenCashController animates these
 
-		local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(160, 36));
-		(status.Parent :: Instance).Name = "Status"
+		local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(80, 18))
+		local stroke = status:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Thickness = 1.25
+		end
+		;(status.Parent :: Instance).Name = "Status"
 		pen.Parent = zoo
 	end
 

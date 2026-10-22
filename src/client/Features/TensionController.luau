@@ -1,6 +1,6 @@
 -- Tension UI and local effects (server side: src/server/Features/Tension).
 --
---   Patience bar  just under the wash card: mood pill, orange-to-red meter, wander-off timer
+--   Patience bar  top of the screen: mood pill, orange-to-red meter, wander-off timer
 --                 for Mythic and rarer animals. Flashes and shakes below 20% ("DON'T LET IT
 --                 SHAKE!"), turns blue while a Calm Treat is active. Hidden when not washing.
 --   Mud splat     brown blotches over the whole screen that drip and fade, when a shake hits you.
@@ -27,9 +27,9 @@ local player = Players.LocalPlayer
 
 local TensionController = {}
 
-local ROW_Y = 162 -- just under the HUD's wash card (y 8..158)
+local ROW_Y = 8 -- top of the HUD; the clean meter lives on the animal
 local ROW_WIDTH = 380
-local ROW_HEIGHT = 22 -- y 162..184: clear of the index toast (y 214), only grazes the announcement (y 176)
+local ROW_HEIGHT = 22 -- y 8..30, under the top bar and clear of the announcement (y 40)
 local MOOD_WIDTH = 104
 local TIMER_WIDTH = 104
 local GAP = 6
@@ -122,7 +122,7 @@ local function buildGui()
 	gui = Instance.new("ScreenGui")
 	gui.Name = "Tension"
 	gui.ResetOnSpawn = false
-	gui.DisplayOrder = 1 -- the HUD announcement (y 176) can overlap the bottom of the row
+	gui.DisplayOrder = 1 -- the HUD announcement (y 40) sits just under this row
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	row = Instance.new("Frame")

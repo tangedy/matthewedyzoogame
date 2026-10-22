@@ -18,6 +18,8 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalService = require(script.Parent.AnimalService)
 local EconomyService = require(script.Parent.EconomyService)
+local MutationPayout = require(script.Parent.MutationPayout)
+local GuideService = require(script.Parent.GuideService)
 local Hooks = require(script.Parent.Hooks)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
@@ -47,8 +49,7 @@ local purchaseResult = Remotes.event("PurchaseResult")
 
 function ZooService.income(species: string, mutation: string): number
 	local def = AnimalConfig.Animals[species]
-	local m = MutationConfig.ByKey[mutation] or MutationConfig.ByKey.Normal
-	return def.Income * m.IncomeMultiplier
+	return def.Income * MutationPayout.multiplier(mutation)
 end
 
 function ZooService.washReward(species: string, mutation: string): number
@@ -323,6 +324,7 @@ local function returnCarryToCache(player: Player)
 		buildCacheModel(zoo, record)
 	end
 	refreshAll(player)
+	GuideService.onCarryReturned(player)
 end
 
 local function pickUp(player: Player, slotIndex: number)
@@ -345,6 +347,7 @@ local function pickUp(player: Player, slotIndex: number)
 	zoo.CarriedId = record.Id
 	zoo.CarryModel = AnimalService.buildCarryModel(record.Species, record.Mutation, head)
 	refreshAll(player)
+	GuideService.onPickedUp(player)
 end
 
 -- Put the carried animal into a pen. An occupied pen sells its animal first (plus any cash
@@ -384,6 +387,7 @@ local function placeCarried(player: Player, penIndex: number)
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
 	Hooks.fire("AnimalPlaced", player, animal)
+	GuideService.onPlaced(player)
 end
 
 local function sellFromPen(player: Player, penIndex: number)
@@ -457,6 +461,7 @@ local function collect(player: Player, penIndex: number)
 	local amount = math.floor(animal.Pending)
 	animal.Pending -= amount
 	EconomyService.addCoins(player, amount)
+	GuideService.onCollected(player)
 	local pen = penOf(zoo, penIndex)
 	local pad = pen and pen:FindFirstChild("CollectPad") :: BasePart?
 	if pad then

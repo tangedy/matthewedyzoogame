@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local CleanGateService = require(script.Parent.CleanGateService)
 local CleaningService = require(script.Parent.CleaningService)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
@@ -96,8 +97,10 @@ local function purchaseToolUpgrade(player: Player)
 		return
 	end
 
+	local previousTier = data.ToolTier
 	data.Coins -= nextTool.Price
 	data.ToolTier = nextTool.Tier
+	CleanGateService.onTiersGained(player, previousTier, nextTool.Tier)
 	PlayerDataService.saveNow(player)
 
 	coinsChanged:FireClient(player, data.Coins)

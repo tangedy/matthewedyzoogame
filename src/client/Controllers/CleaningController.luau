@@ -373,6 +373,11 @@ local function onHeartbeat()
 		stopEffects()
 		return
 	end
+	-- The hose isn't strong enough for this rarity. The prompt offers Let Go / Clean Now.
+	if player:GetAttribute("CleanBlocked") == true then
+		stopEffects()
+		return
+	end
 
 	impactPart.CFrame = CFrame.new(impact)
 	beam.Attachment0 = getNozzle(root)

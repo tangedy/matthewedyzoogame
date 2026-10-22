@@ -1,9 +1,12 @@
--- AnalyticsService: the onboarding funnel (each step logged once per player, remembered in
--- data.Extra.LiveOps.Funnel) and economy sources: wash rewards, sales, and cash earned onto
--- the pen pads (pen income, batched per player, and offline earnings). Pad cash counts as a
--- source when it's earned, not when it's collected, so collecting it (or the pad cash paid out
--- with a sale) is not logged again. endingBalance is always the wallet (data.Coins).
--- Players who had already washed animals before the funnel existed skip it entirely.
+-- AnalyticsService: the onboarding funnel and economy sources (wash rewards, sales, and cash
+-- earned onto the pen pads, including offline earnings). Pad cash counts as a source when
+-- it's earned, not when it's collected, so collecting it is not logged again.
+-- endingBalance is always the wallet (data.Coins).
+--
+-- Each funnel step is claimed once per session in memory before anything can yield, and
+-- once per player in data.Extra.LiveOps.Funnel. A second WashProgress, a poll, and a later
+-- session all no-op, so the funnel isn't counted twice. Players who had already washed
+-- animals before the funnel existed skip it entirely.
 -- Every AnalyticsService call is wrapped in pcall: it can error in Studio or when throttled.
 
 local AnalyticsService = game:GetService("AnalyticsService")
@@ -32,13 +35,32 @@ local CURRENCY = "Cash"
 local Analytics = {}
 
 local unloggedIncome: { [Player]: number } = {} -- pen income earned since the last flush
+local claimed: { [Player]: { [string]: boolean } } = {} -- this session, set before any yield
 
 local function logStep(player: Player, step: number)
-	local state = Common.state(player)
-	local key = "S" .. step
-	if not state or state.Funnel[key] or not player.Parent then
+	if step < 1 or step > #STEPS or not player.Parent then
 		return
 	end
+	local key = "S" .. step
+	local mine = claimed[player]
+	if not mine then
+		mine = {}
+		claimed[player] = mine
+	end
+	if mine[key] then
+		return
+	end
+	local state = Common.state(player)
+	if not state or state.Funnel[key] then
+		-- Saved already, or no profile yet. Claiming a saved step stops the poll from
+		-- retrying it; a missing profile is not claimed, so the step can still fire once
+		-- the data is there.
+		if state then
+			mine[key] = true
+		end
+		return
+	end
+	mine[key] = true
 	state.Funnel[key] = true
 	PlayerDataService.markDirty(player)
 	local ok, err = pcall(function()
@@ -102,8 +124,12 @@ function Analytics.init()
 			return
 		end
 		if next(state.Funnel) == nil and data.LifetimeAnimalsWashed > 0 then
+			local mine = {}
+			claimed[player] = mine
 			for step in STEPS do
-				state.Funnel["S" .. step] = true -- a returning player from before the funnel
+				local key = "S" .. step
+				state.Funnel[key] = true -- a returning player from before the funnel
+				mine[key] = true
 			end
 			PlayerDataService.markDirty(player)
 			return
@@ -147,6 +173,7 @@ function Analytics.init()
 	Players.PlayerRemoving:Connect(function(player)
 		task.defer(function() -- after PlayerLeaving's flush, whichever handler runs first
 			unloggedIncome[player] = nil
+			claimed[player] = nil
 		end)
 	end)
 	task.spawn(function()

@@ -8,6 +8,8 @@ local EVENTS = {
 	"CleaningIntent", -- (jobId: string, aimDirection: Vector3)
 	"PurchaseToolUpgrade", -- ()
 	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
+	"LetAnimalGo", -- () the owner sends a blocked animal away instead of paying to clean it
+	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide
 	-- server -> client
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
@@ -19,6 +21,7 @@ local EVENTS = {
 	"IndexChanged", -- (index: { [string]: boolean }, newKey: string?)
 	"CarryChanged", -- (CarryInfo?) what the player is carrying, nil when nothing
 	"Announcement", -- (text: string, rarity: string) to everyone
+	"GuideStepChanged", -- (step: string)
 }
 
 local FUNCTIONS = {

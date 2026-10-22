@@ -4,6 +4,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Parent.Parent.Services
@@ -15,6 +16,7 @@ export type State = {
 	DailyDay: number?, -- UTC day number of the last Daily Dirty Animal
 	BestStars: number,
 	Funnel: { [string]: boolean },
+	WashesRolled: number?, -- animals that walked in; gold/rainbow pity uses this, never shown
 }
 
 local Common = {}
@@ -60,11 +62,33 @@ function Common.state(player: Player): State?
 		end
 		raw.Funnel = funnel
 	end
+	-- Seed from washes already finished so a zoo in progress still hits the next pity mark.
+	-- Counted when an animal walks in. Not replicated.
+	local rolled = finite(raw.WashesRolled)
+	raw.WashesRolled = if rolled and rolled >= 0 then math.floor(rolled) else math.floor(finite(data.LifetimeAnimalsWashed) or 0)
 	return raw :: State
 end
 
+-- UTC unix time. Schedules and saved LastSeen use this so every server agrees.
+-- It is not the clock clients count down with; replicated end times go through synced().
 function Common.now(): number
 	return os.time()
+end
+
+-- Shift a unix instant into Workspace:GetServerTimeNow() space. Clients subtract
+-- GetServerTimeNow() from attributes written with this, so the countdown matches the
+-- server even when os.time() and the synced clock disagree.
+function Common.synced(unix: number): number
+	if typeof(unix) ~= "number" or unix ~= unix or unix <= 0 or unix == math.huge then
+		return 0
+	end
+	return unix + (Workspace:GetServerTimeNow() - os.time())
+end
+
+-- How far os.time() and the synced server clock are apart, in seconds. Offline pay
+-- treats anything beyond a small tolerance as clock desync, not time the player was away.
+function Common.clockSkew(): number
+	return math.abs(os.time() - Workspace:GetServerTimeNow())
 end
 
 function Common.utcDay(now: number?): number

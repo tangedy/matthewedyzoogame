@@ -1,11 +1,7 @@
--- Mud Storm on the client. Reads the server's storm state from the attributes on
--- ReplicatedStorage.LiveOpsState and shows:
---   * a banner in the free centre of the top bar: "MUD STORM! 12:34" while one is active,
---     or "NEXT MUD STORM IN 42m 10s" when the next one is less than an hour away,
---   * murky brown-orange lighting (tweened in, and restored to what it was afterwards),
---   * mud "rain" falling around the camera.
+-- Mud Storm on the client. The server owns the storm: MudStormActive turns the sky and the
+-- rain on and off. The countdown sits in the shared top-bar counter, not a second banner.
+-- Hitting 0:00 locally does not end the sky; the next replicated MudStormActive does.
 
-local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -13,21 +9,14 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local LiveOpsConfig = require(ReplicatedStorage.Shared.FeatureConfig.LiveOpsConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
 local Storm = {}
 
-local STORM_COLORS = ColorSequence.new(Color3.fromRGB(230, 150, 60), Color3.fromRGB(120, 70, 30))
-local TEASER_COLORS = ColorSequence.new(Color3.fromRGB(80, 70, 60), Color3.fromRGB(40, 35, 30))
 local FADE = TweenInfo.new(2.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 
 local folder: Instance
 local topGui: ScreenGui
-local banner: Frame
-local bannerText: TextLabel
-local bannerScale: UIScale
-local bannerGradient: UIGradient
 
 local active = false
 local grade: ColorCorrectionEffect? = nil
@@ -35,21 +24,6 @@ local saved: { [Instance]: { [string]: any } }? = nil -- lighting values from be
 local fadeToken = 0
 local rain: Part? = nil
 local rainConnection: RBXScriptConnection? = nil
-local popUntil = 0
-
-local function formatClock(seconds: number): string
-	local s = math.max(0, math.floor(seconds))
-	return string.format("%d:%02d", s // 60, s % 60)
-end
-
-local function formatDuration(seconds: number): string
-	local s = math.max(0, math.floor(seconds))
-	if s >= 3600 then
-		return `{s // 3600}h {(s % 3600) // 60}m`
-	end
-	return `{s // 60}m {s % 60}s`
-end
-
 local function playSound(id: string, volume: number)
 	local sound = Instance.new("Sound")
 	sound.SoundId = id
@@ -59,42 +33,6 @@ local function playSound(id: string, volume: number)
 	sound.Ended:Once(function()
 		sound:Destroy()
 	end)
-end
-
-local function buildBanner(gui: ScreenGui)
-	banner = Instance.new("Frame")
-	banner.Name = "StormBanner"
-	banner.AnchorPoint = Vector2.new(0.5, 0)
-	banner.Size = UDim2.fromOffset(270, 42)
-	banner.BackgroundColor3 = Color3.new(1, 1, 1)
-	banner.Visible = false
-	banner.Parent = gui
-	UIStyle.border(banner, 3)
-	bannerGradient = Instance.new("UIGradient")
-	bannerGradient.Rotation = 90
-	bannerGradient.Color = STORM_COLORS
-	bannerGradient.Parent = banner
-	bannerScale = Instance.new("UIScale")
-	bannerScale.Parent = banner
-	bannerText = Instance.new("TextLabel")
-	bannerText.AnchorPoint = Vector2.new(0.5, 0.5)
-	bannerText.Position = UDim2.fromScale(0.5, 0.5)
-	bannerText.Size = UDim2.new(1, -16, 1, -8)
-	bannerText.Parent = banner
-	UIStyle.text(bannerText)
-
-	-- Centre it in the top bar strip (above the core HUD's wash card).
-	local function place()
-		local inset = GuiService:GetGuiInset()
-		local height = if inset.Y >= 30 then math.clamp(inset.Y - 8, 30, 44) else 40
-		banner.Size = UDim2.fromOffset(270, height)
-		banner.Position = UDim2.fromOffset(0, math.max(4, (inset.Y - height) / 2)) + UDim2.fromScale(0.5, 0)
-	end
-	place()
-	local camera = Workspace.CurrentCamera
-	if camera then
-		camera:GetPropertyChangedSignal("ViewportSize"):Connect(place)
-	end
 end
 
 -- Lighting ------------------------------------------------------------------------------
@@ -288,39 +226,9 @@ local function apply()
 		rainOn()
 		playSound("rbxasset://sounds/impact_water.mp3", 0.8)
 		splash()
-		bannerScale.Scale = 0.4
-		popUntil = os.clock() + 0.5
-		TweenService:Create(bannerScale, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Scale = 1,
-		}):Play()
 	else
 		tintOff()
 		rainOff()
-	end
-end
-
-local function numberAttribute(name: string): number
-	local value = folder:GetAttribute(name)
-	return if typeof(value) == "number" then value else 0
-end
-
-local function refreshBanner()
-	local now = Workspace:GetServerTimeNow()
-	if active then
-		banner.Visible = true
-		bannerGradient.Color = STORM_COLORS
-		bannerText.Text = `MUD STORM! {formatClock(numberAttribute("MudStormEndsAt") - now)}`
-		bannerText.TextColor3 = Color3.new(1, 1, 1)
-		return
-	end
-	local untilNext = numberAttribute("MudStormNextAt") - now
-	if untilNext > 0 and untilNext < LiveOpsConfig.MudStorm.TeaserSeconds then
-		banner.Visible = true
-		bannerGradient.Color = TEASER_COLORS
-		bannerText.Text = `NEXT MUD STORM IN {formatDuration(untilNext)}`
-		bannerText.TextColor3 = Color3.fromRGB(255, 200, 120)
-	else
-		banner.Visible = false
 	end
 end
 
@@ -330,21 +238,16 @@ end
 
 function Storm.start(gui: ScreenGui)
 	topGui = gui
-	buildBanner(gui)
 	folder = ReplicatedStorage:WaitForChild("LiveOpsState")
 	folder:GetAttributeChangedSignal("MudStormActive"):Connect(apply)
 	apply()
-	refreshBanner()
 
 	local nextRefresh = 0
 	RunService.Heartbeat:Connect(function()
 		local t = os.clock()
-		if active and t > popUntil then
-			bannerScale.Scale = 1 + math.sin(t * 5) * 0.04 -- gentle throb while the storm rages
-		end
 		if t >= nextRefresh then
 			nextRefresh = t + 0.25
-			refreshBanner()
+			apply() -- sky follows the replicated flag, even if the change signal was missed
 		end
 	end)
 end

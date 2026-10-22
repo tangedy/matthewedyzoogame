@@ -1,13 +1,13 @@
--- HUD in Steal a Brainrot style: big outlined cash on the left with income per second, the
--- animal being washed (name, rarity, mutation) with its clean meter at the top, outlined
--- hints at the bottom, payout pops and server-wide announcements.
+-- HUD in Steal a Brainrot style: big outlined cash on the left with income per second, outlined
+-- hints at the bottom, payout pops and server-wide announcements. The clean meter rides on
+-- the animal's nameplate, above the animal. Name, rarity and mutation already live there.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
-local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -21,23 +21,25 @@ local HUDController = {}
 local BAR_COLOR = Color3.fromRGB(90, 200, 255)
 local BAR_DONE_COLOR = Color3.fromRGB(90, 255, 90)
 
+local PROGRESS_HEIGHT = 46
+
 local gui: ScreenGui
 local cashLabel: TextLabel
 local incomeLabel: TextLabel
 local toolLabel: TextLabel
-local washPanel: Frame
-local mutationLabel: TextLabel
-local nameLabel: TextLabel
-local rarityLabel: TextLabel
+local progressBoard: BillboardGui
+local progressRoot: Frame
 local barFill: Frame
 local percentLabel: TextLabel
 local rewardLabel: TextLabel
-local panelScale: UIScale
 local percentScale: UIScale
 local barGradient: UIGradient
 local shineGradient: UIGradient
 local barStroke: UIStroke?
 local shownPercent = -1
+local wantProgress = false
+local currentBayName: string? = nil
+local mountedHead: BasePart? = nil
 local toast: TextLabel
 local payout: TextLabel
 local announcementLabel: TextLabel
@@ -89,51 +91,26 @@ local function buildGui()
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
 
-	-- Top center: the animal being washed, on a framed card that pops in per animal
-	washPanel = Instance.new("Frame")
-	washPanel.AnchorPoint = Vector2.new(0.5, 0)
-	washPanel.Position = UDim2.new(0.5, 0, 0, 8)
-	washPanel.Size = UDim2.fromOffset(380, 150)
-	washPanel.BackgroundColor3 = Color3.fromRGB(40, 70, 130)
-	washPanel.BackgroundTransparency = 0.15
-	washPanel.Visible = false
-	washPanel.Parent = gui
-	UIStyle.border(washPanel, 4)
-	local cardGradient = Instance.new("UIGradient")
-	cardGradient.Rotation = 90
-	cardGradient.Color = ColorSequence.new(Color3.fromRGB(120, 190, 255), Color3.fromRGB(60, 90, 200))
-	cardGradient.Parent = washPanel
-	panelScale = Instance.new("UIScale")
-	panelScale.Parent = washPanel
-
-	mutationLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 6), Size = UDim2.new(1, 0, 0, 20) })
-	nameLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 24), Size = UDim2.new(1, 0, 0, 40) })
-	local nameShine = Instance.new("UIGradient")
-	nameShine.Rotation = 90
-	nameShine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 235, 150))
-	nameShine.Parent = nameLabel
-	local nameStroke = nameLabel:FindFirstChildOfClass("UIStroke")
-	if nameStroke then
-		nameStroke.Thickness = 3.5
-	end
-
-	-- Rarity badge: a dark pill with the tier-coloured name inside
-	local badge = Instance.new("Frame")
-	badge.AnchorPoint = Vector2.new(0.5, 0)
-	badge.Position = UDim2.new(0.5, 0, 0, 66)
-	badge.Size = UDim2.fromOffset(150, 24)
-	badge.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	badge.BackgroundTransparency = 0.2
-	badge.Parent = washPanel
-	UIStyle.border(badge, 2)
-	rarityLabel = textLabel(badge, { Size = UDim2.fromScale(1, 1) })
-
+	-- Clean meter above the animal. A BillboardGui inside a ScreenGui is never drawn,
+	-- so this one sits directly under PlayerGui and points at the animal's head.
+	progressBoard = Instance.new("BillboardGui")
+	progressBoard.Name = "CleanProgress"
+	progressBoard.Size = UDim2.fromOffset(220, PROGRESS_HEIGHT)
+	progressBoard.SizeOffset = Vector2.new(0, 1.9) -- just above the nameplate
+	progressBoard.MaxDistance = 80
+	progressBoard.Enabled = false
+	progressBoard.Parent = gui.Parent
+	progressRoot = Instance.new("Frame")
+	progressRoot.Name = "CleanProgress"
+	progressRoot.BackgroundTransparency = 1
+	progressRoot.Size = UDim2.fromScale(1, 1)
+	progressRoot.Parent = progressBoard
 	local bar = Instance.new("Frame")
-	bar.Position = UDim2.fromOffset(20, 96)
-	bar.Size = UDim2.new(1, -40, 0, 28)
+	bar.Position = UDim2.fromOffset(6, 0)
+	bar.Size = UDim2.new(1, -12, 0, 26)
 	bar.BackgroundColor3 = Color3.fromRGB(70, 50, 35)
 	bar.ClipsDescendants = true
-	bar.Parent = washPanel
+	bar.Parent = progressRoot
 	UIStyle.border(bar, 3)
 	barStroke = bar:FindFirstChildOfClass("UIStroke")
 	barFill = Instance.new("Frame")
@@ -167,13 +144,16 @@ local function buildGui()
 	percentLabel = textLabel(bar, { Size = UDim2.fromScale(1, 1), ZIndex = 2 })
 	percentScale = Instance.new("UIScale")
 	percentScale.Parent = percentLabel
-	rewardLabel =
-		textLabel(washPanel, { Position = UDim2.fromOffset(0, 126), Size = UDim2.new(1, 0, 0, 20) }, UIStyle.CashColor)
+	rewardLabel = textLabel(
+		progressRoot,
+		{ Position = UDim2.fromOffset(0, 28), Size = UDim2.new(1, 0, 0, 16) },
+		UIStyle.CashColor
+	)
 
-	-- Announcements under the wash panel
+	-- Announcements under the patience row
 	announcementLabel = textLabel(gui, {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 196), -- below the tension patience row
+		Position = UDim2.new(0.5, 0, 0, 40),
 		Size = UDim2.new(0.9, 0, 0, 34),
 		Visible = false,
 	})
@@ -242,6 +222,44 @@ local function setProgress(progress: number, finalized: boolean)
 	shownPercent = shown
 end
 
+local function findAnimal(): Model?
+	if not currentBayName or not currentJobId then
+		return nil
+	end
+	local bays = Workspace:FindFirstChild("WashBays")
+	local bayModel = bays and bays:FindFirstChild(currentBayName)
+	local animal = bayModel and bayModel:FindFirstChild("Animal")
+	if animal and animal:IsA("Model") and animal:GetAttribute("JobId") == currentJobId then
+		return animal
+	end
+	return nil
+end
+
+local function unmountProgress()
+	progressBoard.Enabled = false
+	progressBoard.Adornee = nil
+	mountedHead = nil
+end
+
+-- Point the meter at this animal's head, above the nameplate. The nameplate already
+-- shows the animal, so a screen card would only repeat it.
+local function mountProgress(animal: Model): boolean
+	local head = animal:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then
+		return false
+	end
+	if mountedHead == head and progressBoard.Enabled then
+		return true
+	end
+	local plate = head:FindFirstChild("Nameplate")
+	local lift = if plate and plate:IsA("BillboardGui") then plate.StudsOffset.Y else head.Size.Y / 2 + 2.6
+	progressBoard.StudsOffset = Vector3.new(0, lift, 0)
+	progressBoard.Adornee = head
+	progressBoard.Enabled = true
+	mountedHead = head
+	return true
+end
+
 local function refreshToast()
 	if currentState == "Washing" then
 		if not tutorialCompleted and currentProgress < 0.1 then
@@ -267,21 +285,23 @@ local function applyBay(bay: Types.BaySnapshot?)
 	if bay.JobId ~= currentJobId then
 		hintShowing = false
 		shownPercent = -1
-		if bay.JobId then
-			pop(panelScale, 0.6, 0.45) -- new animal: the card springs in
-		end
+		unmountProgress()
 	end
+	currentBayName = bay.BayName
 	currentJobId = bay.JobId
 	currentState = bay.State
 
-	if bay.AnimalName then
-		washPanel.Visible = true
-		local mutation = bay.Mutation or MutationConfig.Default
-		mutationLabel.Visible = mutation ~= MutationConfig.Default
-		UIStyle.mutation(mutationLabel, mutation)
-		nameLabel.Text = bay.AnimalName
-		UIStyle.rarity(rarityLabel, bay.Rarity or "Common")
-		rewardLabel.Text = `Wash reward: +{UIStyle.formatMoney(bay.Reward or 0)}`
+	wantProgress = bay.AnimalName ~= nil
+		and (bay.State == "Arriving" or bay.State == "Washing" or bay.State == "Completing")
+	if wantProgress then
+		rewardLabel.Text = `Wash {UIStyle.formatMoney(bay.Reward or 0)}`
+		local animal = findAnimal()
+		if animal then
+			mountProgress(animal)
+		end
+	else
+		hintShowing = false
+		unmountProgress()
 	end
 
 	if bay.State == "Arriving" then
@@ -289,13 +309,8 @@ local function applyBay(bay: Types.BaySnapshot?)
 		percentLabel.Text = "ARRIVING..."
 	elseif bay.State == "Washing" then
 		setProgress(bay.Progress or 0, false)
-	elseif bay.State == "Completing" then
+	elseif bay.State == "Completing" or bay.State == "Departing" then
 		setProgress(1, true)
-	elseif bay.State == "Departing" or bay.State == "Empty" or bay.State == "CacheFull" then
-		hintShowing = false
-		if bay.State ~= "Departing" then
-			washPanel.Visible = false
-		end
 	end
 	refreshToast()
 end
@@ -417,8 +432,15 @@ function HUDController.init(initial: Types.InitialState)
 	Remotes.event("Announcement").OnClientEvent:Connect(showAnnouncement)
 
 	-- Passive life on the clean bar: the shine sweeps along and the border gently pulses.
+	-- The animal can replicate a moment after the bay snapshot, so keep trying to attach.
 	RunService.RenderStepped:Connect(function()
-		if not washPanel.Visible then
+		if wantProgress and not progressBoard.Enabled then
+			local animal = findAnimal()
+			if animal then
+				mountProgress(animal)
+			end
+		end
+		if not progressBoard.Enabled then
 			return
 		end
 		local t = os.clock()

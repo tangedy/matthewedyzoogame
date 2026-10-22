@@ -17,8 +17,10 @@ local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local AnimalService = require(script.Parent.AnimalService)
+local CleanGateService = require(script.Parent.CleanGateService)
 local CleaningService = require(script.Parent.CleaningService)
 local EconomyService = require(script.Parent.EconomyService)
+local GuideService = require(script.Parent.GuideService)
 local Hooks = require(script.Parent.Hooks)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 local ZooService = require(script.Parent.ZooService)
@@ -139,6 +141,11 @@ local function runOneJob(bay: Bay, owner: Player)
 			mutationKey = override.Mutation
 		end
 	end
+	-- A scripted tease (10th animal, or the rarity after a hose upgrade) replaces the roll.
+	local tease = CleanGateService.roll(owner)
+	if tease then
+		animalKey = tease
+	end
 	bay.FirstAnimalGiven = true
 	local def = AnimalConfig.Animals[animalKey]
 
@@ -174,6 +181,7 @@ local function runOneJob(bay: Bay, owner: Player)
 			0.05,
 			Hooks.apply("WashTimeMultiplier", def.WashTimeMultiplier, owner, animalKey, mutationKey)
 		),
+		Rarity = def.Rarity,
 		OnComplete = function()
 			onJobComplete(bay, job)
 		end,
@@ -182,7 +190,14 @@ local function runOneJob(bay: Bay, owner: Player)
 	local info: Hooks.WashInfo =
 		{ JobId = jobId, Species = animalKey, Mutation = mutationKey, Model = model, Bay = bay.Model }
 	Hooks.fire("WashStarted", owner, info)
-	coroutine.yield() -- resumed by onJobComplete (or abandonWash)
+	GuideService.onRepeatWashStarted(owner)
+	-- Clean Now bought ahead of this animal: it's already paid for, so skip the wait.
+	-- The bay thread hasn't yielded, so the finish must not try to resume it.
+	if CleaningService.pullQueuedClean(owner) then
+		CleaningService.completeWithoutResume(owner)
+	else
+		coroutine.yield() -- resumed by onJobComplete (or abandonWash)
+	end
 
 	if job.Abandoned then
 		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
@@ -215,6 +230,7 @@ local function runOneJob(bay: Bay, owner: Player)
 			)
 		end
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
+		GuideService.onWashCompleted(owner)
 	end
 	AnimalService.celebrate(model)
 
@@ -365,5 +381,36 @@ function BayService.getSnapshot(player: Player): Types.BaySnapshot?
 	local bay = bayByOwner[player]
 	return bay and snapshot(bay)
 end
+
+local lastLetGoAt: { [Player]: number } = {}
+Remotes.event("LetAnimalGo").OnServerEvent:Connect(function(player)
+	local now = os.clock()
+	if lastLetGoAt[player] and now - lastLetGoAt[player] < 0.4 then
+		return
+	end
+	lastLetGoAt[player] = now
+	-- Only an animal their hose can't wash. A normal wash isn't something they can skip.
+	if CleaningService.isBlocked(player) then
+		BayService.abandonWash(player)
+	end
+end)
+
+Remotes.event("GuideAdvance").OnServerEvent:Connect(function(player)
+	local bay = bayByOwner[player]
+	local station = bay and bay.Model:FindFirstChild("UpgradeStation")
+	local counter = station and station:FindFirstChild("Counter")
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not counter or not counter:IsA("BasePart") or not root then
+		return
+	end
+	if (root.Position - counter.Position).Magnitude > 10 then
+		return
+	end
+	GuideService.onReachedUpgrade(player)
+end)
+
+game:GetService("Players").PlayerRemoving:Connect(function(player)
+	lastLetGoAt[player] = nil
+end)
 
 return BayService

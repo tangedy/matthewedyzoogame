@@ -73,6 +73,16 @@ local GameConfig = {
 	-- Shop
 	ShopCloseDistance = 14, -- the shop panel closes when you walk this far from the station
 
+	-- Walk-ins the player cannot wash yet. The 10th animal is always Legendary. After each
+	-- hose upgrade, the next tease arrives TeaseEvery walk-ins later, starting at Legendary
+	-- and stepping up one rarity for every upgrade after the first.
+	CleanGate = {
+		FirstTeaseAt = 10,
+		TeaseEvery = 10,
+		FirstTeaseRarity = "Legendary",
+		TeaseStartOrder = 4, -- RarityConfig order: Legendary
+	},
+
 	-- Developer shortcuts (C / G). Honored in Studio and for the place owner only.
 	DevCoinGrant = 1000000,
 

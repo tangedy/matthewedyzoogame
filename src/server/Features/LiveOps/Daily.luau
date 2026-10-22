@@ -8,7 +8,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local LiveOpsConfig = require(ReplicatedStorage.Shared.FeatureConfig.LiveOpsConfig)
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -33,6 +35,8 @@ local rng = Random.new()
 local function pickSpecies(player: Player): string?
 	local data = PlayerDataService.get(player)
 	local tier = if data then data.ToolTier else 1
+	local tool = ToolConfig[tier]
+	local power = if tool then tool.CleaningPower else 0
 	local minOrder = (RarityConfig.ByKey[Config.MinRarity] or RarityConfig.ByKey.Rare).Order
 	local keys = {}
 	for key in AnimalConfig.Animals do
@@ -48,6 +52,7 @@ local function pickSpecies(player: Player): string?
 			rarity
 			and rarity.Order >= minOrder
 			and def.RequiredToolTier <= tier
+			and CleanPower.canClean(power, def.Rarity)
 			and def.SpawnWeight > 0
 			and not def.Limited
 			and AnimalBuilder.has(def.TemplateName)
@@ -80,7 +85,7 @@ local function addTag(model: Model)
 	billboard.Name = TAG_NAME
 	billboard.Size = UDim2.fromOffset(240, 34)
 	billboard.StudsOffset = Vector3.new(0, head.Size.Y / 2 + 2.6, 0)
-	billboard.SizeOffset = Vector2.new(0, 2) -- above the 100 px nameplate
+	billboard.SizeOffset = Vector2.new(0, 4.2) -- above the nameplate and the clean meter
 	billboard.MaxDistance = 80
 	billboard.Parent = head
 	local label = Instance.new("TextLabel")

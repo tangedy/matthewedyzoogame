@@ -202,59 +202,21 @@ local function teardown(pad: Instance)
 	end
 end
 
--- "$/s" above each penned animal. Once a second the pop walks left to right down the row.
-local incomeBoards: { [Model]: BillboardGui } = {}
-
-local function incomeBoard(model: Model): BillboardGui?
-	local existing = incomeBoards[model]
-	if existing and existing.Parent then
-		return existing
-	end
+-- The $/s already lives in the animal's nameplate. Pop that one label so a second
+-- billboard doesn't draw over it.
+local function popIncome(model: Model)
 	local head = model:FindFirstChild("Head", true)
-	local adornee = if head and head:IsA("BasePart")
-		then head
-		else model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
-	if not adornee or not adornee:IsA("BasePart") then
-		return nil
-	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "IncomeRate"
-	billboard.Size = UDim2.fromOffset(150, 36)
-	billboard.StudsOffset = Vector3.new(0, if head then 2.6 else 5.5, 0)
-	billboard.MaxDistance = ANIMATE_DISTANCE
-	billboard.Adornee = adornee
-	billboard.Parent = model
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.Parent = billboard
-	UIStyle.text(label, UIStyle.CashColor, nil, 3)
-	local scale = Instance.new("UIScale")
-	scale.Parent = billboard
-	incomeBoards[model] = billboard
-	model.Destroying:Connect(function()
-		incomeBoards[model] = nil
-	end)
-	return billboard
-end
-
-local function popIncome(model: Model, rate: number)
-	local board = incomeBoard(model)
-	if not board then
+	local plate = head and head:FindFirstChild("Nameplate")
+	if not plate or not plate:IsA("BillboardGui") then
 		return
 	end
-	local label = board:FindFirstChildWhichIsA("TextLabel")
-	local scale = board:FindFirstChildOfClass("UIScale")
-	if not label or not scale then
-		return
+	local scale = plate:FindFirstChildOfClass("UIScale")
+	if not scale then
+		scale = Instance.new("UIScale")
+		scale.Parent = plate
 	end
-	label.Text = `+{UIStyle.formatMoney(rate)}/s`
-	label.TextTransparency = 0
-	local stroke = label:FindFirstChildOfClass("UIStroke")
-	if stroke then
-		stroke.Transparency = 0
-	end
-	scale.Scale = 1.4
-	TweenService:Create(scale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+	scale.Scale = 1.12
+	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
 		:Play()
 end
 
@@ -278,7 +240,7 @@ function PenCashController.init()
 		end
 	end)
 
-	-- Each second, "$/s" pops above the animals from the left of the row to the right.
+	-- Each second, the nameplate pops from the left of the row to the right.
 	task.spawn(function()
 		while true do
 			local row = {}
@@ -304,7 +266,7 @@ function PenCashController.init()
 				return a.x < b.x
 			end)
 			for _, entry in row do
-				popIncome(entry.animal, entry.rate)
+				popIncome(entry.animal)
 				task.wait(0.16)
 			end
 			task.wait(if #row == 0 then 1 else 0.7)

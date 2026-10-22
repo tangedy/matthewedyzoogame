@@ -102,44 +102,59 @@ export type NameplateInfo = {
 	IncomePerSecond: number,
 }
 
--- Floating nameplate above an animal: mutation (if any), name, rarity, $/s.
+local function hex(color: Color3): string
+	return string.format("#%02X%02X%02X", math.round(color.R * 255), math.round(color.G * 255), math.round(color.B * 255))
+end
+
+local function escapeRich(text: string): string
+	text = string.gsub(text, "&", "&amp;")
+	text = string.gsub(text, "<", "&lt;")
+	text = string.gsub(text, ">", "&gt;")
+	return text
+end
+
+-- One label, so the stacked strokes don't artifact. A mutation line is included when set.
 function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: number): BillboardGui
+	local rarity = RarityConfig.ByKey[info.Rarity] or RarityConfig.ByKey.Common
+	local mutation = MutationConfig.ByKey[info.Mutation] or MutationConfig.ByKey.Normal
+	local mutated = info.Mutation ~= MutationConfig.Default
+	local rainbowLabel = rarity.Rainbow or (mutated and mutation.Rainbow)
+	local lines = if mutated then 4 else 3
+
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
-	billboard.Size = UDim2.fromOffset(220, 100)
+	billboard.Size = UDim2.fromOffset(220, lines * 24)
 	billboard.StudsOffset = Vector3.new(0, adornee.Size.Y / 2 + 2.6, 0)
 	billboard.MaxDistance = maxDistance
 	billboard.Parent = adornee
 
-	local list = Instance.new("UIListLayout")
-	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.VerticalAlignment = Enum.VerticalAlignment.Bottom
-	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	list.Parent = billboard
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.fromScale(1, 1)
+	label.Parent = billboard
+	local textColor = if rarity.Key == "Secret" then rarity.Color else Color3.new(1, 1, 1)
+	UIStyle.text(label, textColor, if rainbowLabel then Color3.new(0, 0, 0) else rarity.StrokeColor, 3.5)
+	label.RichText = true
 
-	local function line(order: number, height: number): TextLabel
-		local label = Instance.new("TextLabel")
-		label.LayoutOrder = order
-		label.Size = UDim2.new(1, 0, 0, height)
-		label.BackgroundTransparency = 1
-		label.Parent = billboard
-		return label
+	local function span(color: Color3, text: string): string
+		local safe = escapeRich(text)
+		if rainbowLabel then
+			return safe
+		end
+		return `<font color="{hex(color)}">{safe}</font>`
 	end
 
-	if info.Mutation ~= MutationConfig.Default then
-		UIStyle.mutation(line(1, 18), info.Mutation)
+	local rows = {}
+	if mutated then
+		table.insert(rows, span(mutation.Color, mutation.DisplayName))
 	end
-	local name = line(2, 30)
-	UIStyle.text(name, nil, nil, 3.5)
-	name.Text = info.Name
-	local shine = Instance.new("UIGradient") -- white to warm gold, top to bottom
-	shine.Rotation = 90
-	shine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 230, 140))
-	shine.Parent = name
-	UIStyle.rarity(line(3, 20), info.Rarity)
-	local income = line(4, 22)
-	UIStyle.text(income, UIStyle.CashColor)
-	income.Text = UIStyle.formatMoney(info.IncomePerSecond) .. "/s"
+	table.insert(rows, escapeRich(info.Name))
+	table.insert(rows, span(rarity.Color, rarity.DisplayName))
+	table.insert(rows, span(UIStyle.CashColor, UIStyle.formatMoney(info.IncomePerSecond) .. "/s"))
+	label.Text = table.concat(rows, "\n")
+	if rainbowLabel then
+		rainbow(label)
+	end
 	return billboard
 end
 

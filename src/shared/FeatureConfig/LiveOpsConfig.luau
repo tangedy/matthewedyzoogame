@@ -1,6 +1,8 @@
 -- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
 -- Animal, the scheduled Mud Storm, offline earnings, the zoo star rating, leaderstats and the
 -- plaza leaderboard, and the analytics funnel. All times are UTC so every server agrees.
+-- Rotating variant events (Gold Rush, Rainbow Rush, and the rest) and the hidden gold/rainbow
+-- odds are not in this file. Edit src/server/DevParams.json.
 
 export type StormSlot = {
 	Hour: number, -- UTC
@@ -35,10 +37,17 @@ local LiveOpsConfig = {
 	},
 
 	Offline = {
-		MaxSeconds = 2 * 60 * 60, -- earnings cap
+		-- 6 hours of absence, then it stops. 12 or 24 are the other safe caps; the
+		-- server also refuses anything above HardMaxSeconds so a config typo can't pay a week.
+		MaxSeconds = 6 * 60 * 60,
+		HardMaxSeconds = 24 * 60 * 60,
 		MinSeconds = 60, -- shorter absences earn nothing (and show no popup)
 		Rate = 0.5, -- fraction of normal income earned while away
 		LastSeenInterval = 60, -- seconds between LastSeen refreshes while playing
+		-- os.time() and GetServerTimeNow() normally differ by a second or two. A bigger
+		-- gap is clock drift, and that gap is not paid out as offline time.
+		ClockSkewSeconds = 120,
+		EarliestLastSeen = 1577836800, -- 2020-01-01; anything older is a bad save, not a long trip
 	},
 
 	Stars = {

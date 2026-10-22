@@ -15,7 +15,8 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow"
+	Hidden: boolean?, -- offered in the moment (not a shop card)
 	Seconds: number?, -- AutoCollect: play-time added per purchase
 	Color: Color3,
 	OncePerPlayer: boolean?, -- can only be bought once (an intro price)
@@ -165,7 +166,19 @@ local products: { Product } = {
 		Floor = 500,
 		CapFraction = 0.5,
 	},
-	-- Limited
+	-- Offered on an animal the hose can't wash. Not a shop card.
+	{
+		Key = "CleanNow",
+		Id = 0,
+		Robux = 39,
+		DisplayName = "Clean Now",
+		Description = "Instantly clean one animal your hose isn't strong enough for.",
+		Tab = "Boosts",
+		Order = 99,
+		Kind = "CleanNow",
+		Color = GOLD,
+		Hidden = true,
+	},
 	{
 		Key = "LimitedAxolotl",
 		Id = 0,

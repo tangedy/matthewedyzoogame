@@ -1,0 +1,57 @@
+{
+  "_note": "Server-only. Players never see these numbers. Edit, then sync. schedule is seconds: each event runs activeSeconds, then the server is quiet for downtimeSeconds, then the next event. mutations.oneIn is 1-in-N on every animal that walks in. guaranteedEvery forces that variant on the Nth, 2Nth, ... arrival (75 hits both, and priority picks Rainbow). An event boost oneIn replaces the normal oneIn while that event is up; it is not stacked with the Mud Storm. incomeMultiplier is cash versus the Normal version of the same animal.",
+  "schedule": {
+    "activeSeconds": 600,
+    "downtimeSeconds": 300
+  },
+  "priority": ["Rainbow", "Gold"],
+  "mutations": {
+    "Gold": {
+      "incomeMultiplier": 1.5,
+      "oneIn": 75,
+      "guaranteedEvery": 25
+    },
+    "Rainbow": {
+      "incomeMultiplier": 2,
+      "oneIn": 150,
+      "guaranteedEvery": 75
+    }
+  },
+  "events": [
+    {
+      "id": "GoldRush",
+      "title": "GOLD RUSH",
+      "blurb": "Golden animals are walking in!",
+      "announceRarity": "Legendary",
+      "color": [255, 196, 48],
+      "boosts": [{ "mutation": "Gold", "oneIn": 10 }]
+    },
+    {
+      "id": "RainbowRush",
+      "title": "RAINBOW RUSH",
+      "blurb": "Rainbow animals are walking in!",
+      "announceRarity": "ZooGod",
+      "color": [255, 255, 255],
+      "boosts": [{ "mutation": "Rainbow", "oneIn": 20 }]
+    },
+    {
+      "id": "DiamondDrift",
+      "title": "DIAMOND DRIFT",
+      "blurb": "Diamond animals are walking in!",
+      "announceRarity": "Rare",
+      "color": [110, 230, 255],
+      "boosts": [{ "mutation": "Diamond", "oneIn": 8 }]
+    },
+    {
+      "id": "ShinyStampede",
+      "title": "SHINY STAMPEDE",
+      "blurb": "Shiny animals are walking in!",
+      "announceRarity": "Mythic",
+      "color": [255, 120, 210],
+      "boosts": [
+        { "mutation": "Gold", "oneIn": 12 },
+        { "mutation": "Rainbow", "oneIn": 40 }
+      ]
+    }
+  ]
+}
