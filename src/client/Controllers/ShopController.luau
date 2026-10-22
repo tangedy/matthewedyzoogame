@@ -63,7 +63,7 @@ end
 local function unlocksText(toolTier: number): string
 	local tiers: { [string]: boolean } = {}
 	for _, def in AnimalConfig.Animals do
-		if def.RequiredToolTier == toolTier then
+		if def.RequiredToolTier == toolTier and not def.Limited and def.SpawnWeight > 0 then
 			tiers[def.Rarity] = true
 		end
 	end

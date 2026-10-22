@@ -8,6 +8,7 @@
 --   "WashStarted"    (player, info: WashInfo)          animal is at the wash spot, cleaning enabled
 --   "WashProgress"   (player, jobId, progress)         after each accepted spray
 --   "WashCompleted"  (player, info: WashInfo, reward)  paid; info.Model still exists
+--   "WashAbandoned"  (player, info: WashInfo)          the animal wandered off unpaid (Tension)
 --   "AnimalPlaced"   (player, animal: OwnedAnimal)     carried animal put in a pen
 --   "AnimalSold"     (player, species, mutation, value)
 --   "IncomeTick"     (player, amount)                  cash added to pads this tick

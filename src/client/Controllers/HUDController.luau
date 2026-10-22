@@ -172,7 +172,7 @@ local function buildGui()
 	-- Announcements under the wash panel
 	announcementLabel = textLabel(gui, {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 176),
+		Position = UDim2.new(0.5, 0, 0, 196), -- below the tension patience row
 		Size = UDim2.new(0.9, 0, 0, 34),
 		Visible = false,
 	})
