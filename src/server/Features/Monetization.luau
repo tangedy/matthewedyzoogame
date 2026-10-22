@@ -275,6 +275,15 @@ local function buyProduct(player: Player, product: Product)
 		MonetizationState.notify(player, "Start washing an animal first!", false)
 		return
 	end
+	-- The price is the animal in the bay. A cheaper product cannot clean a rarer one.
+	if product.Kind == "CleanNow" then
+		local steps = CleaningService.blockedSteps(player)
+		local expected = if steps ~= nil then MonetizationConfig.productForCleanSteps(steps) else nil
+		if not expected or expected.Key ~= product.Key then
+			MonetizationState.notify(player, "That price doesn't match the animal in your bay.", false)
+			return
+		end
+	end
 	if product.Kind == "AutoCollect" and MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey) then
 		MonetizationState.notify(player, "You already own Auto-Collect Forever!", false)
 		return

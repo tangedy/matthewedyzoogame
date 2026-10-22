@@ -46,12 +46,15 @@ export type SavedData = {
 	TutorialCompleted: boolean,
 	-- First-cycle arrow guide. "Done" once they've washed the animal after visiting upgrades.
 	GuideStep: string,
-	-- Walk-ins seen, and the "too dirty to wash" teases scheduled from them.
+	-- Walk-ins seen. The older tease fields stay so saves from that system still load.
 	AnimalsSeen: number,
 	TenthLegendaryGiven: boolean,
-	CleanUpgradeCount: number, -- hose tiers gained; the first tease stays Legendary
-	TeaseOrder: number, -- RarityConfig order of the next post-upgrade tease
-	AnimalsUntilTease: number, -- walk-ins left before that tease; 0 means not waiting
+	CleanUpgradeCount: number,
+	TeaseOrder: number,
+	AnimalsUntilTease: number,
+	-- Completed washes since an animal this hose could not wash last walked in.
+	-- Each one adds ChancePerWash to every still-unwashable rarity.
+	WashesSinceUnwashable: number,
 	ZooSize: number,
 	Animals: { OwnedAnimal },
 	Cache: { CachedAnimal },
@@ -92,6 +95,7 @@ local function defaults(): SavedData
 		CleanUpgradeCount = 0,
 		TeaseOrder = 4,
 		AnimalsUntilTease = 0,
+		WashesSinceUnwashable = 0,
 		ZooSize = GameConfig.Zoo.StartPens,
 		Animals = {},
 		Cache = {},
@@ -245,9 +249,9 @@ local function sanitize(raw: any): SavedData
 		end
 	end
 
-	-- Guide and clean-power teases. Missing fields (saves from before they existed) follow
-	-- progress already on the profile, so a zoo that's underway doesn't replay the arrows
-	-- or get a surprise 10th-animal Legendary.
+	-- Guide, and the older clean-gate fields. Missing fields follow progress already on
+	-- the profile, so a zoo that's underway doesn't replay the arrows. The 10th-animal
+	-- tease is no longer scheduled; WashesSinceUnwashable starts at 0 when it is absent.
 	local guideSteps = { Wash = true, Pickup = true, Place = true, Collect = true, Upgrade = true, Repeat = true, Done = true }
 	if guideSteps[raw.GuideStep] then
 		data.GuideStep = raw.GuideStep
@@ -271,6 +275,7 @@ local function sanitize(raw: any): SavedData
 		data.TeaseOrder = math.clamp(cleanCount(raw.TeaseOrder), 4, 7)
 		data.AnimalsUntilTease = math.clamp(cleanCount(raw.AnimalsUntilTease), 0, 10)
 	end
+	data.WashesSinceUnwashable = math.clamp(cleanCount(raw.WashesSinceUnwashable), 0, 100000)
 	return data
 end
 

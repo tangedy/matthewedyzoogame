@@ -229,10 +229,11 @@ function MonetizationGrants.product(
 		ZooService.collectAll(player)
 		return true, `Auto-Collect for {clock(left)}! Your pens pay themselves.`
 	elseif kind == "CleanNow" then
-		if CleaningService.grantCleanNow(player) then
+		local paidSteps = product.CleanSteps or 0
+		if CleaningService.grantCleanNow(player, paidSteps) then
 			return true, "Cleaned! That animal is spotless."
 		end
-		return true, "Clean Now is ready for the next animal your hose can't wash."
+		return true, "Clean Now is saved for the next animal this price covers."
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil

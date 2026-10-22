@@ -47,7 +47,9 @@ local CleaningService = {}
 local jobs: { [string]: Job } = {}
 local jobByOwner: { [Player]: Job } = {}
 local lastRequestAt: { [Player]: number } = {}
-local cleanNowQueued: { [Player]: boolean } = {} -- paid Clean Now, waiting for an animal they can't wash
+-- Paid Clean Now steps still unused. A later animal is cleaned only when it costs
+-- this many rarity steps or fewer, so a cheap purchase cannot finish a rarer one.
+local cleanNowCredit: { [Player]: number } = {}
 
 local progressChanged = Remotes.event("CleaningProgressChanged")
 
@@ -197,7 +199,7 @@ function CleaningService.init(deps: { getTool: (Player) -> ToolConfig.ToolTier? 
 	Remotes.event("CleaningIntent").OnServerEvent:Connect(onCleaningIntent)
 	Players.PlayerRemoving:Connect(function(player)
 		lastRequestAt[player] = nil
-		cleanNowQueued[player] = nil
+		cleanNowCredit[player] = nil
 	end)
 end
 
@@ -209,11 +211,17 @@ end
 
 -- True while the owner's current wash is a rarity their hose cannot clean.
 function CleaningService.isBlocked(player: Player): boolean
+	return CleaningService.blockedSteps(player) ~= nil
+end
+
+-- Rarity steps above the cheapest animal this hose cannot wash, while one is in the bay.
+-- nil when the current wash can be sprayed.
+function CleaningService.blockedSteps(player: Player): number?
 	local job = jobByOwner[player]
 	if not job or not job.Active then
-		return false
+		return nil
 	end
-	return not CleanPower.canClean(effectivePower(player), job.Rarity)
+	return CleanPower.stepsAbove(effectivePower(player), job.Rarity)
 end
 
 local function finish(job: Job)
@@ -287,23 +295,28 @@ function CleaningService.completeWithoutResume(player: Player): boolean
 	return true
 end
 
--- Pays off a blocked wash now, or remembers the purchase until the next one they can't clean.
--- Returns true when an animal was cleaned immediately.
-function CleaningService.grantCleanNow(player: Player): boolean
-	if CleaningService.isBlocked(player) and CleaningService.forceComplete(player) then
-		cleanNowQueued[player] = nil
+-- Pays off a blocked wash now when the purchase covers its price, or remembers the
+-- steps paid for until a later animal at that price or cheaper. Returns true when
+-- an animal was cleaned immediately.
+function CleaningService.grantCleanNow(player: Player, paidSteps: number): boolean
+	local steps = CleaningService.blockedSteps(player)
+	if steps ~= nil and paidSteps >= steps and CleaningService.forceComplete(player) then
+		cleanNowCredit[player] = nil
 		return true
 	end
-	cleanNowQueued[player] = true
+	local held = cleanNowCredit[player]
+	cleanNowCredit[player] = if held and held > paidSteps then held else paidSteps
 	return false
 end
 
--- True once, when a queued Clean Now matches the wash that just became active.
+-- True once, when a paid Clean Now covers the wash that just became active.
 function CleaningService.pullQueuedClean(player: Player): boolean
-	if not cleanNowQueued[player] or not CleaningService.isBlocked(player) then
+	local credit = cleanNowCredit[player]
+	local steps = CleaningService.blockedSteps(player)
+	if credit == nil or steps == nil or credit < steps then
 		return false
 	end
-	cleanNowQueued[player] = nil
+	cleanNowCredit[player] = nil
 	return true
 end
 
