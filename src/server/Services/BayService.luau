@@ -31,6 +31,7 @@ type Job = {
 	Model: Model?, -- nil once handed over to the cache
 	Paid: boolean,
 	WaitingThread: thread?,
+	Abandoned: boolean?, -- set by abandonWash: the animal walks off unpaid
 }
 
 type Bay = {
@@ -181,7 +182,17 @@ local function runOneJob(bay: Bay, owner: Player)
 	local info: Hooks.WashInfo =
 		{ JobId = jobId, Species = animalKey, Mutation = mutationKey, Model = model, Bay = bay.Model }
 	Hooks.fire("WashStarted", owner, info)
-	coroutine.yield() -- resumed by onJobComplete
+	coroutine.yield() -- resumed by onJobComplete (or abandonWash)
+
+	if job.Abandoned then
+		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
+		setState(bay, "Departing")
+		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+		disposeJob(bay)
+		setState(bay, "Empty")
+		task.wait(GameConfig.NextAnimalDelay)
+		return
+	end
 
 	-- Completing: pay once, guarded by the job's Paid flag.
 	CleaningService.endJob(jobId)
@@ -323,6 +334,25 @@ function BayService.release(player: Player)
 			break
 		end
 	end
+end
+
+-- For features: the animal being washed gives up and walks off down the lane. The wash is
+-- lost and never paid. Returns false when the player isn't mid-wash.
+function BayService.abandonWash(player: Player): boolean
+	local bay = bayByOwner[player]
+	local job = bay and bay.Job
+	if not bay or not job or bay.State ~= "Washing" or job.Paid then
+		return false
+	end
+	local thread = job.WaitingThread
+	if not thread or coroutine.status(thread) ~= "suspended" then
+		return false
+	end
+	job.WaitingThread = nil
+	job.Abandoned = true
+	CleaningService.endJob(job.Id)
+	task.spawn(thread)
+	return true
 end
 
 function BayService.getSnapshot(player: Player): Types.BaySnapshot?
