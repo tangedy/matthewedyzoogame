@@ -233,12 +233,23 @@ local function onHoseBuyFailed()
 	end
 end
 
-local function watchHoseShop()
-	local shopGui = player:WaitForChild("PlayerGui"):WaitForChild("Shop", 30)
-	local panel = shopGui and shopGui:FindFirstChild("ShopPanel")
-	if not panel then
-		return
+-- Waits for a child without a timeout and without the "infinite yield" warning (the core
+-- hose shop may be renamed or never built; then this thread just stays parked).
+local function waitChild(parent: Instance, name: string): Instance
+	while true do
+		local child = parent:FindFirstChild(name)
+		if child then
+			return child
+		end
+		parent.ChildAdded:Wait()
 	end
+end
+
+-- Best effort: catches hose buys the core ShopController refuses locally (no PurchaseResult is
+-- sent then). Coupled to ShopController's private names ("Shop" / "ShopPanel" / "Buy for");
+-- the PurchaseResult listener stays the primary signal.
+local function watchHoseShop()
+	local panel = waitChild(waitChild(player:WaitForChild("PlayerGui"), "Shop"), "ShopPanel")
 	for _, child in panel:GetChildren() do
 		if child:IsA("TextButton") then
 			child.Activated:Connect(function()

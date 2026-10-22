@@ -23,7 +23,7 @@ export type Saved = {
 	Receipts: { string }, -- most recent PurchaseIds, oldest first
 	SuperSoapLeft: number, -- seconds; only counts down while the player is online
 	LuckyLeft: number, -- walk-ins
-	Passes: { [string]: boolean }, -- passes granted by this server (purchase or simulation)
+	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
 }
@@ -32,6 +32,7 @@ export type Session = {
 	JoinedAt: number, -- os.clock()
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow(); 0 when inactive
 	LuckyRolled: boolean, -- a walk-in was rolled while Lucky Soap was active
+	PendingOnce: { [string]: boolean }, -- once-only products with a prompt open or a receipt due
 	OwnedPasses: { [string]: boolean }, -- UserOwnsGamePassAsync results and grants
 	LastRequest: { [string]: number },
 	LastOffer: { [string]: number },
@@ -139,6 +140,7 @@ function MonetizationState.session(player: Player): Session
 			JoinedAt = os.clock(),
 			SoapEndsAt = 0,
 			LuckyRolled = false,
+			PendingOnce = {},
 			OwnedPasses = {},
 			LastRequest = {},
 			LastOffer = {},

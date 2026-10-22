@@ -102,7 +102,7 @@ local products: { Product } = {
 		Id = 0,
 		Robux = 49,
 		DisplayName = "Lucky Soap",
-		Description = "Next 5 walk-ins: Legendary+ animals 4x as likely, mutations 3x as likely.",
+		Description = "Next 5 walk-ins: mutations 3x as likely, and Legendary+ animals your hose can wash 4x as likely.",
 		Tab = "Boosts",
 		Order = 3,
 		Kind = "LuckySoap",
@@ -225,6 +225,7 @@ return {
 		TagColor = GOLD,
 	},
 	-- Sold out between the stock check and the receipt: cash instead (the Robux can't be refunded).
+	-- max(Floor, min(120 min of income, the full next hose)): never less than Floor at any tier.
 	SoldOutCompensation = { Minutes = 120, Floor = 5000, CapFraction = 1 },
 
 	Offers = {
@@ -244,6 +245,7 @@ return {
 	StockStoreName = "LimitedStock_v1",
 	StudioStockStoreName = "LimitedStock_Studio_v1",
 	StockRefreshSeconds = 30,
+	StockRecheckSeconds = 10, -- a shop request re-reads an unknown stock at most this often
 	BuyCooldown = 0.75, -- seconds between shop requests per player
 	StateCooldown = 1,
 	-- Live servers simulate unconfigured (id 0) purchases for the place owner only. Turning this

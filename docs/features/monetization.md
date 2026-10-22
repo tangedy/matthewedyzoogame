@@ -20,10 +20,10 @@ The helper modules have no `init`, so the feature autoloaders just require them.
 
 | Key | Type | Robux | Effect |
 | --- | --- | --- | --- |
-| `SuperSoapStarter` | Product, once per player | 5 | Same as Super Soap. The shop shows it in place of Super Soap until it has been used. |
+| `SuperSoapStarter` | Product, once per player | 5 | Same as Super Soap. The shop shows it in place of Super Soap until it has been used. While one intro prompt is open (or its receipt is still due) a second one is refused, so it can't be bought twice at the intro price. |
 | `SuperSoap` | Product | 9 | 2x cleaning power for 10 minutes (Hooks `CleaningPower`). Time stacks up to 4 hours, counts down only while online, and is saved. |
-| `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. |
-| `LuckySoap` | Product | 49 | The next 5 walk-ins: Legendary+ `SpawnWeight` x4, non-Normal `MutationWeight` x3. Stacks up to 50. A charge is used only by a walk-in that was actually rolled with the boost (counted on `WashStarted`). The fixed first animal of a session doesn't use one. |
+| `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
+| `LuckySoap` | Product | 49 | The next 5 walk-ins: Legendary+ `SpawnWeight` x4, non-Normal `MutationWeight` x3. Stacks up to 50. A charge is used only by a walk-in that was actually rolled with the boost (counted on `WashStarted`). The fixed first animal of a session doesn't use one, and neither does a walk-in replaced by another feature's `NextAnimal` override (e.g. LiveOps' daily or Mud Storm animal). The Legendary+ part only matters once the hose can wash a Legendary species; the card says so. |
 | `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 199 | `max(Floor, income/s * 60 * Minutes)`, capped at `CapFraction` (15% / 30% / 50%) of the next hose's price, so a pack can never skip a tool tier. The shop shows the current amount. |
 | `LimitedAxolotl` | Product, limited | 1000 | One Axolotl (`Species`/`Mutation` in config) into the cache. Global stock of 1000, never restocked. Shown as COMING SOON until `AnimalConfig.Animals.Axolotl` exists. |
 | `VIPKeeper` | Game pass | 399 | Income x1.25 (Hooks `IncomeMultiplier`) and a gold "VIP" tag over the head. |
@@ -38,7 +38,8 @@ The helper modules have no `init`, so the feature autoloaders just require them.
   - A per-PurchaseId lock stops two concurrent calls for the same receipt.
   - Once granted, the PurchaseId is recorded, `PlayerDataService.saveNow` is called, and only then does it return PurchaseGranted.
 - **Limited stock:** checked before prompting and claimed again at receipt time with `UpdateAsync` on a global record `{ Sold, Claims = { [PurchaseId] = true } }`. A retried receipt finds its own claim and never takes a second unit.
-  - Sold out at receipt time: the player gets `SoldOutCompensation` cash and a message, since Robux can't be refunded.
+  - Sold out at receipt time: the player gets `max(Floor, min(Minutes of income, CapFraction of the next hose))` cash from `SoldOutCompensation` and a message, since Robux can't be refunded. The floor is never capped away.
+  - A shop request treats a known stock of 0 as final (never restocked) and re-reads an unknown stock at most every `StockRecheckSeconds`, so spamming BUY can't drain the GetAsync budget.
   - DataStore error: the receipt stays unprocessed and is retried.
 - **Delivering the animal:** the server builds the model first. Then it calls `ZooService.addToCache`, pivots the model to the returned slot, and calls `ZooService.adoptIntoCache` (plus an index discovery).
   - If there's no room, the animal is queued in `data.Extra.Monetization.PendingAnimals`. The queue retries every `PendingDeliverySeconds` (3 s).
@@ -46,7 +47,7 @@ The helper modules have no `init`, so the feature autoloaders just require them.
 - **Game passes:** ownership comes from three places:
   - `UserOwnsGamePassAsync` on `PlayerLoaded` (pcall, cached for the session),
   - `PromptGamePassPurchaseFinished`,
-  - the saved flag `data.Extra.Monetization.Passes` (set whenever this game grants a pass, so it also covers simulated passes and API outages).
+  - the saved flag `data.Extra.Monetization.Passes` (set whenever this game grants a real pass, or a simulated one in Studio, so it also covers API outages).
 
 ## Offers
 
@@ -63,6 +64,8 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 
 - **In Studio,** every purchase is simulated through `processPurchase` (purchase id `SIM-<guid>`), or `grantPass` for passes. These are the same functions real receipts use.
 - **In a live server,** only items with id 0 are simulated, and only for the place owner, unless `SimulateUnconfiguredLive` is on. Never turn that on in a shipped game, because it would hand out free items. Real ids never simulate.
+  - A simulated limited there takes a unit from a per-server test counter, never the real global stock.
+  - A simulated pass there lasts only for the session; it isn't saved, so it can't outlive the switch to real ids.
 - The shop shows a TEST MODE line when purchases are simulated, and grant messages are prefixed `[TEST]`.
 - Without Studio DataStore access, limited stock falls back to an in-memory counter. Temporary (unsaved) profiles can still receive simulated grants.
 
@@ -76,7 +79,7 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - `VIP.IncomeMultiplier`, `.TagText`, `.TagColor`.
 - `SoldOutCompensation`.
 - `Offers.*`: quiet time, cooldown, per-session cap, auto-hide, Super Soap offer thresholds, cash auto-open cadence and cap.
-- `ReceiptsKept`, `PendingDeliverySeconds`, `StockStoreName` / `StudioStockStoreName`, `StockRefreshSeconds`, `BuyCooldown`, `StateCooldown`, `SimulateUnconfiguredLive`.
+- `ReceiptsKept`, `PendingDeliverySeconds`, `StockStoreName` / `StudioStockStoreName`, `StockRefreshSeconds`, `StockRecheckSeconds`, `BuyCooldown`, `StateCooldown`, `SimulateUnconfiguredLive`.
 
 ## Remotes
 
@@ -95,13 +98,18 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - Sells `AnimalConfig.Animals.Axolotl` only if it exists (added by the Models feature).
 - Owns `MarketplaceService.ProcessReceipt`. Only one handler can exist per game, so any other feature that sells developer products must go through this one.
 
+## Coupling points (merge watch)
+
+- The cash-pack auto-open also counts hose buys the core `ShopController` refuses locally. It finds them through ShopController's private UI: the ScreenGui `Shop`, its child `ShopPanel`, and button text starting with `Buy for`. This is best effort. If those names change, only the local-refusal path stops counting; the "Not enough cash" `PurchaseResult` listener keeps working. A cleaner fix for core: have ShopController fire a client BindableEvent (e.g. ReplicatedStorage `HosePurchaseRefused`) and listen to that instead.
+- Lucky Soap's `NextAnimal` modifier is registered one frame after `init` so it runs after the overrides other features register in their own `init`. A feature that registers a `NextAnimal` modifier later than that would make an overridden walk-in use a charge.
+
 ## Check in Studio
 
 - [ ] Play solo. A pink SHOP button sits under INDEX on the left. Tapping it pops open the panel with Boosts / Cash / Passes / Limited tabs and a TEST MODE line.
 - [ ] Boosts: Super Soap shows 5 ROBUX at first. BUY grants it (notice "[TEST] Super Soap!") and a "SOAP 2X 9:59" pill appears right of INDEX. The card now shows 9 ROBUX. Buying again stacks the time.
 - [ ] With Super Soap active, washing is visibly ~2x faster. Rejoin: the remaining time is kept (with Studio API access enabled).
-- [ ] Lucky Soap: BUY, and the "LUCKY: 5 LEFT" pill appears. It counts down by one per walk-in after purchase. Rarer/mutated animals show up noticeably more often.
-- [ ] Calm Treat: BUY. If the Tension feature is merged, patience freezes for 60 s. Without it, only the notice shows.
+- [ ] Lucky Soap: BUY, and the "LUCKY: 5 LEFT" pill appears. It counts down by one per walk-in after purchase. Rarer/mutated animals show up noticeably more often. With LiveOps merged, a daily/Mud Storm override walk-in doesn't use a charge.
+- [ ] Calm Treat: BUY with no animal at the wash spot: refused with "Start washing an animal first!". BUY during a wash: if the Tension feature is merged, patience freezes for 60 s. Without it, only the notice shows.
 - [ ] Cash: the cards show amounts, and each is at most 15% / 30% / 50% of the next hose price. BUY adds exactly that much cash.
 - [ ] Limited: the Axolotl card shows COMING SOON until the Models branch adds `Axolotl` to AnimalConfig. Once it's there:
   - [ ] it shows "N / 1000 LEFT", and BUY puts an Axolotl in a free cache slot (plus an index toast);

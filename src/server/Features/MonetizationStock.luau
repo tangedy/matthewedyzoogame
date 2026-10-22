@@ -18,6 +18,8 @@ local MonetizationStock = {}
 local store: DataStore? = nil
 local remaining: { [string]: number } = {} -- last known stock per product key
 local studioFallback: { [string]: Record } = {} -- Studio without DataStore access
+local testClaims: { [string]: Record } = {} -- simulated purchases on a live server
+local lastRefresh: { [string]: number } = {}
 local listeners: { (key: string, left: number) -> () } = {}
 
 local function getStore(): DataStore?
@@ -80,8 +82,16 @@ function MonetizationStock.onChanged(fn: (key: string, left: number) -> ())
 	table.insert(listeners, fn)
 end
 
--- Yields. Reads the live stock; returns nil if the DataStore can't be reached.
-function MonetizationStock.refresh(key: string): number?
+-- Yields. Reads the live stock; returns nil if the DataStore can't be reached. With
+-- minInterval, a read that happened less than that many seconds ago is reused instead, so
+-- player requests can't drain the server's GetAsync budget.
+function MonetizationStock.refresh(key: string, minInterval: number?): number?
+	local now = os.clock()
+	local last = lastRefresh[key]
+	if minInterval and last and now - last < minInterval then
+		return remaining[key]
+	end
+	lastRefresh[key] = now
 	local ds = getStore()
 	if ds then
 		local ok, raw = pcall(function()
@@ -148,6 +158,22 @@ function MonetizationStock.claim(key: string, purchaseId: string): ClaimResult
 		return "Claimed"
 	end
 	return "Error"
+end
+
+-- A simulated purchase on a live server (the place owner testing an id-0 item) takes a unit
+-- from a per-server test counter, never from the real global stock. Doesn't yield.
+function MonetizationStock.claimTest(key: string, purchaseId: string): ClaimResult
+	local record = testClaims[key] or { Sold = 0, Claims = {} }
+	testClaims[key] = record
+	if record.Claims[purchaseId] then
+		return "Claimed"
+	end
+	if record.Sold >= totalStock(key) then
+		return "SoldOut"
+	end
+	record.Sold += 1
+	record.Claims[purchaseId] = true
+	return "Claimed"
 end
 
 return MonetizationStock

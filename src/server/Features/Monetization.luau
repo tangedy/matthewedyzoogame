@@ -69,7 +69,7 @@ local function processPurchase(
 	end
 
 	processing[purchaseId] = true
-	local ok, granted, message = pcall(MonetizationGrants.product, player, product, purchaseId)
+	local ok, granted, message = pcall(MonetizationGrants.product, player, product, purchaseId, simulated)
 	processing[purchaseId] = nil
 	if not ok then
 		warn(`[Monetization] Granting {product.Key} to {player.Name} failed: {granted}`)
@@ -79,6 +79,10 @@ local function processPurchase(
 	saved = MonetizationState.saved(player)
 	if not granted or not saved then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local session = MonetizationState.peek(player)
+	if session then
+		session.PendingOnce[product.Key] = nil
 	end
 	table.insert(saved.Receipts, purchaseId)
 	while #saved.Receipts > MonetizationConfig.ReceiptsKept do
@@ -113,8 +117,22 @@ local function buyProduct(player: Player, product: Product)
 		MonetizationState.notify(player, "Still loading your data. Try again in a moment.", false)
 		return
 	end
+	local session = MonetizationState.peek(player)
+	if not session then
+		return
+	end
 	if product.OncePerPlayer and saved.Once[product.Key] then
 		MonetizationState.notify(player, "You already used that offer.", false)
+		return
+	end
+	-- A second intro prompt opened before the first receipt lands would also get the intro price.
+	if product.OncePerPlayer and session.PendingOnce[product.Key] then
+		MonetizationState.notify(player, "Finish your other purchase first.", false)
+		return
+	end
+	-- Without a wash in progress the treat would do nothing.
+	if product.Kind == "CalmTreat" and not CleaningService.getActiveJob(player) then
+		MonetizationState.notify(player, "Start washing an animal first!", false)
 		return
 	end
 	if product.Kind == "Limited" then
@@ -123,9 +141,10 @@ local function buyProduct(player: Player, product: Product)
 			return
 		end
 		-- Robux can't be refunded, so check the stock before prompting (and again at receipt time).
+		-- Stock is never restocked, so a known 0 is final; only an unknown stock is read again.
 		local left = MonetizationStock.remaining(product.Key)
-		if left == nil or left <= 0 then
-			left = MonetizationStock.refresh(product.Key) or left
+		if left == nil then
+			left = MonetizationStock.refresh(product.Key, MonetizationConfig.StockRecheckSeconds)
 		end
 		if left == nil then
 			MonetizationState.notify(player, "Couldn't check the stock. Try again in a moment.", false)
@@ -146,6 +165,9 @@ local function buyProduct(player: Player, product: Product)
 			MonetizationState.notify(player, "[TEST] Purchase could not be granted right now.", false)
 		end
 	elseif product.Id ~= 0 then
+		if product.OncePerPlayer then
+			session.PendingOnce[product.Key] = true
+		end
 		MarketplaceService:PromptProductPurchase(player, product.Id)
 	else
 		MonetizationState.notify(player, "This item isn't on sale yet.", false)
@@ -158,7 +180,7 @@ local function buyPass(player: Player, pass: Pass)
 		return
 	end
 	if MonetizationState.shouldSimulate(player, pass.Id) then
-		MonetizationGrants.grantPass(player, pass.Key)
+		MonetizationGrants.grantPass(player, pass.Key, true)
 	elseif pass.Id ~= 0 then
 		MarketplaceService:PromptGamePassPurchase(player, pass.Id)
 	else
@@ -256,6 +278,21 @@ local function connectHooks()
 			return weight * MonetizationConfig.LuckySoap.MutationWeightMultiplier
 		end
 		return weight
+	end)
+
+	-- Registered a frame later so it runs after the NextAnimal modifiers other features add in
+	-- their init: a walk-in replaced by an override wasn't rolled with Lucky Soap, so it mustn't
+	-- use a charge.
+	task.defer(function()
+		Hooks.modify("NextAnimal", function(override: any, player: Player, _isFirst: boolean)
+			if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
+				local session = MonetizationState.peek(player)
+				if session then
+					session.LuckyRolled = false
+				end
+			end
+			return override
+		end)
 	end)
 
 	Hooks.on("WashStarted", function(player: Player, info: Hooks.WashInfo)
@@ -413,7 +450,19 @@ function Monetization.init()
 		function(player: Player, passId: number, purchased: boolean)
 			local pass = passesById[passId]
 			if purchased and pass and player.Parent then
-				MonetizationGrants.grantPass(player, pass.Key)
+				MonetizationGrants.grantPass(player, pass.Key, false)
+			end
+		end
+	)
+	-- A closed or failed intro prompt frees the once-only product again; a successful one stays
+	-- pending until its receipt is processed.
+	MarketplaceService.PromptProductPurchaseFinished:Connect(
+		function(userId: number, productId: number, purchased: boolean)
+			local product = productsById[productId]
+			local player = Players:GetPlayerByUserId(userId)
+			local session = player and MonetizationState.peek(player)
+			if product and session and not purchased then
+				session.PendingOnce[product.Key] = nil
 			end
 		end
 	)

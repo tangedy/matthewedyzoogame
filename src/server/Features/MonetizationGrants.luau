@@ -4,6 +4,7 @@
 -- Part of the Monetization feature (no init of its own).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
@@ -111,8 +112,10 @@ function MonetizationGrants.deliverPending(player: Player): number
 	return delivered
 end
 
+-- Not capped below its floor like a cash pack: this replaces a Robux purchase that can't be refunded.
 local function compensate(player: Player, reason: string): (boolean, string?)
-	local amount = MonetizationState.cashAmount(player, MonetizationConfig.SoldOutCompensation)
+	local cfg = MonetizationConfig.SoldOutCompensation
+	local amount = math.max(cfg.Floor, MonetizationState.cashAmount(player, cfg))
 	if not EconomyService.addCoins(player, amount) then
 		return false, nil
 	end
@@ -121,13 +124,21 @@ end
 
 -- Yields (global stock). Returns false to leave the receipt unprocessed; claiming is idempotent
 -- per purchase, so the retry never takes a second unit.
-local function grantLimited(player: Player, product: Product, purchaseId: string): (boolean, string?)
+local function grantLimited(
+	player: Player,
+	product: Product,
+	purchaseId: string,
+	simulated: boolean
+): (boolean, string?)
 	local species = product.Species
 	local mutation = product.Mutation or "Normal"
 	if not species or not AnimalConfig.Animals[species] then
 		return compensate(player, `{product.DisplayName} isn't in the game right now.`)
 	end
-	local result = MonetizationStock.claim(product.Key, purchaseId)
+	-- Outside Studio a simulated purchase must not take a real unit from the global stock.
+	local result = if simulated and not RunService:IsStudio()
+		then MonetizationStock.claimTest(product.Key, purchaseId)
+		else MonetizationStock.claim(product.Key, purchaseId)
 	if result == "Error" then
 		return false, nil
 	end
@@ -151,14 +162,19 @@ end
 
 -- Applies a paid product. Returns whether it was granted (false = try the receipt again later)
 -- and a message for the player. Only the Limited kind yields.
-function MonetizationGrants.product(player: Player, product: Product, purchaseId: string): (boolean, string?)
+function MonetizationGrants.product(
+	player: Player,
+	product: Product,
+	purchaseId: string,
+	simulated: boolean
+): (boolean, string?)
 	local saved = MonetizationState.saved(player)
 	if not saved then
 		return false, nil
 	end
 	local kind = product.Kind
 	if kind == "Limited" then
-		return grantLimited(player, product, purchaseId)
+		return grantLimited(player, product, purchaseId, simulated)
 	end
 	if product.OncePerPlayer then
 		saved.Once[product.Key] = true
@@ -243,10 +259,11 @@ function MonetizationGrants.applyPass(player: Player, key: string)
 	end
 end
 
--- A pass was bought (or simulated): remember it in the profile too, then apply it.
-function MonetizationGrants.grantPass(player: Player, key: string)
+-- A pass was bought (or simulated): remember it in the profile too, then apply it. A simulated
+-- pass on a live server only lasts the session, so it never outlives the switch to real ids.
+function MonetizationGrants.grantPass(player: Player, key: string, simulated: boolean)
 	local saved = MonetizationState.saved(player)
-	if saved then
+	if saved and (not simulated or RunService:IsStudio()) then
 		saved.Passes[key] = true
 		PlayerDataService.saveNow(player)
 	end
