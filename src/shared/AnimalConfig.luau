@@ -12,6 +12,7 @@ export type AnimalDefinition = {
 	SpawnWeight: number,
 	RequiredToolTier: number,
 	WashTimeMultiplier: number,
+	Limited: boolean?, -- sold, never spawns (SpawnWeight 0); see the monetization feature
 }
 
 local function animal(

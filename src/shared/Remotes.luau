@@ -47,12 +47,28 @@ else
 	folder = ReplicatedStorage:WaitForChild("Remotes") :: Folder
 end
 
+-- Features can use remotes that aren't in the lists above: the server creates them on first
+-- use, and the client waits for them (so call these from the server before the client needs them).
+local function getOrCreate(name: string, className: string): Instance
+	if RunService:IsServer() then
+		local existing = folder:FindFirstChild(name)
+		if existing then
+			return existing
+		end
+		local remote = Instance.new(className)
+		remote.Name = name
+		remote.Parent = folder
+		return remote
+	end
+	return folder:WaitForChild(name)
+end
+
 function Remotes.event(name: string): RemoteEvent
-	return folder:WaitForChild(name) :: RemoteEvent
+	return getOrCreate(name, "RemoteEvent") :: RemoteEvent
 end
 
 function Remotes.func(name: string): RemoteFunction
-	return folder:WaitForChild(name) :: RemoteFunction
+	return getOrCreate(name, "RemoteFunction") :: RemoteFunction
 end
 
 return Remotes

@@ -18,6 +18,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalService = require(script.Parent.AnimalService)
 local EconomyService = require(script.Parent.EconomyService)
+local Hooks = require(script.Parent.Hooks)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 type OwnedAnimal = PlayerDataService.OwnedAnimal
@@ -359,6 +360,7 @@ local function placeCarried(player: Player, penIndex: number)
 	if old and oldIndex then
 		table.remove(data.Animals, oldIndex)
 		EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
+		Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
 		local oldModel = zoo.PenModels[old.Id]
 		if oldModel then
 			zoo.PenModels[old.Id] = nil
@@ -381,6 +383,7 @@ local function placeCarried(player: Player, penIndex: number)
 	placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation))
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
+	Hooks.fire("AnimalPlaced", player, animal)
 end
 
 local function sellFromPen(player: Player, penIndex: number)
@@ -395,6 +398,13 @@ local function sellFromPen(player: Player, penIndex: number)
 	end
 	table.remove(data.Animals, index)
 	EconomyService.addCoins(player, ZooService.sellValue(animal.Species, animal.Mutation) + math.floor(animal.Pending))
+	Hooks.fire(
+		"AnimalSold",
+		player,
+		animal.Species,
+		animal.Mutation,
+		ZooService.sellValue(animal.Species, animal.Mutation)
+	)
 	local model = zoo.PenModels[animal.Id]
 	if model then
 		zoo.PenModels[animal.Id] = nil
@@ -413,6 +423,13 @@ local function sellFromCache(player: Player, slotIndex: number)
 	end
 	table.remove(data.Cache, slotIndex)
 	EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
+	Hooks.fire(
+		"AnimalSold",
+		player,
+		record.Species,
+		record.Mutation,
+		ZooService.sellValue(record.Species, record.Mutation)
+	)
 	local model = zoo.CacheModels[record.Id]
 	if model then
 		zoo.CacheModels[record.Id] = nil
@@ -468,6 +485,27 @@ local function expand(player: Player)
 end
 
 -- Washed animals ------------------------------------------------------------------------
+
+-- For features: adds cash straight onto every penned animal's pad (e.g. offline earnings),
+-- split by each animal's share of total income.
+function ZooService.addToPads(player: Player, total: number)
+	local data = PlayerDataService.get(player)
+	if not data or #data.Animals == 0 or total <= 0 then
+		return
+	end
+	local sum = totalIncome(data)
+	for _, animal in data.Animals do
+		local share = if sum > 0 then ZooService.income(animal.Species, animal.Mutation) / sum else 1 / #data.Animals
+		animal.Pending += total * share
+	end
+	PlayerDataService.markDirty(player)
+	refreshPens(player)
+end
+
+function ZooService.totalIncome(player: Player): number
+	local data = PlayerDataService.get(player)
+	return if data then totalIncome(data) else 0
+end
 
 function ZooService.cacheHasRoom(player: Player): boolean
 	local data = PlayerDataService.get(player)
@@ -656,11 +694,18 @@ function ZooService.init()
 			for player in zoos do
 				local data = PlayerDataService.get(player)
 				if data and #data.Animals > 0 then
+					local multiplier = Hooks.apply("IncomeMultiplier", 1, player)
+					local tick = 0
 					for _, animal in data.Animals do
-						animal.Pending += ZooService.income(animal.Species, animal.Mutation) * GameConfig.IncomeTickSeconds
+						local amount = ZooService.income(animal.Species, animal.Mutation)
+							* multiplier
+							* GameConfig.IncomeTickSeconds
+						animal.Pending += amount
+						tick += amount
 					end
 					PlayerDataService.markDirty(player)
 					refreshPens(player)
+					Hooks.fire("IncomeTick", player, tick)
 				end
 			end
 		end

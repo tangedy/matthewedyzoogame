@@ -13,6 +13,7 @@ local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local DirtRenderer = require(script.Parent.DirtRenderer)
+local Hooks = require(script.Parent.Hooks)
 local HoseBuilder = require(script.Parent.HoseBuilder)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 
@@ -158,8 +159,9 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 		return
 	end
 
+	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
 	for _, patch in hitPatches do
-		patch.RemainingDirt = math.max(0, patch.RemainingDirt - tool.CleaningPower * step)
+		patch.RemainingDirt = math.max(0, patch.RemainingDirt - power * step)
 		local fraction = patch.RemainingDirt / patch.InitialDirt
 		if fraction <= GameConfig.PatchCleanThreshold then
 			patch.RemainingDirt = 0
@@ -177,6 +179,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 		task.spawn(job.OnComplete)
 	else
 		progressChanged:FireClient(player, job.Id, progress, progress >= GameConfig.HintProgress)
+		Hooks.fire("WashProgress", player, job.Id, progress)
 	end
 end
 
@@ -253,6 +256,44 @@ function CleaningService.endJob(jobId: string)
 	if jobByOwner[job.Owner] == job then
 		jobByOwner[job.Owner] = nil
 	end
+end
+
+-- For features: the owner's active job, if they're washing right now.
+function CleaningService.getActiveJob(player: Player): { Id: string, Model: Model, Progress: number }?
+	local job = jobByOwner[player]
+	if not job or not job.Active then
+		return nil
+	end
+	return { Id = job.Id, Model = job.Model, Progress = progressOf(job) }
+end
+
+-- For features (e.g. an animal shaking mud back on): makes `fraction` of the already-clean
+-- area dirty again, picking random clean patches. Returns how many patches came back.
+function CleaningService.redirty(jobId: string, fraction: number): number
+	local job = jobs[jobId]
+	if not job or not job.Active then
+		return 0
+	end
+	local clean = {}
+	for _, patch in job.PatchList do
+		if patch.RemainingDirt <= 0 and patch.Part.Parent then
+			table.insert(clean, patch)
+		end
+	end
+	local count = math.floor(#clean * math.clamp(fraction, 0, 1) + 0.5)
+	for i = 1, count do
+		local index = math.random(i, #clean)
+		clean[i], clean[index] = clean[index], clean[i]
+		local patch = clean[i]
+		patch.RemainingDirt = patch.InitialDirt
+		DirtRenderer.restore(patch.Part)
+	end
+	if count > 0 then
+		local progress = progressOf(job)
+		DirtRenderer.setGrime(job.Model, progress)
+		progressChanged:FireClient(job.Owner, job.Id, progress, progress >= GameConfig.HintProgress)
+	end
+	return count
 end
 
 function CleaningService.getProgress(jobId: string): number?

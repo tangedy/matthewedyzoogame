@@ -79,8 +79,8 @@ local function popBurst(position: Vector3, normal: Vector3, progress: number)
 	Debris:AddItem(attachment, 1.5)
 end
 
--- Fully cleaned: pop (swell then vanish) with a burst, then remove so it no longer blocks
--- spray or shows in hints. `progress` is the animal's overall progress, for the chime pitch.
+-- Fully cleaned: pop (swell then vanish) with a burst. The part is hidden, not destroyed, so
+-- `restore` can bring it back (an animal shaking mud on). `progress` sets the chime pitch.
 function DirtRenderer.clear(patch: BasePart, progress: number?)
 	patch:SetAttribute("Dirt", 0)
 	patch.CanQuery = false
@@ -94,9 +94,17 @@ function DirtRenderer.clear(patch: BasePart, progress: number?)
 		Transparency = 1,
 	})
 	tween.Completed:Once(function()
-		patch:Destroy()
+		if patch:GetAttribute("Dirt") == 0 then
+			patch.Size = patch.Size / Vector3.new(1, 1.35, 1.35) -- undo the swell for a later restore
+		end
 	end)
 	tween:Play()
+end
+
+-- Back to fully dirty (see CleaningService.redirty).
+function DirtRenderer.restore(patch: BasePart)
+	patch.CanQuery = true
+	DirtRenderer.setAmount(patch, 1)
 end
 
 -- Tints the whole animal from muddy (progress 0) to its true colours (progress 1), so the

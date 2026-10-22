@@ -13,29 +13,40 @@ local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 local DirtRenderer = require(script.Parent.DirtRenderer)
+local Hooks = require(script.Parent.Hooks)
 
 local AnimalService = {}
 
 local rng = Random.new()
 
+-- Entries with weight 0 (e.g. Limited animals) are never picked.
 local function weightedPick<T>(entries: { T }, weightOf: (T) -> number): T?
+	local weights = {}
 	local total = 0
-	for _, entry in entries do
-		total += weightOf(entry)
+	for i, entry in entries do
+		weights[i] = math.max(0, weightOf(entry))
+		total += weights[i]
+	end
+	if total <= 0 then
+		return nil
 	end
 	local roll = rng:NextNumber(0, total)
-	for _, entry in entries do
-		roll -= weightOf(entry)
-		if roll <= 0 then
-			return entry
+	local last: T? = nil
+	for i, entry in entries do
+		if weights[i] > 0 then
+			last = entry
+			roll -= weights[i]
+			if roll <= 0 then
+				return entry
+			end
 		end
 	end
-	return entries[#entries]
+	return last
 end
 
 -- First animal of a session is deterministic; later ones come from the weighted pool of
 -- species the player's hose can handle (better hoses unlock rarer tiers).
-function AnimalService.pickNext(isFirst: boolean, toolTier: number): string
+function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Player?): string
 	if isFirst then
 		return AnimalConfig.FirstAnimal
 	end
@@ -47,17 +58,18 @@ function AnimalService.pickNext(isFirst: boolean, toolTier: number): string
 	end
 	table.sort(pool)
 	return weightedPick(pool, function(key)
-		return AnimalConfig.Animals[key].SpawnWeight
+		local weight = AnimalConfig.Animals[key].SpawnWeight
+		return if player then math.max(0, Hooks.apply("SpawnWeight", weight, player, key)) else weight
 	end) or AnimalConfig.FirstAnimal
 end
 
 -- Weighted mutation roll. The first animal of a session is always Normal.
-function AnimalService.pickMutation(isFirst: boolean): string
+function AnimalService.pickMutation(isFirst: boolean, player: Player?): string
 	if isFirst then
 		return MutationConfig.Default
 	end
 	local picked = weightedPick(MutationConfig.List, function(m)
-		return m.Weight
+		return if player then math.max(0, Hooks.apply("MutationWeight", m.Weight, player, m.Key)) else m.Weight
 	end)
 	return if picked then picked.Key else MutationConfig.Default
 end

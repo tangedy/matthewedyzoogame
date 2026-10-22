@@ -36,3 +36,18 @@ ZooController.init(initial)
 IndexController.init(initial)
 PenCashController.init()
 DevController.init()
+
+-- Feature controllers (src/client/Features): each is required and init(initial) called.
+for _, module in script.Parent.Features:GetChildren() do
+	if module:IsA("ModuleScript") then
+		local started, err = pcall(function()
+			local feature = require(module) :: any
+			if typeof(feature) == "table" and typeof(feature.init) == "function" then
+				feature.init(initial)
+			end
+		end)
+		if not started then
+			warn(`[Features] {module.Name} failed to start: {err}`)
+		end
+	end
+end

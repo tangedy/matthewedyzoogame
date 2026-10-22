@@ -17,6 +17,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Hooks = require(script.Parent.Hooks)
 
 -- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
 -- v3: species have fixed rarities and walk-ins roll a mutation instead; adds the cache and
@@ -48,6 +49,9 @@ export type SavedData = {
 	Cache: { CachedAnimal },
 	Index: { [string]: boolean }, -- "Species:Mutation" -> discovered
 	NextAnimalId: number,
+	-- Feature-owned data (src/server/Features). Each feature uses its own key and must
+	-- validate what it reads back; only plain JSON-safe values survive a save.
+	Extra: { [string]: any },
 }
 
 type Profile = {
@@ -79,6 +83,7 @@ local function defaults(): SavedData
 		Cache = {},
 		Index = {},
 		NextAnimalId = 1,
+		Extra = {},
 	}
 end
 
@@ -115,6 +120,28 @@ local function isValidZooSize(size: number): boolean
 	return false
 end
 
+-- Copies plain data (strings, numbers, booleans, tables of those), dropping anything else.
+local function plainCopy(value: any, depth: number): any
+	local kind = typeof(value)
+	if kind == "string" or kind == "boolean" then
+		return value
+	elseif kind == "number" then
+		return if value == value and value ~= math.huge and value ~= -math.huge then value else nil
+	elseif kind == "table" and depth < 6 then
+		local out = {}
+		for k, v in value do
+			if typeof(k) == "string" or typeof(k) == "number" then
+				out[k] = plainCopy(v, depth + 1)
+			end
+		end
+		return out
+	end
+	return nil
+end
+PlayerDataService.plainCopy = function(value: any): any
+	return plainCopy(value, 0)
+end
+
 local function cleanCount(value: any): number
 	if typeof(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
 		return 0
@@ -132,6 +159,7 @@ local function sanitize(raw: any): SavedData
 	data.Coins = cleanCount(raw.Coins)
 	data.LifetimeAnimalsWashed = cleanCount(raw.LifetimeAnimalsWashed)
 	data.TutorialCompleted = raw.TutorialCompleted == true
+	data.Extra = if typeof(raw.Extra) == "table" then plainCopy(raw.Extra, 0) else {}
 	local tier = cleanCount(raw.ToolTier)
 	data.ToolTier = if ToolConfig[tier] then tier else 1
 
@@ -292,6 +320,7 @@ local function save(profile: Profile, release: boolean): boolean
 		snapshot.Animals[i] = table.clone(animal) -- Pending changes every income tick
 	end
 	snapshot.Cache = table.clone(profile.Data.Cache)
+	snapshot.Extra = plainCopy(profile.Data.Extra, 0)
 	snapshot.Index = table.clone(profile.Data.Index)
 	local lostLock = false
 	local ok, err = pcall(function()
@@ -394,6 +423,11 @@ function PlayerDataService.release(player: Player)
 		return
 	end
 	local profile = profiles[player]
+	if profile then
+		-- Listeners run synchronously up to their first yield, so writes they make
+		-- (e.g. a last-seen time) land in this final save.
+		Hooks.fire("PlayerLeaving", player)
+	end
 	profiles[player] = nil
 	if profile then
 		save(profile, true)
@@ -413,6 +447,7 @@ function PlayerDataService.init()
 
 	game:BindToClose(function()
 		for player, profile in profiles do
+			Hooks.fire("PlayerLeaving", player)
 			profiles[player] = nil
 			task.spawn(save, profile, true)
 		end

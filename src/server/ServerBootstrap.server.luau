@@ -13,6 +13,7 @@ local CleaningService = require(Services.CleaningService)
 local BayService = require(Services.BayService)
 local DevService = require(Services.DevService)
 local ZooService = require(Services.ZooService)
+local Hooks = require(Services.Hooks)
 
 EnvironmentBuilder.build()
 WorldBuilder.init()
@@ -21,6 +22,22 @@ PlayerDataService.init()
 EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
 DevService.init()
+
+-- Feature modules (src/server/Features): each is required and its init() called once the
+-- core is up. They plug in through Services.Hooks, so a broken feature can't stop the game.
+for _, module in script.Parent.Features:GetChildren() do
+	if module:IsA("ModuleScript") then
+		local ok, err = pcall(function()
+			local feature = require(module) :: any
+			if typeof(feature) == "table" and typeof(feature.init) == "function" then
+				feature.init()
+			end
+		end)
+		if not ok then
+			warn(`[Features] {module.Name} failed to start: {err}`)
+		end
+	end
+end
 
 local initialStatePending: { [Player]: boolean } = {}
 Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
@@ -58,6 +75,7 @@ local function onPlayerAdded(player: Player)
 	if not player.Parent then
 		return -- left while loading; PlayerDataService already released the lock
 	end
+	Hooks.fire("PlayerLoaded", player, PlayerDataService.get(player))
 	BayService.assign(player)
 	EconomyService.sendTool(player)
 	CleaningService.refreshHose(player) -- now that the tool tier is known

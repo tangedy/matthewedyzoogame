@@ -19,6 +19,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local AnimalService = require(script.Parent.AnimalService)
 local CleaningService = require(script.Parent.CleaningService)
 local EconomyService = require(script.Parent.EconomyService)
+local Hooks = require(script.Parent.Hooks)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 local ZooService = require(script.Parent.ZooService)
 
@@ -127,8 +128,16 @@ local function runOneJob(bay: Bay, owner: Player)
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
 	local isFirst = not bay.FirstAnimalGiven
-	local animalKey = AnimalService.pickNext(isFirst, tier)
-	local mutationKey = AnimalService.pickMutation(isFirst)
+	local animalKey = AnimalService.pickNext(isFirst, tier, owner)
+	local mutationKey = AnimalService.pickMutation(isFirst, owner)
+	-- Features can override a walk-in (e.g. the Daily Dirty Animal).
+	local override = if isFirst then nil else Hooks.apply("NextAnimal", nil, owner, isFirst)
+	if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
+		animalKey = override.Species
+		if typeof(override.Mutation) == "string" and MutationConfig.ByKey[override.Mutation] then
+			mutationKey = override.Mutation
+		end
+	end
 	bay.FirstAnimalGiven = true
 	local def = AnimalConfig.Animals[animalKey]
 
@@ -138,7 +147,12 @@ local function runOneJob(bay: Bay, owner: Player)
 		Id = jobId,
 		AnimalKey = animalKey,
 		Mutation = mutationKey,
-		Reward = math.max(0, ZooService.washReward(animalKey, mutationKey)),
+		Reward = math.max(
+			0,
+			math.floor(
+				Hooks.apply("WashReward", ZooService.washReward(animalKey, mutationKey), owner, animalKey, mutationKey)
+			)
+		),
 		Model = model,
 		Paid = false,
 	}
@@ -155,12 +169,18 @@ local function runOneJob(bay: Bay, owner: Player)
 		Owner = owner,
 		Model = model,
 		Patches = patches,
-		WashTimeMultiplier = def.WashTimeMultiplier,
+		WashTimeMultiplier = math.max(
+			0.05,
+			Hooks.apply("WashTimeMultiplier", def.WashTimeMultiplier, owner, animalKey, mutationKey)
+		),
 		OnComplete = function()
 			onJobComplete(bay, job)
 		end,
 	})
 	setState(bay, "Washing")
+	local info: Hooks.WashInfo =
+		{ JobId = jobId, Species = animalKey, Mutation = mutationKey, Model = model, Bay = bay.Model }
+	Hooks.fire("WashStarted", owner, info)
 	coroutine.yield() -- resumed by onJobComplete
 
 	-- Completing: pay once, guarded by the job's Paid flag.
@@ -177,6 +197,7 @@ local function runOneJob(bay: Bay, owner: Player)
 			local updated = EconomyService.getProfile(owner)
 			washCompleted:FireClient(owner, jobId, job.Reward + bonus, if updated then updated.Coins else 0)
 		end
+		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
 	end
 	AnimalService.celebrate(model)
 
@@ -268,6 +289,7 @@ function BayService.assign(player: Player): boolean
 		character:PivotTo(bay.Spawn.CFrame + Vector3.new(0, 3, 0))
 	end
 	ZooService.attach(player, bay.Model)
+	Hooks.fire("BayAssigned", player, bay.Model)
 	bay.Thread = task.spawn(runBay, bay, player)
 	return true
 end
