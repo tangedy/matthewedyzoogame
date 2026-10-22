@@ -52,8 +52,8 @@ export type SavedData = {
 	CleanUpgradeCount: number,
 	TeaseOrder: number,
 	AnimalsUntilTease: number,
-	-- Completed washes since an animal this hose could not wash last walked in.
-	-- Each one adds ChancePerWash to every still-unwashable rarity.
+	-- Completed washes since an unwashable animal last walked in.
+	-- Each one adds ChancePerWash to the next rarity this hose cannot wash.
 	WashesSinceUnwashable: number,
 	ZooSize: number,
 	Animals: { OwnedAnimal },

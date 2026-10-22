@@ -73,11 +73,12 @@ local GameConfig = {
 	-- Shop
 	ShopCloseDistance = 14, -- the shop panel closes when you walk this far from the station
 
-	-- Each rarity the hose cannot wash (Clean Now is the only way through) starts at 0%.
-	-- Every completed wash adds ChancePerWash to each of those rarities, taken from Common.
-	-- Seeing one of them resets the count to 0.
+	-- The next rarity this hose cannot wash starts at 0%. Every completed wash adds
+	-- ChancePerWash to that one rarity, taken from Common, until one unwashable walks in.
+	-- Every rarity above that next one is FlatChance on every walk-in, and that does not grow.
 	CleanGate = {
 		ChancePerWash = 0.001,
+		FlatChance = 0.001,
 	},
 
 	-- Developer shortcuts (C / G). Honored in Studio and for the place owner only.

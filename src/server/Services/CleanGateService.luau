@@ -1,6 +1,6 @@
--- Rarities the hose cannot wash (Clean Now is the only way) start at 0%.
--- Each completed wash adds ChancePerWash to every one of those rarities, and that
--- chance is taken from Common. Seeing one of them resets the count to 0.
+-- The next rarity the hose cannot wash starts at 0% and gains ChancePerWash per
+-- completed wash, taken from Common. Every rarity above that is FlatChance on every
+-- walk-in and does not grow. Seeing any unwashable resets the growing count to 0.
 -- Hose upgrades no longer schedule a separate animal: the set is whatever this
 -- hose, including Super Soap, still cannot wash.
 
@@ -62,16 +62,20 @@ local function lockedRarities(power: number): { string }
 	return list
 end
 
--- Folds the tiny unwashable chances into a washable weight table. Other rarities
--- keep their share. Each locked rarity's chance comes out of Common.
+-- Folds unwashable chances into a washable weight table. Rare and above that the
+-- hose can already wash keep their share. The extra chance comes out of Common.
 function CleanGateService.mix(player: Player, weights: { [string]: number }, power: number): { [string]: number }
-	local data = PlayerDataService.get(player)
-	local washes = if data then data.WashesSinceUnwashable else 0
-	if washes <= 0 then
-		return weights
-	end
 	local locked = lockedRarities(power)
 	if #locked == 0 then
+		return weights
+	end
+	local data = PlayerDataService.get(player)
+	local washes = if data then data.WashesSinceUnwashable else 0
+	local cfg = GameConfig.CleanGate
+	local nextChance = math.max(0, washes) * cfg.ChancePerWash
+	local flat = cfg.FlatChance
+	local wanted = nextChance + flat * (#locked - 1)
+	if wanted <= 0 then
 		return weights
 	end
 
@@ -88,9 +92,8 @@ function CleanGateService.mix(player: Player, weights: { [string]: number }, pow
 	end
 
 	local commonShare = common / total
-	local each = washes * GameConfig.CleanGate.ChancePerWash
-	local taken = math.min(commonShare, each * #locked)
-	local eachChance = taken / #locked
+	local taken = math.min(commonShare, wanted)
+	local fit = taken / wanted
 	local commonScale = 1 - taken / commonShare
 
 	local mixed: { [string]: number } = {}
@@ -101,11 +104,11 @@ function CleanGateService.mix(player: Player, weights: { [string]: number }, pow
 			mixed[key] = weight
 		end
 	end
-	local eachWeight = eachChance * total
-	for _, rarityKey in locked do
+	for index, rarityKey in locked do
 		local species = speciesOfRarity(rarityKey)
-		if species then
-			mixed[species] = (mixed[species] or 0) + eachWeight
+		local chance = if index == 1 then nextChance else flat
+		if species and chance > 0 then
+			mixed[species] = (mixed[species] or 0) + chance * fit * total
 		end
 	end
 	return mixed
