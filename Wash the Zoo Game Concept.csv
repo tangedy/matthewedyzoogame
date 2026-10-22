@@ -1,0 +1,367 @@
+Wash the Zoo: Game Concept,,,
+Wash the Zoo: Game Concept,,,
+"Oct 21, 2026 · ", @Edward Tang,,
+Pitch and core fantasy,,,
+Wash the Zoo is a co-op cleaning simulator. You scrub muddy zoo animals until they,,,
+"sparkle, unlock rarer animals for your zoo index, and grow from a bucket and sponge to a",,,
+fire-hose rig for a sleeping T-rex. It is built to the steps in,,,
+"Tizzy RBLX Playbook: Everything from the Channel , and each design choice cites the video it",,,
+comes from [V#].,,,
+"One-line hook: ""The animals are SO dirty. Clean them all.""",,,
+"Primary verb: wash. Kids already know it from bath time, so the 9-year-old majority",,,
+needs no explanation [V17 13:40].,,,
+"Bedtime test: ""What if I had to give an elephant a bath?"" It's silly, physical and easy to",,,
+picture [V18 0:54].,,,
+"Fifth-grader-at-lunch test: ""You wash a giant muddy hippo with a hose and it shakes",,,
+"mud all over your friend."" That pitches in one breath [V5 2:46].",,,
+"Title check: verb + noun, like Grow a Garden and Steal a Brainrot. ""Wash"" and ""zoo"" are",,,
+"both early-reader words [V5 3:57, V5 9:35].",,,
+"What players should feel: satisfaction (dirt to sparkle), care (a happy animal) and",,,
+progress (a bigger zoo). That makes the thumbnail a before/after [V13 8:50].,,,
+Market validation,,,
+"Both halves of the game have proven demand, cleaning and animal care. Nobody on",,,
+"Roblox combines them, so this is a ""purple ocean"": strong demand, no one executing it [V9",,,
+"12:09]. RoTrends data was pulled Oct 21, 2026.",,,
+Signal,Game,Numbers,What it proves
+Animal care,Animal Hospital,"2.5B visits, 978.7K",Kids will pour time into
+demand,(Anomaly),"peak CCU, 21.7K now",caring for animals
+,,,Page 1 of 12
+Wash the Zoo: Game Concept,,,
+Signal,Game,Numbers,What it proves
+Pet care,Adopt Me + 5 others,About 21K CCU per,Underserved genre
+genre,,"game, highest of any",
+,,subgenre; 0 new,
+,,entries since Sep 1,
+Cleaning loop,Wash the Car,"30.6K peak, 5.5K now,",The washing loop works
+,,"0 game passes, no",and the leader is stale
+,,update in 17 days,
+Cleaning loop,Clean Everything,"14.2K peak, 5.6K now,",Cleaning holds long
+,,22.8-minute sessions,sessions
+Bath fantasy,BATHE DA BABY,"397M visits, 9.7K peak",Bath time alone is
+,,,clickable
+"Rescue,",Surf and Rescue,"18.4K peak, 97%",Animal-rescue sims get
+female,,"rating, 36 favorites",loyal fans
+audience,,per 1K visits,
+Off-platform,PowerWash Simulator;,Large Steam and app-,The satisfying-cleaning
+,animal-grooming,store hits,loop works beyond
+,mobile games,,Roblox
+Gap,RoTrends keyword,"""groom"" 0 games;",Nobody owns this
+,search,"""bathe"" 1 live game; no",fantasy
+,,zoo game is about,
+,,cleaning,
+"Market phase: phase 1 for this fantasy, since nobody owns it yet. Cleaning in general is",,,
+"phase 2, with many ""Wash a ___"" games, so the twist has to be meaningful [V9 9:51].",,,
+Reference game and the 20% change [V21 14:23]:,,,
+"Reference: Wash the Car's loop (scrub, earn, upgrade tool, bigger target).",,,
+"What changes: the fantasy (car to living animal); a collection index with rarities, which",,,
+"Wash the Car lacks; co-op tension (animals that move, react and shake); and a new",,,
+"mainly female and young audience, the same play that worked for Raise an Anomaly",,,
+[V21 14:41].,,,
+Expected ceiling under the playbook's rule of thumb: about 1–10K CCU. To push past,,,
+"that, add a second innovation such as a visitors-and-tycoon layer or a PvP showdown",,,
+[V21 15:38].,,,
+,,,Page 2 of 12
+Wash the Zoo: Game Concept,,
+Core loop,,
+"The loop is the playbook's universal ""leave base, get thing"", reshaped as ""truck brings",,
+"thing, clean thing"" [V21 2:29].",,
+"core loop · 4 steps, repeating",,
+The scrub step is the core action and carries the tension. Every pass round the loop raises,,
+the animal's size and rarity.,,
+Building blocks [V21 1:15]:,,
+Block,Wash the Zoo,Proven in
+Fantasy (primary,Wash animals,"Wash the Car, BATHE DA"
+verb),,BABY
+Unique mechanic,Living targets with moods and a,New; nearest is Ride a Pet's
+,patience meter that shake mud back,time pressure
+RNG,"Spawn table, then a post-acquisition","Steal an Egg, Ride a Pet [V21"
+,reveal when the truck door opens,2:45]
+Level design,Plots side by side around a central,Grow a Garden plots [V14
+,"truck depot, visible from spawn",14:53]
+Tension,Patience meter (PvE) plus the 5-,Steal an Egg restock [V21 5:14]
+,minute restock FOMO,
+Progression,"Clean faster, reach bigger animals",Wash the Car tool tiers
+Collection,Zoo index with rarities and,"Grow a Garden, Steal a"
+,mutations,Brainrot [V16 10:03]
+,,Page 3 of 12
+Wash the Zoo: Game Concept,,
+Block,Wash the Zoo,Proven in
+Social,"Co-op scrubbing, visible zoos,",99 Nights co-op [V18 11:46]
+,leaderboard,
+Onboarding: the first 90 seconds,,
+"The player is scrubbing a dirty animal within 10 seconds and sees a sparkling ""wow"" result",,
+before minute 1. There is no text tutorial and no shop or product prompt until the player,,
+"cares [V16 13:26, V18 7:16, V22 2:55].",,
+"1. 0–5 s, cutscene (about 5 s). A truck tips over and dumps a mud-covered baby",,
+"elephant at your empty zoo gate. The elephant looks sad. This shows why to care, not",,
+"just what to do [V18 4:08, V18 5:17].",,
+"2. 5–10 s. A sponge is already in hand, auto-equipped, with nothing to pick from a hotbar.",,
+One glowing arrow points at the elephant [V22 2:55].,,
+"3. 10–40 s, first scrub. Hold or swipe to scrub. Mud flies off with a squelch sound,",,
+bubbles and a light camera shake on every stroke. A 0–100% clean meter fills [V10,,
+1:26].,,
+"4. 40–50 s, wow moment. At 100% the elephant sparkles, sprays you with water,",,
+"trumpets, and drops a coin burst about 5x bigger than normal. It then walks into your",,
+first enclosure [V22 5:08].,,
+"5. 50–90 s, the loop clicks. A second dirty animal arrives on the delivery truck. Coins buy",,
+"the first tool upgrade (big sponge), and then the player is set free [V22 5:39].",,
+"Contextual tutorials, fired by triggers later rather than up front [V22 6:23]:",,
+Enclosure full for the first time: teach zoo expansion.,,
+First 1K coins: teach the tool shop (hose).,,
+First rare animal on the truck: teach the index.,,
+First visitor arrives (minute 5–10): teach visitors and tips.,,
+"Funnel steps to track, every micro-step [V18 9:21]: join → cutscene done → first scrub →",,
+elephant 100% → elephant placed → second animal started → first upgrade bought. Slice,,
+"by device, since 80% of players are on mobile and about 30% of a hit's players can be on",,
+"console [V14 14:38, V17 15:12].",,
+Mobile rule: scrubbing must work with one thumb drag. No precise aiming and no multi-,,
+button combos. Build a Base and Steal lost CCU to clunky mobile building [V18 15:50].,,
+,,Page 4 of 12
+Wash the Zoo: Game Concept,,
+Progression and retention,,
+The early game is paced so no player hits a wall in minutes 5–10. Each retention stat has its,,
+"own hook [V22 8:39, V12 11:51].",,
+Progression axes,,
+Tools: sponge → big sponge → brush → hose → power washer → foam cannon → fire-,,
+hose rig. Each tool cleans faster and reaches bigger animals.,,
+"Animals: about 40 at launch across 4 zones (Farm → Savanna → Arctic → Jungle), in",,
+"rarities Common → Rare → Epic → Legendary → Mythic. Examples: a golden giraffe, a",,
+"rainbow axolotl, a T-rex in the ""fossil wing"".",,
+"Zone gates need a tool tier, not just coins. That gives a clear next goal [V7 8:22].",,
+"Zoo size: more enclosures, decorations and visitor paths.",,
+First-session milestone targets. Check these with paid testers on fresh alts before,,
+"launch [V22 9:00, V22 11:41]:",,
+Minute,Milestone,
+1,"First animal clean, first upgrade",
+3,Hose unlocked; second enclosure,
+5,First Rare animal on the truck,
+10,Savanna zone opens; first visitor tips,
+20,First Epic; index about 25% full,
+Retention hooks by stat,,
+Stat,Hook,Playbook source
+Playtime,Delivery truck every 5 minutes with a,Steal an Egg's in-world restock
+,"random rarity roll, which builds restock",[V21 5:14]
+,FOMO,
+D1,"Frictionless onboarding plus ""Daily Dirty",Onboarding drives D1 [V12 11:51]
+,"Animal"": one guaranteed Rare, very",
+,"muddy, each day",
+,,Page 5 of 12
+Wash the Zoo: Game Concept,,
+Stat,Hook,Playbook source
+D7,"Weekly ""Mud Storm"" event (admin-abuse",Weekly events drive D7 [V10 3:06]
+,style) where every animal spawns filthy,
+,and rare spawns rise; plus index,
+,completion,
+D28,Zoo star rating 1–5 unlocks new zones and,Deeper progression for D28 [V12
+,"mutations (glitter, frozen, lava-mud",11:51]
+,variants),
+Sunk,A decorated zoo the player built and,Base-building sunk cost [V16
+cost,named,10:19]
+"Social flex: your zoo sits next to other players' plots, visible from spawn with no walls.",,
+"Players see a friend's Mythic T-rex at once [V7 8:38, V17 16:26]. Add a server leaderboard",,
+for zoo stars.,,
+"Socialization, depth and clippable moments",,
+"Big animals need teamwork, and animals react in funny ways, so the game is ""10 times",,
+"more fun with friends"" and easy to clip [V18 11:46, V18 16:30].",,
+Co-op built into the core loop,,
+Big animals clean faster with more people. An elephant takes 1 player about 60,,
+"seconds and 3 players about 20, and co-op cleans pay a small bonus. That gives a",,
+reason to invite friends [V16 9:04].,,
+Roles appear naturally. One player hoses while another feeds the animal to keep it,,
+calm.,,
+"Friends share a zoo, or visit and help scrub in each other's.",,
+Depth without complexity [V16 6:50],,
+"Animals have moods. A calm animal stands still, a ticklish one squirms, a grumpy one",,
+"charges. Each species needs a different approach, such as a slow scrub for the",,
+porcupine or quick hose bursts for the hippo.,,
+"Tension, the ""holy shit"" moment [V21 4:35]. Each animal has a patience meter. Let it",,
+"run out and the animal shakes, splattering mud over the whole area and everyone",,
+"nearby, so you lose progress. Skunks spray. Mythic animals have a timer before they",,
+wander off.,,
+,,Page 6 of 12
+Wash the Zoo: Game Concept,,,,
+"No solved strategy. Mixed deliveries, moods and mutations make every truck",,,,
+different.,,,,
+Clippable moments. Design for what a YouTuber would react to [V17 17:04]:,,,,
+"A hippo shaking mud over 4 players at once, with ragdolls flying.",,,,
+An elephant hosing a player across the map.,,,,
+The first Mythic reveal: the truck door opens on a glowing rainbow T-rex.,,,,
+A tiny player power-washing a building-sized brontosaurus.,,,,
+"Social flex: visible zoos, a server leaderboard, rare animals on display, and limited",,,,
+decorations (see Monetization).,,,,
+Monetization,,,,
+"The game launches with its full product set on day one, mostly repeatable consumables,",,,,
+"plus limiteds and whale sinks from week 1. Raise an Anomaly added those 2 weeks late,",,,,
+"and the playbook counts that as a mistake [V22 14:39]. Nothing pay-to-win, and no shop",,,,
+"prompt in the first 90 seconds [V19 14:44, V18 7:16].",,,,
+Product,Type,Price,Pain it solves,Where it's
+,,(Robux),,offered
+Super Soap x1 (2x,Stackable,"5, then 9",Effort; the cheap,Popup when an
+"clean speed, 10",consumable,per tier,first purchase,animal is over
+min),,,,50% dirty [V22
+,,,,16:32]
+Instant Truck (skip,Consumable,19,Waiting,Beside the truck
+the 5-min restock),,,,"timer, in the"
+,,,,world
+Calm Treat,Consumable,15,"""It's about to",When the
+(freezes the,,,shake mud,patience meter is
+patience meter),,,"everywhere""",under 20%
+2x Offline Visitor,"Consumable,",19,Missing out on,Prompt when
+Tips,not a game pass,,big gains,collecting offline
+,,,,tips [V11 6:03]
+,,,,Page 7 of 12
+Wash the Zoo: Game Concept,,,,
+Product,Type,Price,Pain it solves,Where it's
+,,(Robux),,offered
+Golden Truck,Consumable,49,Wanting the rare,"At the truck, the"
+(Mythic odds up,,,one,busiest spot [V11
+for 1 delivery),,,,9:59]
+Starter / Pro / OP,Bundles,49 / 249 /,Anchoring with,"Shop, after"
+packs,,999,three sizes,minute 5 [V10
+,,,,4:08]
+Limited animal,Limited,"1,000",Flexing,Shop banner and
+(e.g. Rainbow,,,,zoo display [V22
+"Axolotl, 1,000",,,,14:55]
+"stock, never",,,,
+restocked),,,,
+Fire-Hose Rig,Whale game,"1,499",Wanting to be,Tool shop [V10
+early unlock,pass,,the best,3:52]
+VIP Keeper,Game pass,399,Status,Shop
+(cosmetic,,,,
+"uniform, tip bonus,",,,,
+chat tag),,,,
+Coins with a,Consumable,Varies,"""Can't afford this",Third failed buy
+Robux fallback,,,"tool""",auto-opens the
+,,,,"coin shop,"
+,,,,capped at 3 per
+,,,,"session [V11 6:49,"
+,,,,V16 19:03]
+"Purchase pathways: the HUD shop, a ""+"" next to coins, auto-open after the third failed",,,,
+"purchase, and physical shop stands where foot traffic is highest [V11 6:49].",,,,
+"Economy guardrails: no auto-clean pass, because it would break the core loop. Coin",,,,
+"packs are priced so one pack can't skip a whole zone [V11 2:19, V22 15:29].",,,,
+Metric to watch: 7-day spend days per user. Consumables should push it up [V11 5:04].,,,,
+,,,,Page 8 of 12
+Wash the Zoo: Game Concept,,
+Launch plan,,
+"Test privately, then launch in beta mode, then buy initial data with cheap ads. Fix the",,
+"worst stat before turning on home recommendations, and stop ads once home-rec",,
+"impressions pass ad impressions [V3 3:09, V5 15:05].",,
+"Thumbnails: have 10–20 ready at launch, then test 2–3 new ones a week [V5 12:05, V13",,
+8:36].,,
+"Before/after: a mud-covered elephant beside a sparkling one, with ""LEVEL 1 vs LEVEL",,
+"999"" [V13 6:43].",,
+"Two characters: a Bacon avatar laughing while a hippo shakes mud on a noob [V13 7:33,",,
+V13 17:29].,,
+One character plus one action: a tiny player fire-hosing a giant glowing T-rex.,,
+"Tease the unique mechanic in text: ""DON'T LET IT SHAKE!"" [V13 0:47].",,
+"Style: simple background, bright high contrast, readable faces. Check every one on",,
+"qptr.io at mobile size [V13 5:39, V13 9:57].",,
+"Experience page: use your best-performing thumbnails and vary the scenes: scrubbing, a",,
+"Mythic reveal, a full zoo [V12 3:08].",,
+"Ad plan [V5 12:20, V8 8:10]:",,
+"1. Private playtest with the testers for 1 week, plus a published test place [V22 19:10].",,
+2. Launch in beta mode. Run ads at $16/day on recommended targeting for at least 3 days,,
+"and ideally a week, paying with Robux-converted credits.",,
+3. Patch daily from the funnel and first-session retention data [V15 4:18].,,
+4. Turn beta mode off once bounce rate and D1 beat the genre benchmark. Budget about,,
+$180–250 to pass the 500-highly-engaged-players gate.,,
+"Target stats, against ""experiences with similar players"" [V3 8:36]:",,
+Stat,Target,Basis
+First-session,"Above 85% at 1 min, above",Tizzy's own game at 87% / 65% [V18
+retention,65% at 5 min,8:07]
+First-play bounce,Under 16%,Cutscene fix took Hack a Business
+rate,,from 22% to 15–16% [V17 18:55]
+,,Page 9 of 12
+Wash the Zoo: Game Concept,,
+Stat,Target,Basis
+D1,Above 15%,Raise an Anomaly's 6–8% was
+,,"""atrocious""; about 16% after the fix"
+,,[V22 8:03]
+ARPDAU,About 2.0,"What he calls ""not bad for a sim"" [V22"
+,,17:46]
+Tutorial,Above 75% on every device,"Hack a Business: 77% overall, 30% on"
+completion,,console before a bug fix [V12 12:26]
+Production plan,,
+"The MVP is one zone (Farm) with about 10 animals, 3 tools and the truck restock. That's",,
+enough to playtest whether scrubbing is fun before building the rest [V6 8:14].,,
+"Build order, following the playbook's pipeline [V6 10:53]:",,
+"1. AI prototype, 1–2 days. Build the scrub mechanic in Studio with Claude: a dirt mask on",,
+"a free-model animal, a clean meter, coin payout. Check the feel on a phone before",,
+hiring anyone [V6 8:30].,,
+"2. GDD and SOW. Turn this doc into a GDD, then ask an AI model to break it into",,
+programmer tasks. Put a Trello card per system [V6 10:53].,,
+"3. Art first. A modeler makes about 10 animals in one locked art style, with AI reference",,
+images and a style guide on day one. A builder makes the Farm zone and plots [V22,,
+"21:15, V6 13:04].",,
+"4. Programmer brings it to life: the scrub system, patience meter, truck restock, index,",,
+tools and data saving.,,
+"5. Monetization wired in before launch, not after [V22 14:00].",,
+"6. Playtest with 2–3 paid testers (1,000–2,000 Robux each) who grind about 3 hours and",,
+log every milestone time [V22 11:41].,,
+"Team: lean and T-shaped. One programmer who also does UI, one builder/modeler, and",,
+"you as producer and designer [V6 5:46, V6 6:18]. Find them on Twitter, YouTube or Tizzy",,
+"Town's featured-talent channel. Use contracts, a paid test task, and 50% up front at most",,
+"[V6 7:24, V15 3:31, V6 9:19].",,
+Technical risk to solve first: dirt removal needs to look satisfying on low-end phones. Test,,
+both texture-mask and decal-layer approaches in the prototype.,,
+,,Page 10 of 12
+Wash the Zoo: Game Concept,,,
+"Full launch scope after the MVP passes playtests: 4 zones, about 40 animals, 7 tools,",,,
+"visitors, the weekly event system and the full monetization set.",,,
+Live ops: the first four weeks,,,
+Patch daily and ship one planned update each Saturday. Each update targets one home-,,,
+"recommendation stat and starts from a hypothesis of the form ""if we add Y, stat X",,,
+"improves"" [V19 1:41, V19 2:16, V10 5:51].",,,
+Week,Update,Hypothesis: target stat,Playbook source
+1,"Daily tutorial iterations,",Fixing the biggest drop-off,~9 tutorials in week 1
+,"mobile scrub fixes, first",in the first-session,[V16 12:23]
+,Mud Storm event,retention curve raises D1,
+2,Savanna zone + 10 animals,More content and a flex,Limiteds from launch
+,+ first limited animal,item raise playtime and D7,[V22 14:55]
+3,Visitors and tips tycoon,A reason to come back for,Offline-earnings
+,layer + 2x offline tips,offline earnings raises play,consumable [V11 5:36]
+,,days,
+4,"Mutations (glitter, frozen,",Deeper progression raises,D28 needs depth [V19
+,lava-mud) + zoo star,D28,14:25]
+,ratings,,
+"Weekly cadence: Saturday launch and plan, Sunday assign, Monday–Wednesday build,",,,
+"Thursday ready, Friday playtest with 8–10 core players [V19 10:36, V19 7:48].",,,
+Data to collect every week:,,,
+"The dashboard feedback tab's ""full report"" [V19 3:13].",,,
+An in-game feedback mailbox [V22 18:07].,,,
+Discord bug reports.,,,
+"Tiny-YouTuber videos of the game: search the name and sort by ""posted today"" [V19",,,
+13:28].,,,
+"Competitor research against Wash the Car, Clean Everything and Animal Hospital.",,,
+,,,Page 11 of 12
+Wash the Zoo: Game Concept,,
+Risks and open questions,,
+Risk,Why it matters,Mitigation
+Scrubbing gets repetitive,"Playtime and D7 collapse,","Moods, patience tension, co-"
+after 20 minutes,the usual way sims die [V22,"op, mutations; test on fresh"
+,1:22],alts at 1 hour and again the
+,,next day [V7 10:51]
+Clone wave once it works,Phase-2 saturation [V9 3:25],"Original title and thumbnails,"
+,,"fast weekly updates, own the"
+,,index and community
+Economy breaks,Raise an Anomaly's cash,"No auto-clean, tiered coin"
+,packs and OP items fried its,"packs, testers hunting"
+,economy [V22 15:29],exploits before launch [V22
+,,19:45]
+Dirt effect is weak on,The satisfying moment is the,Prototype the effect first on
+mobile,whole game,a low-end phone
+Misleading title or,The June 2026 algorithm,The first 10 seconds must
+thumbnail raises bounce,penalizes bounce [V12 1:09],show exactly the thumbnail's
+rate,,"promise: a dirty animal, then"
+,,a scrub
+Open questions,,
+"Name check: ""Wash the Zoo"", ""Wash a Zoo"" or ""Wash the Animals""? Test 2–3 titles in",,
+ads.,,
+"Should a light PvP mode (a ""Clean-off"" race between zoos) be the second innovation",,
+that pushes past the 10K CCU ceiling [V21 16:02]?,,
+"Check the remaining top competitors in Creator Exchange for ""wash"", ""zoo"" and",,
+"""animal"" before committing [V5 4:29].",,
+"Budget: about $180–250 for ads, about $300–800 for 10 animal models, plus",,
+programmer and builder contracts.,,
+,,Page 12 of 12

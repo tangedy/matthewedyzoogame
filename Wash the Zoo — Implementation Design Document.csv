@@ -1,0 +1,522 @@
+Wash the Zoo — Implementation Design Document
+Version 0.1 · Roblox · For Claude Code
+1. Project direction
+Build a Roblox game called Wash the Zoo around this loop:
+An animal arrives at your washing station → you walk around it and clean oﬀ the mud →
+ﬁnishing the wash awards money → the animal leaves → the next animal arrives.
+The player physically moves around a 3D animal and cleans the places they aim at. This is not a
+clicker where holding anywhere ﬁlls a progress bar.
+Your clariﬁcation takes priority over the original concept: the ﬁrst build should focus on this
+"washing-station experience rather than building an entire zoo, collecting deliveries every ﬁve"
+"minutes, or managing visitors."
+"The original concept provides the animal-cleaning theme, tool progression, satisfying clean"
+"reveal, and emphasis on testing dirt removal on mobile before expanding production. Its"
+broader systems are deferred here.[1]
+"This document speciﬁes a proposed implementation, not a claim about how the reference game"
+implements its systems.
+2. Instructions for Claude Code
+You are implementing a Roblox game in Luau.
+"Follow these priorities, in order:"
+1. Make walking around and cleaning an animal satisfying.
+2. Make the full arrival → wash → reward → departure cycle work reliably.
+3. Make controls usable on desktop and mobile.
+"4. Add money, tool upgrades, and saving."
+5. Add more animals and polish only a er the ﬁrst complete loop works.
+Implementation rules:
+Inspect the existing repository before changing its structure.
+Reuse an existing project workﬂow if one is present.
+Keep gameplay values in conﬁguration modules.
+"Keep money, cleaning validation, progression, and rewards server-authoritative.",
+Use placeholder animals and environments until the mechanic works.,
+Do not implement deferred features without approval.,
+"Work in small, testable milestones.",
+"Report what was implemented, what needs testing in Roblox Studio, and any blockers.",
+Do not describe untested code as veriﬁed.,
+"If an asset or Studio-only action is required, explain exactly what the developer needs to",
+supply or do.,
+The architecture below is a suggested structure; adapt naming to the existing project.,
+3. Design assumptions,
+Use these defaults unless the project owner answers otherwise:,
+Topic,Default
+Player perspective,Third person
+Washing location,An individual outdoor wash bay
+Animal behavior during washing,"Mostly stationary, with optional idle animation"
+Starting tool,Water hose
+Cleaning input,Hold to spray
+Animal delivery,Animal walks into the bay
+Animal departure,Animal walks out a er completion
+Delivery frequency,"Continuous, with a short transition between animals"
+Money,Awarded once when the animal is completely clean
+Dirt,Localized patches that disappear as they are washed
+Multiplayer,Players share a server but have separate bays
+Co-op cleaning,Deferred
+Collecting cleaned animals,Deferred
+Monetization,Deferred
+These choices intentionally narrow the ﬁrst build. The source concept includes a much larger,
+"launch scope, but also identiﬁes a small prototype as the ﬁrst production step.[1]",
+4. Player experience,
+First session
+1. The player spawns beside their assigned wash bay.
+2. A dirty starter animal enters the bay.
+3. The player automatically receives a hose.
+4. A short instruction says: “Hold to spray. Wash oﬀ all the mud!”
+"5. The player walks around the animal, aiming at visible dirt."
+6. Each successfully washed area becomes visibly clean.
+7. A progress display updates as dirt is removed.
+8. At completion:
+Remaining dirt disappears.
+The animal plays a happy reaction.
+A completion sound and restrained sparkle eﬀect play.
+The player receives coins.
+A payout message appears.
+9. The animal exits.
+10. The next animal enters automatically.
+"Do not require the player to open a menu, accept a job, or purchase the ﬁrst animal."
+Intended feel
+Dirty areas respond immediately to spraying.
+The animal becomes visibly cleaner in the speciﬁc places washed.
+Walking around the animal matters.
+The player can easily identify what remains dirty.
+Finishing feels rewarding without a long interruption.
+The player almost always has another animal available to wash.
+5. MVP scope
+Included
+One simple map.
+Individual wash bays.
+Three placeholder animal types.
+One active animal per bay.
+Localized dirt removal.
+One hose tool with three upgrade tiers.
+Cleaning progress UI.
+Completion payout.
+Automatic animal turnover.
+Coin balance.
+Basic tool shop.
+Saving coins and purchased tool tier.
+Desktop and mobile controls.
+Basic onboarding.
+Not included
+Zoo enclosures or animal ownership.
+Visitors and passive income.
+Oﬄine earnings.
+Collection index.
+Mutations.
+Animal patience meters.
+Animals escaping or undoing cleaning progress.
+Five-minute delivery timers.
+Premium products.
+Trading.
+PvP.
+Shared persistent zoos.
+Weekly events.
+"These are possible later expansions, not dependencies of the washing loop."
+6. Washing system
+Core requirement
+Cleaning must be spatial.
+Spraying the animalʼs le side should not automatically clean dirt on its right side. Spraying the
+"ﬂoor, empty space, or a clean area should not increase progress."
+Proposed ﬁrst implementation: removable dirt patches
+Use multiple authored dirt patches distributed across each animal.
+Each patch stores:
+type DirtPatchState = {
+" Id: string,"
+" RemainingDirt: number,"
+" InitialDirt: number,"
+" Weight: number,"
+}
+Patches should:
+Follow the animalʼs body.
+Be independently cleanable.
+Fade or shrink as their remaining dirt decreases.
+Disappear when fully cleaned.
+Cover enough of the surface to create a convincing dirty-to-clean transformation.
+Start with a modest patch count. Increase visual density only a er performance and targeting
+are acceptable.
+Do not begin with a custom texture-painting system. Keep dirt rendering behind a replaceable
+interface so the visual approach can change without rewriting rewards or animal lifecycle
+logic.
+Targeting
+The client determines aiming intent and displays the spray immediately.
+The server validates the cleaning attempt and determines which eligible patch receives
+cleaning.
+Server checks must include:
+Player has an active character and valid equipped tool.
+Player owns the target bay.
+Bay is currently in the washing state.
+Target animal matches the bayʼs current animal instance.
+Origin is reasonably close to the player.
+"Aim data contains ﬁnite, valid values."
+Target is within tool range.
+The spray has line of sight to the target surface.
+Request frequency is within the allowed rate.
+"Do not accept client-provided payout amounts, cleaning strength, patch health, or completion"
+percentages.
+Cleaning rate
+"Use server-measured, capped elapsed time:"
+Dirt removed = tool cleaning power × accepted elapsed time
+Do not make cleaning faster simply because a client sends more requests.
+"The client may render spray every frame, but cleaning requests should use a controlled"
+cadence.
+Progress calculation
+Progress = 1 - (weighted remaining dirt / weighted initial dirt)
+The server owns this value.
+Display a rounded percentage in the UI. Show 100% only when the server has ﬁnalized
+completion.
+Last-patch assistance
+Avoid leaving players hunting for an invisible speck.
+At high completion:
+Highlight remaining dirty patches subtly.
+Provide a “Mud remaining” hint.
+Allow a small cleanup tolerance for negligible remaining dirt.
+The tolerance must not permit skipping a clearly dirty portion of the animal.
+7. Animal lifecycle
+Each bay uses an explicit state machine:
+Empty → Arriving → Washing → Completing → Departing → Empty
+Empty
+Bay contains no active animal.
+Select the next eligible animal.
+Spawn it at the entrance.
+Begin arrival.
+Arriving
+Move the animal to a ﬁxed wash position.
+Disable cleaning during transit.
+"If movement fails, use a safe fallback placement."
+Transition to washing when positioned.
+"For the prototype, a simple scripted route is suﬃcient. Do not make pathﬁnding a prerequisite"
+for testing washing.
+Washing
+Enable cleaning.
+Show progress.
+Keep the animal inside the wash area.
+Monitor server-owned dirt state.
+Completing
+On completion:
+1. Lock the animal against further cleaning and rewards.
+2. Compute payout from server conﬁguration.
+3. Add coins once.
+4. Send completion feedback to the owner.
+5. Start departure a er a short celebration.
+Departing
+Move the animal toward the exit.
+Destroy the animal a er it leaves or a timeout expires.
+Disconnect its event connections.
+Clear bay references.
+Schedule the next animal.
+Reward invariant
+Each animal instance can award a completion payout at most once.
+Use an animal/job identiﬁer and a completion guard. Multiple cleaning requests arriving
+during completion must not generate additional money.
+8. Animals and content setup,,,
+Starter roster,,,
+Suggested placeholders:,,,
+Animal,Purpose,Relative wash time,Relative payout
+Pig,Small starter target,1.0×,1.0×
+Sheep,Medium target,1.3×,1.4×
+Cow,Larger target requiring more movement,1.8×,2.0×
+"These are initial tuning proposals, not ﬁnal economy values.",,,
+Target approximately 30–45 seconds for the ﬁrst starter wash with the starting hose. Adjust,,,
+a er hands-on testing.,,,
+Animal template contract,,,
+Each animal template should provide:,,,
+AnimalModel,,,
+├── Root,,,
+├── Body / body meshes,,,
+├── DirtPatches,,,
+├── Attachments,,,
+└── Optional animation controller,,,
+Requirements:,,,
+Consistent forward direction and ground alignment.,,,
+Deﬁned wash pose.,,,
+Dirt patches mapped to the correct body parts.,,,
+Stable positioning during washing.,,,
+No collision conﬁguration that traps the player.,,,
+No required dirt patch inside inaccessible geometry.,,,
+No required underside patch that cannot be reached with normal controls.,,,
+"If an animated model is unavailable, a static placeholder is acceptable.",,,
+Animal conﬁguration,,,
+return {,,,
+ Pig = {,,,
+" TemplateName = ""Pig"",",,,
+" BaseReward = 25,",,,
+" SelectionWeight = 60,",,,
+" RequiredToolTier = 1,",,
+" },",,
+ Sheep = {,,
+" TemplateName = ""Sheep"",",,
+" BaseReward = 35,",,
+" SelectionWeight = 30,",,
+" RequiredToolTier = 1,",,
+" },",,
+ Cow = {,,
+" TemplateName = ""Cow"",",,
+" BaseReward = 50,",,
+" SelectionWeight = 10,",,
+" RequiredToolTier = 1,",,
+" },",,
+},,
+The ﬁrst animal should be deterministic rather than random.,,
+Later animals may be selected from a weighted pool. Do not force every subsequent animal to,,
+be larger or rarer.,,
+9. Tools and economy,,
+Tool upgrades,,
+Use one hose with upgrade tiers rather than three unrelated tools.,,
+Tier,Name,Proposed eﬀect
+1,Basic Hose,Starting cleaning power
+2,Strong Hose,Higher cleaning power
+3,Power Washer,Higher cleaning power and improved spray presentation
+"For the ﬁrst implementation, increase cleaning power only. Add wider spray coverage later if",,
+needed.,,
+This keeps the initial aiming and validation system simpler.,,
+Economy rules,,
+Coins are earned when a wash is completed.,,
+Coins are not awarded per spray request.,,
+The reward is visible before or during the wash.,,
+Rewards cannot become negative.,,
+Tool prices and cleaning power live in conﬁguration.,,
+Tool upgrades are permanent.,,
+A player cannot purchase a tier twice.
+Purchases are validated and applied by the server.
+"Initial pacing goal: the ﬁrst upgrade should be aﬀordable a er a few completed animals, not"
+a er a long grind.
+Shop
+Use a simple shop panel opened near a physical upgrade station.
+Display:
+Current tier.
+Next tier.
+Cleaning power improvement.
+Price.
+Purchase button.
+Clear insuﬃcient-funds message.
+Do not interrupt washing with automatic shop popups.
+10. World and multiplayer
+Bay layout
+Each bay needs:
+Animal entrance.
+Animal wash position.
+Animal exit.
+Clear walking space around every side.
+Nearby tool upgrade station.
+Spawn point.
+Optional payout sign.
+Keep the wash area visually simple so mud is easy to identify.
+Ownership
+For the MVP:
+Assign one bay per player.
+Only its owner can clean its animal.
+Other players may visit and watch.
+Players cannot move another playerʼs animal.
+Players cannot collect another playerʼs payout.
+Release the bay when its owner leaves.
+Conﬁgure the server player limit to match available bays. Handle a missing bay gracefully
+rather than assigning one bay to multiple players.
+Disconnect behavior
+When a player leaves:
+Stop their active job.
+Remove the animal and temporary eﬀects.
+Release the bay.
+Save persistent progression.
+Do not award an unﬁnished wash.
+Active animals and dirt progress do not need to persist in the MVP.
+11. Controls and interface
+Desktop
+Standard movement and camera controls.
+Equip the hose automatically when appropriate.
+Hold the primary action to spray.
+Aim using the pointer/camera targeting system.
+Show a small aiming indicator.
+Mobile
+Preserve standard movement and camera controls.
+Provide a large hold-to-spray button.
+Aim using a clearly visible center-screen reticle.
+Avoid requiring simultaneous precise tapping on tiny patches.
+Keep shop and spray controls away from movement controls.
+Mobile targeting needs an early hands-on test; do not wait until the rest of the game is ﬁnished.
+HUD
+Always visible:
+Coins.
+Current animal name.
+Cleaning percentage.
+Expected completion reward.,
+Current tool tier.,
+Contextual:,
+First-wash instruction.,
+Remaining-dirt hint.,
+Completion payout.,
+Upgrade purchase result.,
+"Do not add inventory, index, event, or premium currency buttons to the MVP.",
+12. Suggested code structure,
+ReplicatedStorage,
+├── Shared,
+│ ├── AnimalConﬁg,
+│ ├── ToolConﬁg,
+│ ├── GameConﬁg,
+│ └── Types,
+└── Remotes,
+ServerScriptService,
+├── ServerBootstrap,
+└── Services,
+ ├── PlayerDataService,
+ ├── BayService,
+ ├── AnimalService,
+ ├── CleaningService,
+ └── EconomyService,
+ServerStorage,
+└── AnimalTemplates,
+StarterPlayer,
+└── StarterPlayerScripts,
+ ├── ClientBootstrap,
+ └── Controllers,
+ ├── CleaningController,
+ ├── HUDController,
+ └── ShopController,
+Workspace,
+└── WashBays,
+Responsibility boundaries,
+Module,Responsibility
+PlayerDataService,"Load, validate, save, and expose player progression"
+BayService,"Bay assignment, ownership, and cleanup"
+Module,Responsibility
+AnimalService,"Animal selection, spawning, lifecycle, and disposal"
+CleaningService,"Spray validation, dirt state, progress, completion signal"
+EconomyService,Coin transactions and validated upgrades
+CleaningController,"Input, aiming, local spray eﬀects"
+HUDController,"Progress, balances, onboarding, completion feedback"
+ShopController,Shop presentation and purchase requests
+Avoid circular dependencies. Deﬁne which service owns job state and expose explicit methods,
+or signals to the others.,
+13. Networking and persistence,
+Suggested client requests,
+"CleaningIntent(jobId, aimDirection)",
+PurchaseToolUpgrade(),
+RequestInitialState(),
+"The server derives the player's bay, tool strength, next upgrade, and price. Do not trust client-",
+supplied versions of those values.,
+Suggested server updates,
+InitialState,
+BayStateChanged,
+CleaningProgressChanged,
+CoinsChanged,
+ToolTierChanged,
+WashCompleted,
+PurchaseResult,
+"Replicate progress and patch changes at a controlled rate, not necessarily on every rendered",
+frame.,
+Saved proﬁle,
+{,
+" SchemaVersion = 1,",
+" Coins = 0,",
+" ToolTier = 1,",
+" LifetimeAnimalsWashed = 0,",
+" TutorialCompleted = false,",
+},
+Persistence requirements:
+Validate loaded values.
+Use a session-safe proﬁle approach.
+Prevent overlapping sessions from overwriting newer data.
+"Save periodically, on departure, and during server shutdown."
+Handle failed loads explicitly.
+Never overwrite an existing proﬁle with defaults because a load failed.
+Keep test data separate from production data.
+"If loading cannot be completed safely, block persistent progression and explain the issue to"
+the player.
+14. Eﬀects and performance
+Required feedback
+During cleaning:
+Hose spray.
+Water impact eﬀect.
+Visible localized dirt reduction.
+Spray sound.
+Responsive progress indicator.
+At completion:
+Happy animal reaction.
+Short completion sound.
+Small sparkle burst.
+Coin payout message.
+Clear transition to departure.
+Performance rules
+Avoid creating a new object every spray frame.
+Reuse eﬀects where practical.
+Clean up connections and temporary instances when jobs end.
+Cap request rates.
+Limit unnecessary replication.
+Keep animal physics controlled.
+Test several occupied bays at once.
+The source concept explicitly identiﬁes convincing dirt removal on low-end phones as the ﬁrst
+technical risk to solve.[1]
+15. Implementation milestones and acceptance tests
+Milestone 1 — One animal can be washed
+Build:
+One placeholder animal.
+One hose.
+Localized dirt patches.
+Progress meter.
+Desktop input.
+Pass when:
+Spraying dirt removes dirt at the hit location.
+Spraying empty space does nothing.
+Spraying one side does not clean the opposite side.
+Walking around the animal is necessary.
+All required dirt is reachable.
+Milestone 2 — Complete repeatable loop
+Build:
+Arrival.
+Completion detection.
+Coin payout.
+Departure.
+Next animal.
+Pass when:
+Ten consecutive washes complete without restarting.
+Every animal pays exactly once.
+No old animals or eﬀects remain.
+The next animal arrives automatically.
+Completion requests cannot produce duplicate rewards.
+Milestone 3 — Progression and saving
+Build:
+Three animal types.
+Tool tiers.
+Shop.
+Persistent player proﬁle.
+Pass when:
+Insuﬃcient funds prevent a purchase.
+A successful upgrade deducts the correct amount once.
+Upgrades aﬀect server-authorized cleaning power.
+Rejoining restores coins and tool tier.
+Failed loads cannot overwrite existing data.
+Milestone 4 — Multiplayer and mobile
+Build:
+Individual bay assignment.
+Ownership validation.
+Mobile controls.
+Multi-bay performance testing.
+Pass when:
+Two players can wash independently.
+One player cannot clean or claim another player's job.
+Disconnecting releases the bay.
+"Mobile players can move, aim, and spray comfortably."
+Invalid or excessive remote requests do not generate rewards.
+Milestone 5 — Presentation
+Build:
+Better animal assets.
+Improved dirt appearance.
+Onboarding.
+Sound and eﬀects.
+Economy tuning.
+Pass when:
+A new player can ﬁnish the ﬁrst wash without verbal help.
+Remaining dirt is easy to ﬁnd.
+The dirty-to-clean transformation is visually obvious.
+Repeated washing remains the focus rather than menus or waiting.
+16. Questions to ﬁnalize the design
+"I can proceed with the defaults above, but these answers would materially change the"
+implementation:
+"1. Should cleaned animals leave permanently, or move into a zoo collection you keep? The"
+"dra assumes they leave, matching your described wash-and-get-paid loop."
+2. Should players start with a hose or a sponge? The dra assumes a hose and hold-to-spray
+controls.
+"3. Should each player have their own station, or should everyone clean the same animal"
+together? The dra assumes separate stations.
+"4. Should animals walk in, or arrive on a truck? The dra uses walking for the ﬁrst build."
+"5. Are you starting from an empty Roblox project, or do you already have a place/repository"
+and animal models? This determines Claude Codeʼs setup steps.
+⁂
+1. Wash-the-Zoo-Game-Concept.pdf
