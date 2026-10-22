@@ -1,0 +1,186 @@
+-- Tuning for the tension feature (src/server/Features/Tension): animal moods, the patience
+-- meter, the mud shake, grumpy lunges, and the wander-off timer on Mythic and rarer animals.
+--
+-- Each species gets a profile: its rarity's defaults with any per-species override on top.
+-- Cleaning is fast (a Pig takes about 3 s, big animals longer with WashTimeMultiplier), so
+-- patience is set to bite only when a player dawdles on a big or rare animal.
+
+export type Mood = "Calm" | "Ticklish" | "Grumpy"
+
+export type Profile = {
+	Mood: Mood,
+	PatienceSeconds: number, -- seconds from full to empty (it drains at 1 per second)
+	ShakeRedirty: number, -- fraction of the already-clean patches the shake muddies again
+	ShakeRadius: number, -- studs from the animal; every character inside is flung and splatted
+	Knockback: number, -- horizontal fling speed (studs/s) at the animal; falls off with distance
+	KnockUp: number, -- upward fling speed (studs/s)
+	WanderOffSeconds: number, -- 0 = never wanders off; otherwise the wash is lost at 0
+}
+
+export type ProfileOverride = {
+	Mood: Mood?,
+	PatienceSeconds: number?,
+	ShakeRedirty: number?,
+	ShakeRadius: number?,
+	Knockback: number?,
+	KnockUp: number?,
+	WanderOffSeconds: number?,
+}
+
+local TensionConfig = {
+	-- No tension at all until the player has finished this many washes (LifetimeAnimalsWashed),
+	-- and never on the first animal of a session.
+	GraceWashes = 3,
+
+	RefillFraction = 0.7, -- patience refills to this after a shake
+	LowFraction = 0.2, -- below this: warning UI, and the "PatienceLow" hook fires (once per wash)
+	MaxCalmSeconds = 600, -- a single Calm Treat can't freeze patience for longer than this
+	StateSendInterval = 0.2, -- seconds between patience updates sent to the washing player
+
+	Squirm = { -- Ticklish
+		IntervalMin = 1,
+		IntervalMax = 2,
+		Duration = 0.45,
+		MaxYawDegrees = 10,
+		MaxRollDegrees = 6,
+		MaxShift = 0.2, -- studs sideways; the animal never leaves its wash spot
+	},
+
+	Lunge = { -- Grumpy, only while patience is below BelowFraction
+		BelowFraction = 0.4,
+		CooldownMin = 3.5,
+		CooldownMax = 5.5,
+		Range = 14, -- studs: it only lunges at a player this close
+		WindUp = 0.6, -- telegraph: rears back and shakes
+		Strike = 0.15,
+		Hold = 0.1,
+		Return = 0.35,
+		Distance = 1, -- studs toward the target
+		RearBack = 0.4, -- studs away from the target during the wind-up
+		HitDistance = 2.5, -- studs between a character and the animal's box that counts as touching
+		Knockback = 55,
+		KnockUp = 28,
+		RagdollSeconds = 1.2,
+	},
+
+	Shake = {
+		Duration = 0.9, -- the full-body wiggle
+		ExplodeAt = 0.15, -- seconds into the wiggle when the mud flies
+		WiggleDegrees = 14,
+		WiggleHz = 16,
+		Particles = 90, -- scaled up with the shake radius
+		Puddles = 8, -- mud splats left on the ground
+		PuddleSeconds = 4,
+		RagdollSeconds = 1.6,
+		MinFalloff = 0.55, -- fling strength at the edge of the radius, as a fraction of full
+		CameraShakeRange = 2.2, -- times ShakeRadius: clients this close get a camera shake
+		CameraShakeIntensity = 1,
+		CameraShakeSeconds = 0.7,
+	},
+
+	Sounds = {
+		Shake = "rbxasset://sounds/impact_water.mp3",
+		WindUp = "rbxasset://sounds/swoosh.wav",
+		Fling = "rbxasset://sounds/uuhhh.mp3", -- played locally on each flung player
+		Warning = "rbxasset://sounds/electronicpingshort.wav",
+	},
+
+	MudColors = {
+		Color3.fromRGB(110, 72, 40),
+		Color3.fromRGB(92, 60, 34),
+		Color3.fromRGB(130, 88, 50),
+		Color3.fromRGB(75, 50, 28),
+	},
+
+	-- Sent only to the owner when their Mythic+ animal gives up. {name} = the animal's name.
+	WanderOffLines = {
+		"Your {name} got bored and wandered off. Rude!",
+		"Your {name} left to find a better car wash.",
+		"Your {name} said 'nah' and walked away covered in mud.",
+		"Your {name} wandered off. It had places to be.",
+	},
+
+	ByRarity = {
+		Common = {
+			Mood = "Calm",
+			PatienceSeconds = 40,
+			ShakeRedirty = 0.3,
+			ShakeRadius = 9,
+			Knockback = 35,
+			KnockUp = 22,
+			WanderOffSeconds = 0,
+		},
+		Rare = {
+			Mood = "Calm",
+			PatienceSeconds = 34,
+			ShakeRedirty = 0.35,
+			ShakeRadius = 10,
+			Knockback = 40,
+			KnockUp = 25,
+			WanderOffSeconds = 0,
+		},
+		Epic = {
+			Mood = "Ticklish",
+			PatienceSeconds = 28,
+			ShakeRedirty = 0.4,
+			ShakeRadius = 11,
+			Knockback = 48,
+			KnockUp = 28,
+			WanderOffSeconds = 0,
+		},
+		Legendary = {
+			Mood = "Ticklish",
+			PatienceSeconds = 25,
+			ShakeRedirty = 0.4,
+			ShakeRadius = 13,
+			Knockback = 55,
+			KnockUp = 32,
+			WanderOffSeconds = 0,
+		},
+		Mythic = {
+			Mood = "Grumpy",
+			PatienceSeconds = 22,
+			ShakeRedirty = 0.45,
+			ShakeRadius = 15,
+			Knockback = 65,
+			KnockUp = 38,
+			WanderOffSeconds = 100,
+		},
+		ZooGod = {
+			Mood = "Grumpy",
+			PatienceSeconds = 26,
+			ShakeRedirty = 0.45,
+			ShakeRadius = 18,
+			Knockback = 75,
+			KnockUp = 42,
+			WanderOffSeconds = 110,
+		},
+		Secret = {
+			Mood = "Grumpy",
+			PatienceSeconds = 26,
+			ShakeRedirty = 0.5,
+			ShakeRadius = 20,
+			Knockback = 80,
+			KnockUp = 45,
+			WanderOffSeconds = 120,
+		},
+	} :: { [string]: Profile },
+
+	BySpecies = {
+		Cat = { Mood = "Ticklish" },
+		Goat = { Mood = "Grumpy" },
+		Cow = { Mood = "Calm", PatienceSeconds = 32 },
+		Donkey = { Mood = "Grumpy" },
+		Penguin = { Mood = "Ticklish" },
+		Zebra = { Mood = "Grumpy" },
+		Panda = { Mood = "Calm", PatienceSeconds = 30 },
+		Giraffe = { Mood = "Ticklish" },
+		Hippo = { ShakeRadius = 20, Knockback = 85, KnockUp = 48 }, -- the big one for clips
+		Elephant = { ShakeRadius = 22, Knockback = 90 },
+		Unicorn = { Mood = "Ticklish" },
+		-- Bought, not found: a paid animal must never be lost, and stays gentle.
+		Axolotl = { Mood = "Calm", PatienceSeconds = 40, WanderOffSeconds = 0 },
+	} :: { [string]: ProfileOverride },
+}
+
+return TensionConfig
