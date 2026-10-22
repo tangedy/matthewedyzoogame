@@ -57,58 +57,76 @@ local function clock(seconds: number): string
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
--- Booth just left of pen 1, beside the stables. Two prompts: 2 hours (E) and forever (R).
+-- Two kiosks just left of pen 1. Each one is its own purchase, with its own sign
+-- and its own E prompt, far enough apart that standing at one does not offer the other.
 local function ensureStand(bay: Model): Model?
 	local zoo = bay:FindFirstChild("Zoo")
 	local existing = zoo and zoo:FindFirstChild("AutoCollectStand")
-	if existing and existing:IsA("Model") then
+	if existing and existing:IsA("Model") and existing:FindFirstChild("TimedCounter") then
 		return existing
+	end
+	if existing then
+		existing:Destroy()
 	end
 	local pen = zoo and zoo:FindFirstChild("Pen1")
 	local floor = pen and pen:FindFirstChild("Floor")
 	if not zoo or not floor or not floor:IsA("BasePart") then
 		return nil
 	end
-	local stand = Instance.new("Model")
-	stand.Name = "AutoCollectStand"
-	local counter = Instance.new("Part")
-	counter.Name = "Counter"
-	counter.Anchored = true
-	counter.Size = Vector3.new(6, 3.2, 2.4)
-	counter.Position = floor.Position + Vector3.new(-floor.Size.X / 2 - 5, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
-	counter.Color = Color3.fromRGB(70, 190, 90)
-	counter.Material = Enum.Material.SmoothPlastic
-	counter.TopSurface = Enum.SurfaceType.Smooth
-	counter.BottomSurface = Enum.SurfaceType.Smooth
-	counter.Parent = stand
-	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.fromOffset(220, 40)
-	billboard.StudsOffset = Vector3.new(0, 3.4, 0)
-	billboard.MaxDistance = 60
-	billboard.Parent = counter
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.Parent = billboard
-	UIStyle.text(label, UIStyle.CashColor, nil, 3)
-	label.Text = "AUTO COLLECT"
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
-	local function prompt(name: string, text: string, key: Enum.KeyCode): ProximityPrompt
+	local stand = Instance.new("Model")
+	stand.Name = "AutoCollectStand"
+	local base = floor.Position + Vector3.new(-floor.Size.X / 2 - 6, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
+
+	local function kiosk(name: string, promptName: string, title: string, price: string, color: Color3, offset: Vector3): BasePart
+		local counter = Instance.new("Part")
+		counter.Name = name
+		counter.Anchored = true
+		counter.Size = Vector3.new(4.2, 3.2, 2.6)
+		counter.Position = base + offset
+		counter.Color = color
+		counter.Material = Enum.Material.SmoothPlastic
+		counter.TopSurface = Enum.SurfaceType.Smooth
+		counter.BottomSurface = Enum.SurfaceType.Smooth
+		counter.Parent = stand
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "Sign"
+		billboard.Size = UDim2.fromOffset(180, 70)
+		billboard.StudsOffset = Vector3.new(0, 3.2, 0)
+		billboard.MaxDistance = 70
+		billboard.Parent = counter
+		local label = Instance.new("TextLabel")
+		label.Name = "Title"
+		label.Size = UDim2.fromScale(1, 1)
+		label.Parent = billboard
+		UIStyle.text(label, Color3.new(1, 1, 1), nil, 3)
+		label.Text = `{title}\n{price}`
 		local created = Instance.new("ProximityPrompt")
-		created.Name = name
-		created.ActionText = text
-		created.ObjectText = "Stables"
+		created.Name = promptName
+		created.ActionText = `Buy ({price})`
+		created.ObjectText = title
 		created.HoldDuration = 0.4
-		created.MaxActivationDistance = 12
+		created.MaxActivationDistance = 8
 		created.RequiresLineOfSight = false
-		created.KeyboardKeyCode = key
+		created.KeyboardKeyCode = Enum.KeyCode.E
 		created.Parent = counter
-		return created
+		return counter
 	end
-	prompt("TimedPrompt", `{product.DisplayName} ({product.Robux} R$)`, Enum.KeyCode.E)
-	prompt("ForeverPrompt", `{pass.DisplayName} ({pass.Robux} R$)`, Enum.KeyCode.R)
+
+	kiosk("TimedCounter", "TimedPrompt", "2 HOURS", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.new(0, 0, -4.2))
+	kiosk("ForeverCounter", "ForeverPrompt", "FOREVER", `{pass.Robux} ROBUX`, Color3.fromRGB(230, 170, 40), Vector3.new(0, 0, 4.2))
 	stand.Parent = zoo
 	return stand
+end
+
+local function promptOn(stand: Model, counterName: string, promptName: string): ProximityPrompt?
+	local counter = stand:FindFirstChild(counterName)
+	local prompt = counter and counter:FindFirstChild(promptName)
+	if prompt and prompt:IsA("ProximityPrompt") then
+		return prompt
+	end
+	return nil
 end
 
 local function refreshStand(player: Player)
@@ -116,24 +134,37 @@ local function refreshStand(player: Player)
 	if not stand or not stand.Parent then
 		return
 	end
-	local counter = stand:FindFirstChild("Counter")
-	local timed = counter and counter:FindFirstChild("TimedPrompt") :: ProximityPrompt?
-	local forever = counter and counter:FindFirstChild("ForeverPrompt") :: ProximityPrompt?
+	local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
+	local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
 	local owns = MonetizationState.ownsPass(player, pass.Key)
 	if forever then
 		forever.Enabled = not owns
-		forever.ActionText = if owns then "Owned" else `{pass.DisplayName} ({pass.Robux} R$)`
+		forever.ObjectText = "FOREVER"
+		forever.ActionText = if owns then "Owned" else `Buy ({pass.Robux} ROBUX)`
 	end
 	if timed then
 		timed.Enabled = not owns
+		timed.ObjectText = "2 HOURS"
 		local left = MonetizationGrants.autoCollectLeft(player)
 		timed.ActionText = if owns
 			then "Owned forever"
-			elseif left > 0 then `Auto-Collect {clock(left)} ({product.Robux} R$)`
-			else `{product.DisplayName} ({product.Robux} R$)`
+			elseif left > 0 then `Add 2 hours ({product.Robux} ROBUX) {clock(left)} left`
+			else `Buy ({product.Robux} ROBUX)`
 	end
+end
+
+local function bindPrompt(prompt: ProximityPrompt, player: Player, key: string)
+	if prompt:GetAttribute("Bound") then
+		return
+	end
+	prompt:SetAttribute("Bound", true)
+	prompt.Triggered:Connect(function(who: Player)
+		if who == player then
+			purchaseFromStand(player, key)
+		end
+	end)
 end
 
 local function bindStand(player: Player, bay: Model)
@@ -142,24 +173,13 @@ local function bindStand(player: Player, bay: Model)
 		return
 	end
 	standByPlayer[player] = stand
-	local counter = stand:FindFirstChild("Counter")
-	local timed = counter and counter:FindFirstChild("TimedPrompt") :: ProximityPrompt?
-	local forever = counter and counter:FindFirstChild("ForeverPrompt") :: ProximityPrompt?
-	if timed and not timed:GetAttribute("Bound") then
-		timed:SetAttribute("Bound", true)
-		timed.Triggered:Connect(function(who: Player)
-			if who == player then
-				purchaseFromStand(player, "AutoCollect2h")
-			end
-		end)
+	local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
+	local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
+	if timed then
+		bindPrompt(timed, player, "AutoCollect2h")
 	end
-	if forever and not forever:GetAttribute("Bound") then
-		forever:SetAttribute("Bound", true)
-		forever.Triggered:Connect(function(who: Player)
-			if who == player then
-				purchaseFromStand(player, "AutoCollectForever")
-			end
-		end)
+	if forever then
+		bindPrompt(forever, player, "AutoCollectForever")
 	end
 	refreshStand(player)
 end
