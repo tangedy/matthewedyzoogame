@@ -1,6 +1,7 @@
 -- Contextual onboarding, fired by triggers instead of up-front menus:
---   * First cycle: a rainbow trail of arrows on the ground — wash, pick up, stable, collect,
---     hose stand, then back to the next animal. The server remembers the step.
+--   * First cycle: a candy-colored trail on the ground — wash, pick up, stable, collect,
+--     hose stand, then back to the next animal. Each mark points at that destination.
+--     The server remembers the step.
 --   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
 --   * Empty zoo: "Pick me up!" over the cache, then "Place here!" over the first pen while
 --     carrying, until the first animal is in a pen.
@@ -34,8 +35,27 @@ local GUIDE_TEXT = {
 	Repeat = "Follow the arrows — wash the next one!",
 }
 
-local ARROW_COUNT = 14
-local ARROW_SPACING = 3.6
+-- Candy path colors. The trail is not the theme accent.
+local RAINBOW: { Color3 } = {
+	Color3.fromRGB(255, 70, 104),
+	Color3.fromRGB(255, 146, 48),
+	Color3.fromRGB(255, 214, 64),
+	Color3.fromRGB(96, 230, 112),
+	Color3.fromRGB(64, 214, 255),
+	Color3.fromRGB(92, 124, 255),
+	Color3.fromRGB(186, 96, 255),
+}
+local SEGMENT_LIMIT = 26
+local SEGMENT_SPACING = 3.6
+local SEGMENT_START = 3.2
+local MARCH_SPEED = 8
+local ARM_YAW = math.rad(34)
+-- Tip meets on -Z, which is the LookVector, so each mark points at the destination.
+local LEFT_ARM = CFrame.new(0.87, 0, 0.94) * CFrame.Angles(0, ARM_YAW, 0)
+local RIGHT_ARM = CFrame.new(-0.87, 0, 0.94) * CFrame.Angles(0, -ARM_YAW, 0)
+-- Clearance above the ground hit so the marks sit on the path instead of in the floor.
+local APRON_SURFACE = 0.7
+local INSTRUCTION_MIN_TEXT = 16
 
 local tutorialCompleted = false
 local guideStep = "Done"
@@ -58,12 +78,15 @@ local cacheCount = 0
 local carrying = false
 local bannerToken = 0
 local guideLabel: TextLabel
-local trailFolder: Folder
-type GuideArrow = { Parts: { BasePart }, Offsets: { CFrame } }
+local trail: Folder
+type TrailSegment = { left: Part, right: Part }
 
-local arrows: { GuideArrow } = {}
+local segments: { TrailSegment } = {}
+local march = 0
 local nextAdvanceAt = 0
 local guideAdvance = Remotes.event("GuideAdvance")
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function makeMarker(text: string, color: Color3): BillboardGui
 	local billboard = Instance.new("BillboardGui")
@@ -95,41 +118,28 @@ local function bayModel(): Instance?
 	return bays and bayName and bays:FindFirstChild(bayName)
 end
 
-local function hideArrow(arrow: GuideArrow)
-	for _, piece in arrow.Parts do
-		piece.Transparency = 1
-	end
+local function trailArm(name: string): Part
+	local block = Instance.new("Part")
+	block.Name = name
+	block.Size = Vector3.new(1.25, 0.1, 3.1)
+	block.Anchored = true
+	block.CanCollide = false
+	block.CanTouch = false
+	block.CanQuery = false
+	block.CastShadow = false
+	block.Material = Enum.Material.Neon
+	block.TopSurface = Enum.SurfaceType.Smooth
+	block.BottomSurface = Enum.SurfaceType.Smooth
+	block.Transparency = 1
+	block.Parent = trail
+	return block
 end
 
--- A chevron head (two blades meeting at a point) plus a narrow tail, flat on the ground.
--- lookAt faces the point, so the arrow aims along the trail.
-local function makeArrow(parent: Instance): GuideArrow
-	local arrow: GuideArrow = { Parts = {}, Offsets = {} }
-	local function piece(size: Vector3, offset: CFrame)
-		local created = Instance.new("Part")
-		created.Anchored = true
-		created.CanCollide = false
-		created.CanQuery = false
-		created.CanTouch = false
-		created.CastShadow = false
-		created.Material = Enum.Material.Neon
-		created.Size = size
-		created.Transparency = 1
-		created.Parent = parent
-		table.insert(arrow.Parts, created)
-		table.insert(arrow.Offsets, offset)
+local function hideTrail()
+	for _, segment in segments do
+		segment.left.Transparency = 1
+		segment.right.Transparency = 1
 	end
-	local angle = math.rad(36)
-	local length = 1.7
-	local half = length / 2
-	local tip = -0.95
-	local blade = Vector3.new(0.55, 0.12, length)
-	local flank = math.sin(angle) * half
-	local along = tip + math.cos(angle) * half
-	piece(blade, CFrame.new(-flank, 0, along) * CFrame.Angles(0, angle, 0))
-	piece(blade, CFrame.new(flank, 0, along) * CFrame.Angles(0, -angle, 0))
-	piece(Vector3.new(0.28, 0.12, 1.05), CFrame.new(0, 0, 0.78))
-	return arrow
 end
 
 local function guideTarget(): BasePart?
@@ -175,20 +185,15 @@ local function guideTarget(): BasePart?
 	return nil
 end
 
-local function updateTrail()
+local function updateTrail(dt: number)
 	if guideStep == "Done" then
 		return
 	end
 	local target = guideTarget()
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local function hideAll()
-		for _, arrow in arrows do
-			hideArrow(arrow)
-		end
-	end
-	if not target or not root then
-		hideAll()
+	if not target or not root or not character then
+		hideTrail()
 		return
 	end
 	if guideStep == "Upgrade" and os.clock() >= nextAdvanceAt then
@@ -197,43 +202,55 @@ local function updateTrail()
 			guideAdvance:FireServer()
 		end
 	end
+
 	local flat = Vector3.new(target.Position.X - root.Position.X, 0, target.Position.Z - root.Position.Z)
-	local distance = flat.Magnitude
-	if distance < 5 then
-		hideAll()
-		return
+	local span = flat.Magnitude
+	-- Stop short of the destination so the last mark points at it instead of sitting on it.
+	local reach = math.max(target.Size.X, target.Size.Z) * 0.5
+	local travel = span - reach
+
+	march += dt * MARCH_SPEED
+	local spacing = SEGMENT_SPACING
+	local cycle = spacing * #RAINBOW
+	if cycle > 0 and march >= cycle then
+		march -= cycle * math.floor(march / cycle)
 	end
-	local direction = flat.Unit
-	local usable = math.max(distance - 4, ARROW_SPACING)
-	local count = math.clamp(math.floor(usable / ARROW_SPACING), 1, ARROW_COUNT)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	local ignore: { Instance } = { character :: Instance, trailFolder }
+	local base = march % spacing
+	local generation = math.floor(march / spacing)
+
+	local ignore: { Instance } = { trail, character }
 	local bay = bayModel()
 	local animal = bay and bay:FindFirstChild("Animal")
 	if animal then
 		table.insert(ignore, animal)
 	end
-	params.FilterDescendantsInstances = ignore
-	local hueShift = os.clock() * 0.18
-	for i = 1, ARROW_COUNT do
-		local arrow = arrows[i]
-		if i > count then
-			hideArrow(arrow)
-			continue
-		end
-		local along = 2.5 + (i - 0.5) * (usable / count)
-		local point = root.Position + direction * along
-		local hit = Workspace:Raycast(point + Vector3.new(0, 12, 0), Vector3.new(0, -40, 0), params)
-		local y = if hit then hit.Position.Y else point.Y
-		local bob = math.sin(os.clock() * 3 + i * 0.7) * 0.05
-		local pos = Vector3.new(point.X, y + 0.14 + bob, point.Z)
-		local cf = CFrame.lookAt(pos, pos + direction)
-		local color = Color3.fromHSV((i / count + hueShift) % 1, 0.85, 1)
-		for index, piece in arrow.Parts do
-			piece.CFrame = cf * arrow.Offsets[index]
-			piece.Color = color
-			piece.Transparency = 0.05
+	rayParams.FilterDescendantsInstances = ignore
+
+	local padTop = target.Position.Y + target.Size.Y * 0.5
+	local direction = if span > 0.05 then flat.Unit else Vector3.new(0, 0, -1)
+	for index, segment in segments do
+		local along = SEGMENT_START + base + (index - 1) * spacing
+		if span > 0.8 and along <= travel then
+			local point = root.Position + direction * along
+			local hit = Workspace:Raycast(point + Vector3.new(0, 12, 0), Vector3.new(0, -40, 0), rayParams)
+			local groundY = if hit then hit.Position.Y else padTop
+			local pos = Vector3.new(point.X, groundY + APRON_SURFACE, point.Z)
+			local aim = Vector3.new(target.Position.X, pos.Y, target.Position.Z)
+			if (aim - pos).Magnitude < 0.05 then
+				aim = pos + direction
+			end
+			-- LookVector is -Z. The chevron tip is on -Z, so the mark points at the pad.
+			local basis = CFrame.lookAt(pos, aim)
+			local color = RAINBOW[(index - 1 - generation) % #RAINBOW + 1]
+			segment.left.Color = color
+			segment.right.Color = color
+			segment.left.Transparency = 0
+			segment.right.Transparency = 0
+			segment.left.CFrame = basis * LEFT_ARM
+			segment.right.CFrame = basis * RIGHT_ARM
+		else
+			segment.left.Transparency = 1
+			segment.right.Transparency = 1
 		end
 	end
 end
@@ -249,9 +266,7 @@ local function applyGuide(step: string)
 		nextAdvanceAt = 0
 	end
 	if step == "Done" then
-		for _, arrow in arrows do
-			hideArrow(arrow)
-		end
+		hideTrail()
 	end
 end
 
@@ -360,19 +375,38 @@ local function buildGui()
 	pad.PaddingBottom = UDim.new(0, 6)
 	pad.Parent = banner
 
-	guideLabel = banner:Clone()
-	guideLabel.Name = "Guide"
-	guideLabel.Position = UDim2.new(0.5, 0, 0, 248)
+	guideLabel = Instance.new("TextLabel")
+	guideLabel.Name = "Target"
 	guideLabel.AnchorPoint = Vector2.new(0.5, 0)
-	guideLabel.BackgroundColor3 = Color3.fromRGB(255, 120, 190)
+	guideLabel.Position = UDim2.new(0.5, 0, 0, 6)
+	guideLabel.Size = UDim2.new(0.72, 0, 0, 48)
+	guideLabel.BackgroundTransparency = 1
+	guideLabel.TextXAlignment = Enum.TextXAlignment.Center
+	guideLabel.TextYAlignment = Enum.TextYAlignment.Center
+	guideLabel.Text = ""
+	guideLabel.TextScaled = true
+	guideLabel.TextWrapped = false
+	guideLabel.Font = Enum.Font.GothamBlack
+	guideLabel.TextColor3 = Color3.fromRGB(22, 30, 68)
 	guideLabel.Visible = false
 	guideLabel.Parent = gui
+	local instructionSize = Instance.new("UITextSizeConstraint")
+	instructionSize.MaxTextSize = 36
+	instructionSize.MinTextSize = INSTRUCTION_MIN_TEXT
+	instructionSize.Parent = guideLabel
+	local instructionStroke = Instance.new("UIStroke")
+	instructionStroke.Color = Color3.fromRGB(255, 255, 255)
+	instructionStroke.Thickness = 2.5
+	instructionStroke.Parent = guideLabel
 
-	trailFolder = Instance.new("Folder")
-	trailFolder.Name = "GuideTrail"
-	trailFolder.Parent = Workspace
-	for _ = 1, ARROW_COUNT do
-		table.insert(arrows, makeArrow(trailFolder))
+	trail = Instance.new("Folder")
+	trail.Name = "GuideTrail"
+	trail.Parent = Workspace
+	for _ = 1, SEGMENT_LIMIT do
+		table.insert(segments, {
+			left = trailArm("SegmentLeft"),
+			right = trailArm("SegmentRight"),
+		})
 	end
 
 	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
@@ -434,13 +468,13 @@ function OnboardingController.init(initial: Types.InitialState)
 	end)
 
 	-- Bob the markers so they catch the eye.
-	RunService.Heartbeat:Connect(function()
+	RunService.Heartbeat:Connect(function(dt)
 		local bob = Vector3.new(0, 4 + math.sin(os.clock() * 4) * 0.4, 0)
 		animalMarker.StudsOffset = bob
 		stationMarker.StudsOffset = bob + Vector3.new(0, 2, 0)
 		cacheMarker.StudsOffset = bob + Vector3.new(0, 3, 0)
 		penMarker.StudsOffset = bob
-		updateTrail()
+		updateTrail(dt)
 	end)
 end
 
