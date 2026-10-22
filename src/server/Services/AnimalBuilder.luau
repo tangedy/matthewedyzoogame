@@ -1180,12 +1180,118 @@ local function applyMutation(model: Model, mutationKey: string)
 	end
 end
 
--- The top two tiers always shimmer, whatever their mutation.
+-- Particles that fill the body volume (Box shape), used for the tier auras below.
+local function bodyEmitter(model: Model, props: { [string]: any })
+	local body = model:FindFirstChild("Body")
+	if not body then
+		return
+	end
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "TierAura"
+	emitter.Shape = Enum.ParticleEmitterShape.Box
+	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.LightEmission = 1
+	for key, value in props do
+		(emitter :: any)[key] = value
+	end
+	emitter.Parent = body
+end
+
+local function tierLight(model: Model, color: Color3, brightness: number, range: number)
+	local body = model:FindFirstChild("Body")
+	if body then
+		local light = Instance.new("PointLight")
+		light.Color = color
+		light.Brightness = brightness
+		light.Range = range
+		light.Parent = body
+	end
+end
+
+local RAINBOW = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 220, 60)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(90, 255, 120)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 180, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 100, 255)),
+})
+
+-- Rarer tiers carry their own particles, whatever their mutation:
+-- Epic purple twinkles, Legendary gold glitter, Mythic rising embers, Zoo God rainbow
+-- sparkles with a halo, Secret dark smoke with white stars.
 local function applyTierAura(model: Model, rarityKey: string)
-	if rarityKey == "ZooGod" then
-		aura(model, Color3.fromRGB(255, 255, 200), 12)
+	if rarityKey == "Epic" then
+		bodyEmitter(model, {
+			Rate = 5,
+			Lifetime = NumberRange.new(0.8, 1.2),
+			Speed = NumberRange.new(0.2, 0.6),
+			Size = NumberSequence.new(0.3, 0),
+			Color = ColorSequence.new(Color3.fromRGB(200, 130, 255)),
+		})
+	elseif rarityKey == "Legendary" then
+		bodyEmitter(model, {
+			Rate = 10,
+			Lifetime = NumberRange.new(1, 1.6),
+			Speed = NumberRange.new(0.3, 0.8),
+			Acceleration = Vector3.new(0, 1.5, 0),
+			Size = NumberSequence.new(0.35, 0),
+			Color = ColorSequence.new(Color3.fromRGB(255, 215, 80)),
+		})
+		tierLight(model, Color3.fromRGB(255, 210, 90), 1, 10)
+	elseif rarityKey == "Mythic" then
+		bodyEmitter(model, {
+			Rate = 16,
+			Lifetime = NumberRange.new(1, 1.8),
+			Speed = NumberRange.new(0.5, 1.5),
+			Acceleration = Vector3.new(0, 4, 0),
+			Size = NumberSequence.new(0.4, 0),
+			Color = ColorSequence.new(Color3.fromRGB(255, 120, 40), Color3.fromRGB(255, 40, 40)),
+		})
+		tierLight(model, Color3.fromRGB(255, 90, 60), 1.5, 12)
+	elseif rarityKey == "ZooGod" then
+		bodyEmitter(model, {
+			Rate = 22,
+			Lifetime = NumberRange.new(1, 1.6),
+			Speed = NumberRange.new(0.5, 1.5),
+			Acceleration = Vector3.new(0, 2, 0),
+			Size = NumberSequence.new(0.45, 0),
+			Color = RAINBOW,
+		})
+		tierLight(model, Color3.fromRGB(255, 255, 220), 2, 14)
+		local head = model:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			local halo = decoration(
+				"Halo",
+				Vector3.new(0.15, head.Size.X * 0.9, head.Size.X * 0.9),
+				head.CFrame * CFrame.new(0, head.Size.Y / 2 + 0.9, 0) * CFrame.Angles(0, 0, math.rad(90)),
+				Color3.fromRGB(255, 230, 120),
+				model
+			)
+			halo.Shape = Enum.PartType.Cylinder
+			halo.Material = Enum.Material.Neon
+			halo.Transparency = 0.2
+			halo:SetAttribute("NoGrime", true)
+		end
 	elseif rarityKey == "Secret" then
-		aura(model, Color3.fromRGB(120, 60, 200), 12)
+		bodyEmitter(model, {
+			Rate = 10,
+			Lifetime = NumberRange.new(1.5, 2.5),
+			Speed = NumberRange.new(0.3, 0.8),
+			Acceleration = Vector3.new(0, 1, 0),
+			Size = NumberSequence.new(1.2, 2.4),
+			Transparency = NumberSequence.new(0.5, 1),
+			Color = ColorSequence.new(Color3.fromRGB(60, 20, 90)),
+			LightEmission = 0,
+		})
+		bodyEmitter(model, {
+			Rate = 8,
+			Lifetime = NumberRange.new(0.5, 0.9),
+			Speed = NumberRange.new(0.2, 0.5),
+			Size = NumberSequence.new(0.35, 0),
+			Color = ColorSequence.new(Color3.new(1, 1, 1)),
+		})
+		tierLight(model, Color3.fromRGB(150, 80, 255), 1.5, 12)
 	end
 end
 

@@ -9,19 +9,20 @@ local GameConfig = {
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart
-	RequestRateHz = 10, -- client cleaning request cadence
-	MinRequestInterval = 0.06, -- server drops requests arriving faster than this
-	MaxAcceptedStep = 0.15, -- max seconds of cleaning credited per request
-	SprayRadius = 1.6, -- studs around a body hit that can clean the nearest patch
+	RequestRateHz = 15, -- client cleaning request cadence
+	MinRequestInterval = 0.04, -- server drops requests arriving faster than this
+	MaxAcceptedStep = 0.1, -- max seconds of cleaning credited per request
+	SprayRadius = 1.6, -- aim assist: a patch counts as reachable if the ray lands this close
 
 	-- Touch/gamepad aiming (client only; the server still validates every spray)
 	CenterAimHeight = 0.4, -- reticle height as a fraction of the screen, above the character
 	AimAssistRadius = 0.18, -- snap to a dirty patch within this fraction of the screen's short side
 
 	-- Dirt
-	-- Seconds of continuous on-target spraying a 1.0x animal needs with the tier 1 hose.
-	-- Walking around adds on top; doc target is 30-45 s for the first wash.
-	BaseWashSeconds = 24,
+	-- Seconds of continuous on-target spraying a 1.0x animal needs with the tier 1 hose, if
+	-- each hit cleaned only one patch. Hits clean an area (ToolConfig.SprayRadius), so mud
+	-- pops off almost instantly; walking around the animal is most of the wash.
+	BaseWashSeconds = 2.5,
 	PatchCleanThreshold = 0.05, -- a patch below this fraction snaps to clean
 	HintProgress = 0.85, -- progress at which remaining patches get highlighted
 

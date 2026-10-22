@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local CleaningService = require(script.Parent.CleaningService)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local EconomyService = {}
@@ -101,6 +102,7 @@ local function purchaseToolUpgrade(player: Player)
 
 	coinsChanged:FireClient(player, data.Coins)
 	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name)
+	CleaningService.refreshHose(player) -- the new hose appears in their hand
 	purchaseResult:FireClient(player, true, `Upgraded to {nextTool.Name}!`)
 end
 

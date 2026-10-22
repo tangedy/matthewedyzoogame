@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Services
+local EnvironmentBuilder = require(Services.EnvironmentBuilder)
 local WorldBuilder = require(Services.WorldBuilder)
 local PlayerDataService = require(Services.PlayerDataService)
 local EconomyService = require(Services.EconomyService)
@@ -13,6 +14,7 @@ local BayService = require(Services.BayService)
 local DevService = require(Services.DevService)
 local ZooService = require(Services.ZooService)
 
+EnvironmentBuilder.build()
 WorldBuilder.init()
 ZooService.init()
 PlayerDataService.init()
@@ -44,11 +46,11 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 end
 
 local function onPlayerAdded(player: Player)
-	player.CharacterAdded:Connect(function(character)
-		CleaningService.giveHose(character)
+	player.CharacterAdded:Connect(function()
+		CleaningService.refreshHose(player)
 	end)
 	if player.Character then
-		task.spawn(CleaningService.giveHose, player.Character)
+		task.spawn(CleaningService.refreshHose, player)
 	end
 
 	-- Load before assigning a bay so payouts and tool tier always have a profile.
@@ -58,6 +60,7 @@ local function onPlayerAdded(player: Player)
 	end
 	BayService.assign(player)
 	EconomyService.sendTool(player)
+	CleaningService.refreshHose(player) -- now that the tool tier is known
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)

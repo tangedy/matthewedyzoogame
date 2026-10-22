@@ -106,7 +106,7 @@ export type NameplateInfo = {
 function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: number): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
-	billboard.Size = UDim2.fromOffset(200, 96)
+	billboard.Size = UDim2.fromOffset(220, 100)
 	billboard.StudsOffset = Vector3.new(0, adornee.Size.Y / 2 + 2.6, 0)
 	billboard.MaxDistance = maxDistance
 	billboard.Parent = adornee
@@ -129,9 +129,13 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	if info.Mutation ~= MutationConfig.Default then
 		UIStyle.mutation(line(1, 18), info.Mutation)
 	end
-	local name = line(2, 26)
-	UIStyle.text(name)
+	local name = line(2, 30)
+	UIStyle.text(name, nil, nil, 3.5)
 	name.Text = info.Name
+	local shine = Instance.new("UIGradient") -- white to warm gold, top to bottom
+	shine.Rotation = 90
+	shine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 230, 140))
+	shine.Parent = name
 	UIStyle.rarity(line(3, 20), info.Rarity)
 	local income = line(4, 22)
 	UIStyle.text(income, UIStyle.CashColor)

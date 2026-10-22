@@ -11,6 +11,7 @@
 --   Zoo.Pen{i}                     Floor, Slot, Gate, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandCounter              zoo expansion prompt
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -235,8 +236,14 @@ local function buildZoo(center: Vector3, padTop: number, bay: Model)
 			CanCollide = false,
 			Parent = pen,
 		})
-		local cash = billboardLabel(pad, "", Vector3.new(0, 2.2, 0), Vector2.new(140, 34), UIStyle.CashColor);
+		local cash = billboardLabel(pad, "", Vector3.new(0, 2.6, 0), Vector2.new(170, 44), UIStyle.CashColor);
 		(cash.Parent :: Instance).Name = "Cash"
+		local glow = Instance.new("PointLight")
+		glow.Color = UIStyle.CashColor
+		glow.Brightness = 1.2
+		glow.Range = 7
+		glow.Parent = pad
+		CollectionService:AddTag(pad, "CollectPad") -- PenCashController animates these
 
 		local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(160, 36));
 		(status.Parent :: Instance).Name = "Status"

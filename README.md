@@ -40,6 +40,8 @@ stylua src && selene src
 
 Server services:
 
+- **EnvironmentBuilder** builds the cozy world (lighting, grass, the dirt road, fences, trees, flower beds, hay, barn, pond, welcome plaza and clouds), kept clear of every bay slot.
+- **HoseBuilder** builds a different hose model for each tool tier, with a tank on the back at tier 5.
 - **WorldBuilder** builds the ground, wash bays, and each bay's zoo pens and expansion stand.
 - **AnimalBuilder** builds animals: real models from `ServerStorage.AnimalTemplates` when present (see the contract at the top of the file), otherwise block placeholders. It also applies the rarity looks.
 - **DirtRenderer** handles how dirt looks. It's the only place to change when trying decals or texture masks.
@@ -61,6 +63,7 @@ Client controllers:
 - **OnboardingController** shows the first-wash "Wash me!" marker and the "you can afford an upgrade" hint.
 - **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
 - **ZooController** shows what you're carrying and the "cache full" hint, puts other players' prompts out of reach, and animates rainbow labels.
+- **PenCashController** animates the cash counter above each pen pad: it bobs, glows, counts up with a bounce, and pops a floating "+$X" with sparkles.
 - **IndexController** shows the Index button and panel (species × mutation) and new-discovery toasts.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
 

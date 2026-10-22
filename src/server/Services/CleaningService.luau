@@ -13,6 +13,7 @@ local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local DirtRenderer = require(script.Parent.DirtRenderer)
+local HoseBuilder = require(script.Parent.HoseBuilder)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 
 type Patch = Types.DirtPatchState & { Part: BasePart }
@@ -82,24 +83,24 @@ local function isComplete(job: Job): boolean
 end
 
 -- Direct patch hit wins; otherwise the nearest dirty patch within SprayRadius of the body hit.
-local function findPatch(job: Job, hit: BasePart, position: Vector3): Patch?
-	local id = hit:GetAttribute("PatchId")
-	if typeof(id) == "string" then
-		local patch = job.Patches[id]
-		if patch and patch.RemainingDirt > 0 then
-			return patch
-		end
-	end
-	local best: Patch?, bestDist = nil, GameConfig.SprayRadius
+-- Every dirty patch within the tool's spray radius of the hit point that faces the nozzle.
+-- The facing test keeps cleaning spatial: spraying one side never cleans the far side, even
+-- on small animals that fit inside the radius.
+local function patchesInSpray(job: Job, hit: BasePart, position: Vector3, direction: Vector3, radius: number): { Patch }
+	local found: { Patch } = {}
+	local direct = hit:GetAttribute("PatchId")
 	for _, patch in job.PatchList do
-		if patch.RemainingDirt > 0 then
-			local d = (patch.Part.Position - position).Magnitude
-			if d <= bestDist then
-				best, bestDist = patch, d
-			end
+		if patch.RemainingDirt <= 0 then
+			continue
+		end
+		local isDirect = typeof(direct) == "string" and patch.Id == direct
+		local near = (patch.Part.Position - position).Magnitude <= radius
+		local facing = patch.Part.CFrame.RightVector:Dot(-direction) > 0.15 -- RightVector is the surface normal
+		if isDirect or (near and facing) then
+			table.insert(found, patch)
 		end
 	end
-	return best
+	return found
 end
 
 local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
@@ -151,18 +152,21 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 		return
 	end
 
-	local patch = findPatch(job, result.Instance :: BasePart, result.Position)
-	if not patch then
+	local direction = (aimDirection :: Vector3).Unit
+	local hitPatches = patchesInSpray(job, result.Instance :: BasePart, result.Position, direction, tool.SprayRadius)
+	if #hitPatches == 0 then
 		return
 	end
 
-	patch.RemainingDirt = math.max(0, patch.RemainingDirt - tool.CleaningPower * step)
-	local fraction = patch.RemainingDirt / patch.InitialDirt
-	if fraction <= GameConfig.PatchCleanThreshold then
-		patch.RemainingDirt = 0
-		DirtRenderer.clear(patch.Part)
-	else
-		DirtRenderer.setAmount(patch.Part, fraction)
+	for _, patch in hitPatches do
+		patch.RemainingDirt = math.max(0, patch.RemainingDirt - tool.CleaningPower * step)
+		local fraction = patch.RemainingDirt / patch.InitialDirt
+		if fraction <= GameConfig.PatchCleanThreshold then
+			patch.RemainingDirt = 0
+			DirtRenderer.clear(patch.Part, progressOf(job)) -- the pop gets higher-pitched as the wash nears 100%
+		else
+			DirtRenderer.setAmount(patch.Part, fraction)
+		end
 	end
 
 	local progress = progressOf(job)
@@ -230,7 +234,7 @@ function CleaningService.forceComplete(player: Player): boolean
 	for _, patch in job.PatchList do
 		if patch.RemainingDirt > 0 then
 			patch.RemainingDirt = 0
-			DirtRenderer.clear(patch.Part)
+			DirtRenderer.clear(patch.Part, 1)
 		end
 	end
 	DirtRenderer.setGrime(job.Model, 1)
@@ -256,33 +260,15 @@ function CleaningService.getProgress(jobId: string): number?
 	return job and progressOf(job)
 end
 
--- Visual hose welded to the character's right hand. Its presence is the "tool equipped" check.
-function CleaningService.giveHose(character: Model)
-	local hand = character:WaitForChild("RightHand", 5) or character:FindFirstChild("Right Arm")
-	if not hand or not hand:IsA("BasePart") or character:FindFirstChild("Hose") then
+-- The hose in the player's hand matches their tool tier (HoseBuilder). Its presence is the
+-- "tool equipped" check. Rebuilt on respawn and after an upgrade.
+function CleaningService.refreshHose(player: Player)
+	local character = player.Character
+	if not character then
 		return
 	end
-	local hose = Instance.new("Part")
-	hose.Name = "Hose"
-	hose.Size = Vector3.new(0.35, 0.35, 1.6)
-	hose.Color = Color3.fromRGB(60, 160, 80)
-	hose.Material = Enum.Material.SmoothPlastic
-	hose.CanCollide = false
-	hose.CanQuery = false
-	hose.CanTouch = false
-	hose.Massless = true
-	hose.CFrame = hand.CFrame * CFrame.new(0, -0.2, -0.6)
-
-	local nozzle = Instance.new("Attachment")
-	nozzle.Name = "Nozzle"
-	nozzle.Position = Vector3.new(0, 0, -0.85)
-	nozzle.Parent = hose
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = hand
-	weld.Part1 = hose
-	weld.Parent = hose
-	hose.Parent = character
+	local tool = getTool(player)
+	HoseBuilder.equip(character, if tool then tool.Tier else 1)
 end
 
 return CleaningService

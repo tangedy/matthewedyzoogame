@@ -193,11 +193,9 @@ local function refreshPens(player: Player)
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
 			pad.Transparency = if locked then 1 else 0
-			local cash = pad:FindFirstChild("Cash")
-			local cashText = cash and cash:FindFirstChild("Label") :: TextLabel?
-			if cashText then
-				cashText.Text = if animal then UIStyle.formatMoney(animal.Pending) else ""
-			end
+			-- The client renders the counter (count-up, bounce, money pop) from these.
+			pad:SetAttribute("Cash", if animal then math.floor(animal.Pending) else nil)
+			pad:SetAttribute("Rate", if animal then ZooService.income(animal.Species, animal.Mutation) else nil)
 		end
 
 		local post = pen:FindFirstChild("GatePost")

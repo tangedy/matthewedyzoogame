@@ -4,6 +4,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -31,6 +32,12 @@ local rarityLabel: TextLabel
 local barFill: Frame
 local percentLabel: TextLabel
 local rewardLabel: TextLabel
+local panelScale: UIScale
+local percentScale: UIScale
+local barGradient: UIGradient
+local shineGradient: UIGradient
+local barStroke: UIStroke?
+local shownPercent = -1
 local toast: TextLabel
 local payout: TextLabel
 local announcementLabel: TextLabel
@@ -81,33 +88,86 @@ local function buildGui()
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
 
-	-- Top center: the animal being washed
+	-- Top center: the animal being washed, on a framed card that pops in per animal
 	washPanel = Instance.new("Frame")
 	washPanel.AnchorPoint = Vector2.new(0.5, 0)
 	washPanel.Position = UDim2.new(0.5, 0, 0, 8)
-	washPanel.Size = UDim2.fromOffset(360, 132)
-	washPanel.BackgroundTransparency = 1
+	washPanel.Size = UDim2.fromOffset(380, 150)
+	washPanel.BackgroundColor3 = Color3.fromRGB(40, 70, 130)
+	washPanel.BackgroundTransparency = 0.15
 	washPanel.Visible = false
 	washPanel.Parent = gui
-	mutationLabel = textLabel(washPanel, { Size = UDim2.new(1, 0, 0, 20) })
-	nameLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 34) })
-	rarityLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 54), Size = UDim2.new(1, 0, 0, 22) })
+	UIStyle.border(washPanel, 4)
+	local cardGradient = Instance.new("UIGradient")
+	cardGradient.Rotation = 90
+	cardGradient.Color = ColorSequence.new(Color3.fromRGB(120, 190, 255), Color3.fromRGB(60, 90, 200))
+	cardGradient.Parent = washPanel
+	panelScale = Instance.new("UIScale")
+	panelScale.Parent = washPanel
+
+	mutationLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 6), Size = UDim2.new(1, 0, 0, 20) })
+	nameLabel = textLabel(washPanel, { Position = UDim2.fromOffset(0, 24), Size = UDim2.new(1, 0, 0, 40) })
+	local nameShine = Instance.new("UIGradient")
+	nameShine.Rotation = 90
+	nameShine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 235, 150))
+	nameShine.Parent = nameLabel
+	local nameStroke = nameLabel:FindFirstChildOfClass("UIStroke")
+	if nameStroke then
+		nameStroke.Thickness = 3.5
+	end
+
+	-- Rarity badge: a dark pill with the tier-coloured name inside
+	local badge = Instance.new("Frame")
+	badge.AnchorPoint = Vector2.new(0.5, 0)
+	badge.Position = UDim2.new(0.5, 0, 0, 66)
+	badge.Size = UDim2.fromOffset(150, 24)
+	badge.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	badge.BackgroundTransparency = 0.2
+	badge.Parent = washPanel
+	UIStyle.border(badge, 2)
+	rarityLabel = textLabel(badge, { Size = UDim2.fromScale(1, 1) })
+
 	local bar = Instance.new("Frame")
-	bar.Position = UDim2.fromOffset(20, 80)
-	bar.Size = UDim2.new(1, -40, 0, 26)
-	bar.BackgroundColor3 = Color3.fromRGB(60, 50, 40)
+	bar.Position = UDim2.fromOffset(20, 96)
+	bar.Size = UDim2.new(1, -40, 0, 28)
+	bar.BackgroundColor3 = Color3.fromRGB(70, 50, 35)
+	bar.ClipsDescendants = true
 	bar.Parent = washPanel
 	UIStyle.border(bar, 3)
+	barStroke = bar:FindFirstChildOfClass("UIStroke")
 	barFill = Instance.new("Frame")
 	barFill.Size = UDim2.fromScale(0, 1)
-	barFill.BackgroundColor3 = BAR_COLOR
+	barFill.BackgroundColor3 = Color3.new(1, 1, 1)
 	barFill.Parent = bar
 	local fillCorner = Instance.new("UICorner")
 	fillCorner.CornerRadius = UDim.new(0, 12)
 	fillCorner.Parent = barFill
+	barGradient = Instance.new("UIGradient")
+	barGradient.Rotation = 90
+	barGradient.Parent = barFill
+	-- A soft white shine that sweeps along the fill forever.
+	local shine = Instance.new("Frame")
+	shine.Size = UDim2.fromScale(1, 1)
+	shine.BackgroundColor3 = Color3.new(1, 1, 1)
+	shine.Parent = barFill
+	local shineCorner = Instance.new("UICorner")
+	shineCorner.CornerRadius = UDim.new(0, 12)
+	shineCorner.Parent = shine
+	shineGradient = Instance.new("UIGradient")
+	shineGradient.Rotation = 20
+	shineGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.4, 1),
+		NumberSequenceKeypoint.new(0.5, 0.45),
+		NumberSequenceKeypoint.new(0.6, 1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	shineGradient.Parent = shine
 	percentLabel = textLabel(bar, { Size = UDim2.fromScale(1, 1), ZIndex = 2 })
+	percentScale = Instance.new("UIScale")
+	percentScale.Parent = percentLabel
 	rewardLabel =
-		textLabel(washPanel, { Position = UDim2.fromOffset(0, 108), Size = UDim2.new(1, 0, 0, 22) }, UIStyle.CashColor)
+		textLabel(washPanel, { Position = UDim2.fromOffset(0, 126), Size = UDim2.new(1, 0, 0, 20) }, UIStyle.CashColor)
 
 	-- Announcements under the wash panel
 	announcementLabel = textLabel(gui, {
@@ -149,12 +209,29 @@ local function showToast(text: string?)
 	end
 end
 
+local BAR_COLORS = ColorSequence.new(Color3.fromRGB(130, 230, 255), BAR_COLOR)
+local BAR_DONE_COLORS = ColorSequence.new(Color3.fromRGB(170, 255, 140), BAR_DONE_COLOR)
+
+local function pop(scale: UIScale, size: number, seconds: number)
+	scale.Scale = size
+	TweenService:Create(scale, TweenInfo.new(seconds, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+		:Play()
+end
+
+-- The bar glides to the new value; the % text pops each time it ticks up.
 local function setProgress(progress: number, finalized: boolean)
 	currentProgress = progress
 	local shown = if finalized then 100 else math.min(math.floor(progress * 100), 99)
-	percentLabel.Text = `{shown}% CLEAN`
-	barFill.Size = UDim2.fromScale(if finalized then 1 else math.clamp(progress, 0, 0.99), 1)
-	barFill.BackgroundColor3 = if finalized then BAR_DONE_COLOR else BAR_COLOR
+	percentLabel.Text = if finalized then "SQUEAKY CLEAN!" else `{shown}% CLEAN`
+	local width = if finalized then 1 else math.clamp(progress, 0, 0.99)
+	TweenService:Create(barFill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.fromScale(width, 1),
+	}):Play()
+	barGradient.Color = if finalized then BAR_DONE_COLORS else BAR_COLORS
+	if shown > shownPercent and shownPercent >= 0 then
+		pop(percentScale, if finalized then 1.5 else 1.15, if finalized then 0.5 else 0.2)
+	end
+	shownPercent = shown
 end
 
 local function refreshToast()
@@ -181,6 +258,10 @@ local function applyBay(bay: Types.BaySnapshot?)
 	end
 	if bay.JobId ~= currentJobId then
 		hintShowing = false
+		shownPercent = -1
+		if bay.JobId then
+			pop(panelScale, 0.6, 0.45) -- new animal: the card springs in
+		end
 	end
 	currentJobId = bay.JobId
 	currentState = bay.State
@@ -303,6 +384,19 @@ function HUDController.init(initial: Types.InitialState)
 		toolLabel.Text = name
 	end)
 	Remotes.event("Announcement").OnClientEvent:Connect(showAnnouncement)
+
+	-- Passive life on the clean bar: the shine sweeps along and the border gently pulses.
+	RunService.RenderStepped:Connect(function()
+		if not washPanel.Visible then
+			return
+		end
+		local t = os.clock()
+		shineGradient.Offset = Vector2.new((t * 0.8) % 2.4 - 1.2, 0)
+		if barStroke then
+			local pulse = (math.sin(t * 4) + 1) / 2
+			barStroke.Color = Color3.new(0, 0, 0):Lerp(Color3.fromRGB(255, 255, 255), pulse * 0.35)
+		end
+	end)
 	Remotes.event("WashCompleted").OnClientEvent:Connect(function(jobId: string, reward: number, coins: number)
 		if jobId == currentJobId then
 			setProgress(1, true)

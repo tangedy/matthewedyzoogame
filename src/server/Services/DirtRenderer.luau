@@ -35,41 +35,64 @@ function DirtRenderer.setAmount(patch: BasePart, fraction: number)
 	patch:SetAttribute("Dirt", fraction)
 end
 
--- A burst of mud chunks and a squelch where a patch came off.
-local function mudBurst(position: Vector3, normal: Vector3)
+-- A burst of mud chunks, a few sparkles, a squelch and a chime where a patch popped off.
+-- The chime climbs in pitch as the wash nears 100%, so finishing feels like a crescendo.
+local function popBurst(position: Vector3, normal: Vector3, progress: number)
 	local attachment = Instance.new("Attachment")
 	attachment.WorldCFrame = CFrame.lookAt(position, position + normal)
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Enabled = false
-	emitter.EmissionDirection = Enum.NormalId.Front
-	emitter.SpreadAngle = Vector2.new(50, 50)
-	emitter.Speed = NumberRange.new(6, 11)
-	emitter.Acceleration = Vector3.new(0, -40, 0)
-	emitter.Lifetime = NumberRange.new(0.4, 0.7)
-	emitter.Size = NumberSequence.new(0.35, 0.1)
-	emitter.Color = ColorSequence.new(MUD_COLOR)
-	emitter.Rotation = NumberRange.new(0, 360)
-	emitter.Parent = attachment
-	local sound = Instance.new("Sound")
-	sound.SoundId = GameConfig.Sounds.PatchClear
-	sound.PlaybackSpeed = 1.5
-	sound.Volume = 0.45
-	sound.Parent = attachment
+	local mud = Instance.new("ParticleEmitter")
+	mud.Enabled = false
+	mud.EmissionDirection = Enum.NormalId.Front
+	mud.SpreadAngle = Vector2.new(55, 55)
+	mud.Speed = NumberRange.new(8, 14)
+	mud.Acceleration = Vector3.new(0, -45, 0)
+	mud.Lifetime = NumberRange.new(0.4, 0.7)
+	mud.Size = NumberSequence.new(0.4, 0.1)
+	mud.Color = ColorSequence.new(MUD_COLOR)
+	mud.Rotation = NumberRange.new(0, 360)
+	mud.Parent = attachment
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Enabled = false
+	sparkle.EmissionDirection = Enum.NormalId.Front
+	sparkle.SpreadAngle = Vector2.new(80, 80)
+	sparkle.Speed = NumberRange.new(3, 6)
+	sparkle.Lifetime = NumberRange.new(0.3, 0.5)
+	sparkle.Size = NumberSequence.new(0.45, 0)
+	sparkle.Color = ColorSequence.new(Color3.fromRGB(255, 255, 220), Color3.fromRGB(170, 230, 255))
+	sparkle.LightEmission = 1
+	sparkle.Parent = attachment
+	local squelch = Instance.new("Sound")
+	squelch.SoundId = GameConfig.Sounds.PatchClear
+	squelch.PlaybackSpeed = 1.4
+	squelch.Volume = 0.35
+	squelch.Parent = attachment
+	local chime = Instance.new("Sound")
+	chime.SoundId = GameConfig.Sounds.Complete
+	chime.PlaybackSpeed = 1.1 + math.clamp(progress, 0, 1) * 0.9
+	chime.Volume = 0.25
+	chime.Parent = attachment
 	attachment.Parent = Workspace.Terrain
-	emitter:Emit(14)
-	sound:Play()
+	mud:Emit(16)
+	sparkle:Emit(8)
+	squelch:Play()
+	chime:Play()
 	Debris:AddItem(attachment, 1.5)
 end
 
--- Fully cleaned: burst, fade out, then remove so it no longer blocks spray or shows in hints.
-function DirtRenderer.clear(patch: BasePart)
+-- Fully cleaned: pop (swell then vanish) with a burst, then remove so it no longer blocks
+-- spray or shows in hints. `progress` is the animal's overall progress, for the chime pitch.
+function DirtRenderer.clear(patch: BasePart, progress: number?)
 	patch:SetAttribute("Dirt", 0)
 	patch.CanQuery = false
 	if patch.Parent then
-		mudBurst(patch.Position, patch.CFrame.RightVector) -- RightVector is the surface normal
+		popBurst(patch.Position, patch.CFrame.RightVector, progress or 0) -- RightVector is the surface normal
 	end
 	fadeSplats(patch, 1)
-	local tween = TweenService:Create(patch, TweenInfo.new(0.2), { Transparency = 1 })
+	local swell = patch.Size * Vector3.new(1, 1.35, 1.35)
+	local tween = TweenService:Create(patch, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = swell,
+		Transparency = 1,
+	})
 	tween.Completed:Once(function()
 		patch:Destroy()
 	end)

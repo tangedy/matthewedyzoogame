@@ -121,6 +121,24 @@ Check by eye or with saving:
 - [ ] **Saving (published place):** pens, uncollected cash, cache contents and the index all come back after rejoining. Saves made before this change convert over (Legendary becomes Gold, Mythic becomes Rainbow).
 - [ ] **Two players:** each gets their own bay, a second bay appears and disappears with its player, and nobody can use another player's prompts or pads.
 
+## Presentation pass
+
+Verified in a Studio playtest:
+
+- [x] ✅ **World:** bright sky and green grass (the Studio grid is removed), white fences, trees, a red barn and silo, the dirt road the animals walk in on, flower beds, hay bales, a pond and clouds. About 1,100 scenery parts, no errors.
+- [x] ✅ **Cleaning speed:** each hit cleans every mud patch within the hose's spray radius that faces you. A Pig took 3.3 s in total, 2.3 s of it spraying.
+- [x] ✅ **Cash pads:** the counter reads `$21` with a green glow, and a "+$3" floats up each second.
+- [x] ✅ **Hoses:** each tier swaps the model in your hand: green hose, blue with brass rings, yellow pressure washer, purple foam cannon, red fire-hose rig with a tank on the back.
+- [x] ✅ **Rarity looks:** each tier's nameplate colour is correct. Zoo God glows with a halo and has a rainbow label; Secret is black with a white outline.
+
+Check by eye (live motion doesn't come across in screenshots):
+
+- [ ] **Patch pops:** each patch swells and pops with a mud and sparkle burst, and the chime rises in pitch toward 100%.
+- [ ] **Cash pads in motion:** the counter bobs, counts up with a bounce every second, and shows "COLLECTED!" with a big burst when you step on it.
+- [ ] **Wash card:** springs in for each new animal. A shine sweeps along the clean bar, the bar's border pulses, the % pops as it rises, and it ends on "SQUEAKY CLEAN!" in green.
+- [ ] **Auras:** Epic twinkles, Legendary glitters, Mythic gives off rising embers, Zoo God shows rainbow sparkles, and Secret has dark smoke with stars.
+- [ ] **Washing feel:** it should feel close to instant. Tune with `GameConfig.BaseWashSeconds` and each tier's `ToolConfig.SprayRadius`.
+
 ## Report back
 
 For each failing box, note what happened. Also note:
