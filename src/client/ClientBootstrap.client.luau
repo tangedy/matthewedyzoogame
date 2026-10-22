@@ -7,6 +7,7 @@ local Controllers = script.Parent.Controllers
 local HUDController = require(Controllers.HUDController)
 local CleaningController = require(Controllers.CleaningController)
 local ShopController = require(Controllers.ShopController)
+local DevController = require(Controllers.DevController)
 
 local ok, initial = pcall(function()
 	return Remotes.func("RequestInitialState"):InvokeServer()
@@ -26,3 +27,4 @@ end
 HUDController.init(initial)
 CleaningController.init(initial)
 ShopController.init(initial)
+DevController.init()

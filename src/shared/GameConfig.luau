@@ -37,6 +37,9 @@ local GameConfig = {
 	-- Shop
 	ShopCloseDistance = 14, -- the shop panel closes when you walk this far from the station
 
+	-- Developer shortcuts (C / G). Honored in Studio and for the place owner only.
+	DevCoinGrant = 1000000,
+
 	-- Placeholder sounds. Swap in real asset ids (rbxassetid://...) when available.
 	Sounds = {
 		Spray = "rbxasset://sounds/impact_water.mp3",

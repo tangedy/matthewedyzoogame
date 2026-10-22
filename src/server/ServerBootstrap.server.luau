@@ -10,11 +10,13 @@ local PlayerDataService = require(Services.PlayerDataService)
 local EconomyService = require(Services.EconomyService)
 local CleaningService = require(Services.CleaningService)
 local BayService = require(Services.BayService)
+local DevService = require(Services.DevService)
 
 BayService.init(WorldBuilder.build())
 PlayerDataService.init()
 EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
+DevService.init()
 
 Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 	local data = PlayerDataService.waitFor(player, 30)

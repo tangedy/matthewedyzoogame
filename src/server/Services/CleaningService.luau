@@ -219,6 +219,24 @@ function CleaningService.beginJob(params: JobParams)
 	jobByOwner[job.Owner] = job
 end
 
+-- Developer shortcut: finish the owner's active wash through the normal completion path.
+function CleaningService.forceComplete(player: Player): boolean
+	local job = jobByOwner[player]
+	if not job or not job.Active then
+		return false
+	end
+	job.Active = false
+	for _, patch in job.PatchList do
+		if patch.RemainingDirt > 0 then
+			patch.RemainingDirt = 0
+			DirtRenderer.clear(patch.Part)
+		end
+	end
+	progressChanged:FireClient(player, job.Id, 1, false)
+	task.spawn(job.OnComplete)
+	return true
+end
+
 function CleaningService.endJob(jobId: string)
 	local job = jobs[jobId]
 	if not job then

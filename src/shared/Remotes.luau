@@ -7,6 +7,7 @@ local EVENTS = {
 	-- client -> server
 	"CleaningIntent", -- (jobId: string, aimDirection: Vector3)
 	"PurchaseToolUpgrade", -- ()
+	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
 	-- server -> client
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)

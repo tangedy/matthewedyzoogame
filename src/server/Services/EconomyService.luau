@@ -22,7 +22,7 @@ function EconomyService.getTool(player: Player): ToolConfig.ToolTier?
 	return data and ToolConfig[data.ToolTier]
 end
 
--- The only way coins enter the game. Amount comes from server config.
+-- Coins from a completed wash. Amount comes from server config.
 function EconomyService.awardWash(player: Player, amount: number): boolean
 	local data = PlayerDataService.get(player)
 	if not data or typeof(amount) ~= "number" or amount ~= amount or amount <= 0 then
@@ -31,6 +31,18 @@ function EconomyService.awardWash(player: Player, amount: number): boolean
 	data.Coins += math.floor(amount)
 	data.LifetimeAnimalsWashed += 1
 	data.TutorialCompleted = true
+	PlayerDataService.markDirty(player)
+	coinsChanged:FireClient(player, data.Coins)
+	return true
+end
+
+-- Developer coin grant. The amount is a server constant; the client never supplies it.
+function EconomyService.grant(player: Player, amount: number): boolean
+	local data = PlayerDataService.get(player)
+	if not data or typeof(amount) ~= "number" or amount ~= amount or amount <= 0 or amount == math.huge then
+		return false
+	end
+	data.Coins += math.floor(amount)
 	PlayerDataService.markDirty(player)
 	coinsChanged:FireClient(player, data.Coins)
 	return true
