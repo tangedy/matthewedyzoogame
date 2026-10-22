@@ -286,7 +286,7 @@ local function apply()
 	if active then
 		tintOn()
 		rainOn()
-		playSound("rbxasset://sounds/swoosh.wav", 0.8)
+		playSound("rbxasset://sounds/impact_water.mp3", 0.8)
 		splash()
 		bannerScale.Scale = 0.4
 		popUntil = os.clock() + 0.5

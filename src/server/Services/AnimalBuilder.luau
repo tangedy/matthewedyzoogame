@@ -713,7 +713,7 @@ local SPECS: { [string]: Spec } = {
 		end,
 	},
 	Cow = {
-		BodySize = Vector3.new(4.4, 4, 8),
+		BodySize = Vector3.new(4.4, 4, 6.4), -- shorter so the whole cow fits a 12-stud pen
 		LegHeight = 2.4,
 		HeadSize = Vector3.new(2.8, 2.8, 3),
 		BodyColor = Color3.fromRGB(250, 250, 250),
@@ -1068,7 +1068,7 @@ local SPECS: { [string]: Spec } = {
 		end,
 	},
 	Hippo = {
-		BodySize = Vector3.new(5.0, 3.6, 7.5),
+		BodySize = Vector3.new(5.0, 3.6, 5.8), -- shorter so the whole hippo fits a 12-stud pen
 		LegHeight = 1.4,
 		LegThickness = 1.4,
 		HeadSize = Vector3.new(3.6, 2.8, 3.4),

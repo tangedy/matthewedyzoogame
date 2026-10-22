@@ -271,7 +271,7 @@ local function buildGui()
 	gui.DisplayOrder = 5 -- above the hose shop when the Cash tab auto-opens
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	clickSound = sound("rbxasset://sounds/swoosh.wav", 0.5)
+	clickSound = sound("rbxasset://sounds/electronicpingshort.wav", 0.5)
 	buySound = sound("rbxasset://sounds/electronicpingshort.wav", 0.5)
 
 	-- Right of the INDEX / SHOP buttons, just under the cash

@@ -67,6 +67,33 @@ Client controllers:
 - **IndexController** shows the Index button and panel (species × mutation) and new-discovery toasts.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
 
+## Feature systems (big-push branch)
+
+These plug in through `src/server/Services/Hooks.luau` and the Features folders. See [docs/features/README.md](docs/features/README.md) for how. Each one has its own doc with config settings and a Studio checklist:
+
+- [Hero models](docs/features/models.md):
+  - new species: Griffon, Phoenix, Kitsune, Dragon, Kaiju and the Limited Axolotl
+  - rebuilt Elephant, Giraffe and T-Rex
+  - `AnimalBuilder.audit()` to check every model fits a pen
+- [Tension](docs/features/tension.md):
+  - moods and a patience meter
+  - shakes that bring mud back and fling nearby players
+  - a mud splat on screen and camera shake
+  - wander-off timer for Mythic and rarer animals
+  - dev keys: K shakes the animal, L skips the wander-off timer to 5 s
+- [Live ops](docs/features/liveops.md):
+  - Daily Dirty Animal and the scheduled Mud Storm (dev key M toggles it)
+  - offline earnings with a welcome-back popup
+  - zoo stars, leaderstats and the plaza leaderboard
+  - onboarding analytics
+- [Monetization](docs/features/monetization.md):
+  - products: Super Soap, Calm Treat, Lucky Soap and cash packs
+  - game passes: VIP and the Fire-Hose Rig early unlock
+  - Limited Axolotl with a global stock
+  - purchase handling that never grants twice
+  - the shop and contextual offers
+  - Studio test mode: purchases are simulated through the real grant code
+
 ## Status
 
 - **Milestones 1–2:** done and tested in Studio.

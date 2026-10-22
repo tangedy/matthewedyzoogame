@@ -95,7 +95,7 @@ local TensionConfig = {
 
 	Sounds = {
 		Shake = "rbxasset://sounds/impact_water.mp3",
-		WindUp = "rbxasset://sounds/swoosh.wav",
+		WindUp = "rbxasset://sounds/impact_water.mp3",
 		Fling = "rbxasset://sounds/uuhhh.mp3", -- played locally on each flung player
 		Warning = "rbxasset://sounds/electronicpingshort.wav",
 	},

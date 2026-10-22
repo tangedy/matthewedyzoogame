@@ -139,6 +139,23 @@ Check by eye (live motion doesn't come across in screenshots):
 - [ ] **Auras:** Epic twinkles, Legendary glitters, Mythic gives off rising embers, Zoo God shows rainbow sparkles, and Secret has dark smoke with stars.
 - [ ] **Washing feel:** it should feel close to instant. Tune with `GameConfig.BaseWashSeconds` and each tier's `ToolConfig.SprayRadius`.
 
+## Feature systems
+
+Each feature's Studio checklist is in its doc: [models](docs/features/models.md), [tension](docs/features/tension.md), [live ops](docs/features/liveops.md) and [monetization](docs/features/monetization.md).
+
+Verified in a merged Studio playtest:
+
+- [x] ✅ All features start with no script errors, and the onboarding analytics events fire.
+- [x] ✅ **Tension:** the dev shake brought mud back (69% → 57% clean), flung the nearby player, showed the mud splat overlay, and the patience bar drained.
+- [x] ✅ **Mud Storm:** the dev toggle shows the banner countdown and murky lighting, and lighting goes back to normal afterwards.
+- [x] ✅ **Studio test-mode purchases:**
+  - Super Soap and Lucky Soap both show timers.
+  - The cash pack paid out.
+  - VIP shows its overhead tag.
+  - The Limited Axolotl appeared in the cache and stock dropped from 1000 to 999.
+- [x] ✅ **Leaderstats:** Stars, Cash and Income show in the player list. The plaza leaderboard board and the stars on the bay sign show.
+- [x] ✅ **Model audit:** after shrinking Cow and Hippo, only T-Rex is over, by 0.02 studs (11.52 vs 11.5); pens are 12 deep.
+
 ## Report back
 
 For each failing box, note what happened. Also note:
