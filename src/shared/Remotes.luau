@@ -6,12 +6,14 @@ local RunService = game:GetService("RunService")
 local EVENTS = {
 	-- client -> server
 	"CleaningIntent", -- (jobId: string, aimDirection: Vector3)
+	"PurchaseToolUpgrade", -- ()
 	-- server -> client
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
 	"CoinsChanged", -- (coins: number)
 	"ToolTierChanged", -- (tier: number, name: string)
 	"WashCompleted", -- (jobId: string, reward: number, coins: number)
+	"PurchaseResult", -- (success: boolean, message: string)
 }
 
 local FUNCTIONS = {

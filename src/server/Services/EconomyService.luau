@@ -1,57 +1,66 @@
--- Coin transactions and tool tier. Phase 1 keeps profiles in memory only; Phase 2 moves
--- loading/saving into PlayerDataService and this module keeps the same API.
+-- Coin transactions and validated tool upgrades. Reads and writes the profile owned by
+-- PlayerDataService; never trusts client-supplied amounts, tiers, or prices.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-
-type Profile = {
-	Coins: number,
-	ToolTier: number,
-	LifetimeAnimalsWashed: number,
-	TutorialCompleted: boolean,
-}
+local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local EconomyService = {}
 
-local profiles: { [Player]: Profile } = {}
 local coinsChanged = Remotes.event("CoinsChanged")
 local toolTierChanged = Remotes.event("ToolTierChanged")
+local purchaseResult = Remotes.event("PurchaseResult")
 
-function EconomyService.load(player: Player)
-	profiles[player] = {
-		Coins = 0,
-		ToolTier = 1,
-		LifetimeAnimalsWashed = 0,
-		TutorialCompleted = false,
-	}
-end
-
-function EconomyService.unload(player: Player)
-	profiles[player] = nil
-end
-
-function EconomyService.getProfile(player: Player): Profile?
-	return profiles[player]
+function EconomyService.getProfile(player: Player): PlayerDataService.SavedData?
+	return PlayerDataService.get(player)
 end
 
 function EconomyService.getTool(player: Player): ToolConfig.ToolTier?
-	local profile = profiles[player]
-	return profile and ToolConfig[profile.ToolTier]
+	local data = PlayerDataService.get(player)
+	return data and ToolConfig[data.ToolTier]
 end
 
--- The only way coins enter the game in Phase 1. Amount comes from server config.
+-- The only way coins enter the game. Amount comes from server config.
 function EconomyService.awardWash(player: Player, amount: number): boolean
-	local profile = profiles[player]
-	if not profile or typeof(amount) ~= "number" or amount ~= amount or amount <= 0 then
+	local data = PlayerDataService.get(player)
+	if not data or typeof(amount) ~= "number" or amount ~= amount or amount <= 0 then
 		return false
 	end
-	profile.Coins += math.floor(amount)
-	profile.LifetimeAnimalsWashed += 1
-	profile.TutorialCompleted = true
-	coinsChanged:FireClient(player, profile.Coins)
+	data.Coins += math.floor(amount)
+	data.LifetimeAnimalsWashed += 1
+	data.TutorialCompleted = true
+	PlayerDataService.markDirty(player)
+	coinsChanged:FireClient(player, data.Coins)
 	return true
+end
+
+-- Buys the next hose tier. The server picks the tier and price; nothing comes from the client.
+-- Doesn't yield, so two requests can't both pass the balance check.
+local function purchaseToolUpgrade(player: Player)
+	local data = PlayerDataService.get(player)
+	if not data then
+		purchaseResult:FireClient(player, false, "Still loading your data. Try again in a moment.")
+		return
+	end
+	local nextTool = ToolConfig[data.ToolTier + 1]
+	if not nextTool then
+		purchaseResult:FireClient(player, false, "Your hose is already fully upgraded!")
+		return
+	end
+	if data.Coins < nextTool.Price then
+		purchaseResult:FireClient(player, false, `Not enough coins. You need {nextTool.Price - data.Coins} more.`)
+		return
+	end
+
+	data.Coins -= nextTool.Price
+	data.ToolTier = nextTool.Tier
+	PlayerDataService.saveNow(player)
+
+	coinsChanged:FireClient(player, data.Coins)
+	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name)
+	purchaseResult:FireClient(player, true, `Upgraded to {nextTool.Name}!`)
 end
 
 function EconomyService.sendTool(player: Player)
@@ -59,6 +68,21 @@ function EconomyService.sendTool(player: Player)
 	if tool then
 		toolTierChanged:FireClient(player, tool.Tier, tool.Name)
 	end
+end
+
+function EconomyService.init()
+	local lastPurchaseAt: { [Player]: number } = {}
+	Remotes.event("PurchaseToolUpgrade").OnServerEvent:Connect(function(player)
+		local now = os.clock()
+		if lastPurchaseAt[player] and now - lastPurchaseAt[player] < 0.5 then
+			return
+		end
+		lastPurchaseAt[player] = now
+		purchaseToolUpgrade(player)
+	end)
+	game:GetService("Players").PlayerRemoving:Connect(function(player)
+		lastPurchaseAt[player] = nil
+	end)
 end
 
 return EconomyService

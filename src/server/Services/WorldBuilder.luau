@@ -46,6 +46,66 @@ local function ensureGround()
 	})
 end
 
+-- Hose upgrade counter. The client opens the shop panel when its ProximityPrompt fires;
+-- purchases still go through the server.
+local function buildUpgradeStation(base: Vector3, parent: Instance)
+	local station = Instance.new("Model")
+	station.Name = "UpgradeStation"
+
+	local counter = makePart({
+		Name = "Counter",
+		Size = Vector3.new(6, 3, 3),
+		Position = base + Vector3.new(0, 1.5, 0),
+		Color = Color3.fromRGB(60, 150, 230),
+		Material = Enum.Material.SmoothPlastic,
+		Parent = station,
+	})
+	makePart({
+		Name = "Awning",
+		Size = Vector3.new(7, 0.4, 4),
+		Position = base + Vector3.new(0, 6.5, 0),
+		Color = Color3.fromRGB(255, 210, 70),
+		Material = Enum.Material.SmoothPlastic,
+		Parent = station,
+	})
+	for _, side in { -1, 1 } do
+		makePart({
+			Name = "Pole",
+			Size = Vector3.new(0.4, 3.5, 0.4),
+			Position = base + Vector3.new(side * 3.2, 4.75, 0),
+			Color = Color3.fromRGB(240, 240, 240),
+			Material = Enum.Material.SmoothPlastic,
+			Parent = station,
+		})
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromOffset(200, 40)
+	billboard.StudsOffset = Vector3.new(0, 6.5, 0)
+	billboard.MaxDistance = 80
+	billboard.Parent = counter
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.fromScale(1, 1)
+	title.BackgroundTransparency = 1
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextStrokeTransparency = 0.3
+	title.TextScaled = true
+	title.Font = Enum.Font.FredokaOne
+	title.Text = "HOSE UPGRADES"
+	title.Parent = billboard
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "UpgradePrompt"
+	prompt.ActionText = "Upgrade Hose"
+	prompt.ObjectText = "Hose Shop"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = counter
+
+	station.Parent = parent
+end
+
 local function buildBay(index: number, center: Vector3, parent: Instance): Model
 	local bay = Instance.new("Model")
 	bay.Name = "Bay" .. index
@@ -125,6 +185,8 @@ local function buildBay(index: number, center: Vector3, parent: Instance): Model
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = label
+
+	buildUpgradeStation(Vector3.new(center.X - 14, padTop, center.Z + 12), bay)
 
 	bay:SetAttribute("BayIndex", index)
 	bay.Parent = parent

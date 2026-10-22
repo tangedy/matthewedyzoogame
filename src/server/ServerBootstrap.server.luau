@@ -6,32 +6,41 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Services
 local WorldBuilder = require(Services.WorldBuilder)
+local PlayerDataService = require(Services.PlayerDataService)
 local EconomyService = require(Services.EconomyService)
 local CleaningService = require(Services.CleaningService)
 local BayService = require(Services.BayService)
 
 BayService.init(WorldBuilder.build())
+PlayerDataService.init()
+EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
 
 Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
-	local profile = EconomyService.getProfile(player)
+	local data = PlayerDataService.waitFor(player, 30)
 	local tool = EconomyService.getTool(player)
 	return {
-		Coins = if profile then profile.Coins else 0,
+		DataStatus = PlayerDataService.getStatus(player) or "Failed",
+		Coins = if data then data.Coins else 0,
 		ToolTier = if tool then tool.Tier else 1,
 		ToolName = if tool then tool.Name else "",
-		TutorialCompleted = if profile then profile.TutorialCompleted else false,
+		TutorialCompleted = if data then data.TutorialCompleted else false,
 		Bay = BayService.getSnapshot(player),
 	}
 end
 
 local function onPlayerAdded(player: Player)
-	EconomyService.load(player)
 	player.CharacterAdded:Connect(function(character)
 		CleaningService.giveHose(character)
 	end)
 	if player.Character then
 		task.spawn(CleaningService.giveHose, player.Character)
+	end
+
+	-- Load before assigning a bay so payouts and tool tier always have a profile.
+	PlayerDataService.load(player)
+	if not player.Parent then
+		return -- left while loading; PlayerDataService already released the lock
 	end
 	BayService.assign(player)
 	EconomyService.sendTool(player)
@@ -43,6 +52,5 @@ for _, player in Players:GetPlayers() do
 end
 
 Players.PlayerRemoving:Connect(function(player)
-	BayService.release(player)
-	EconomyService.unload(player)
+	BayService.release(player) -- unfinished washes are never paid
 end)

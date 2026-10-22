@@ -242,12 +242,36 @@ local function playPayout(reward: number)
 	tween:Play()
 end
 
+-- Persistent banner: the doc requires explaining when progress can't be saved.
+local function showDataWarning(status: Types.DataStatus)
+	local gui = player:WaitForChild("PlayerGui"):WaitForChild("HUD")
+	local banner = label({
+		Name = "DataWarning",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 106),
+		Size = UDim2.new(0.9, 0, 0, 30),
+		BackgroundColor3 = Color3.fromRGB(170, 60, 50),
+		BackgroundTransparency = 0.1,
+		Text = if status == "Locked"
+			then "Your save is still open on another server. Progress this session won't save. Rejoin in a minute."
+			else "Couldn't load your save. Progress this session won't save. Rejoin to try again.",
+		Parent = gui,
+	})
+	round(banner, 8)
+	local constraint = Instance.new("UISizeConstraint")
+	constraint.MaxSize = Vector2.new(620, 30)
+	constraint.Parent = banner
+end
+
 function HUDController.init(initial: Types.InitialState)
 	buildGui()
 	tutorialCompleted = initial.TutorialCompleted
 	coinsLabel.Text = `{initial.Coins} coins`
-	toolLabel.Text = initial.ToolName
+	toolLabel.Text = `{initial.ToolName} (Tier {initial.ToolTier})`
 	applyBay(initial.Bay)
+	if initial.DataStatus ~= "Loaded" then
+		showDataWarning(initial.DataStatus)
+	end
 
 	local gotBay = initial.Bay ~= nil
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(function(bay)
@@ -272,8 +296,8 @@ function HUDController.init(initial: Types.InitialState)
 	Remotes.event("CoinsChanged").OnClientEvent:Connect(function(coins: number)
 		coinsLabel.Text = `{coins} coins`
 	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(_tier: number, name: string)
-		toolLabel.Text = name
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(tier: number, name: string)
+		toolLabel.Text = `{name} (Tier {tier})`
 	end)
 	Remotes.event("WashCompleted").OnClientEvent:Connect(function(jobId: string, reward: number, coins: number)
 		if jobId == currentJobId then

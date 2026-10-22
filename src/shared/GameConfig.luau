@@ -26,6 +26,17 @@ local GameConfig = {
 	CelebrationDuration = 1.5,
 	NextAnimalDelay = 1,
 
+	-- Persistence. Studio uses a separate store so test data never touches live players.
+	DataStoreName = "PlayerData_v1",
+	StudioDataStoreName = "PlayerData_Studio_v1",
+	AutosaveInterval = 60, -- also refreshes the session lock
+	SessionLockExpiry = 300, -- a lock not refreshed for this long is considered abandoned
+	LockRetryAttempts = 6,
+	LockRetryDelay = 4,
+
+	-- Shop
+	ShopCloseDistance = 14, -- the shop panel closes when you walk this far from the station
+
 	-- Placeholder sounds. Swap in real asset ids (rbxassetid://...) when available.
 	Sounds = {
 		Spray = "rbxasset://sounds/impact_water.mp3",

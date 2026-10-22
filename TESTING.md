@@ -1,8 +1,8 @@
-# Phase 1 Studio test checklist
+# Studio test checklist
 
-None of these checks have been run yet. The code passes `selene` and the luau-lsp type check, and `rojo build` succeeds, but it hasn't been run in Roblox.
+Milestones 1 and 2 have passed in Studio. Milestone 3 is new and untested. It passes `selene` and the luau-lsp type check, and `rojo build` succeeds, but it hasn't been run in Roblox.
 
-Watch the **Output** window for `[BayService]` warnings or script errors the whole time.
+Watch the **Output** window for `[BayService]` / `[PlayerDataService]` warnings or script errors the whole time.
 
 ## Milestone 1: one animal can be washed
 
@@ -30,6 +30,24 @@ Press Play (solo).
 - [ ] Spraying hard during the last patch never pays twice.
 - [ ] Every patch on the sheep and cow can be reached. The cow has no mud on top by design, because a standing player can't reach it.
 
+## Milestone 3: progression and saving
+
+Setup: publish the place and turn on **Game Settings → Security → Enable Studio Access to API Services**.
+
+- [ ] No red "won't save" banner appears under the wash meter.
+- [ ] A blue **HOSE UPGRADES** counter with a yellow awning stands next to your spawn pad. Walking up shows an "Upgrade Hose" prompt (E on desktop, a tap button on mobile).
+- [ ] The shop never opens on its own, and spraying never opens it.
+- [ ] The panel shows Current: Basic Hose (Tier 1), Next: Strong Hose, Cleaning speed +50%, and Buy for 150 coins.
+- [ ] Buying with fewer than 150 coins shows "Not enough coins. You need N more." and nothing changes.
+- [ ] Buying with enough coins takes exactly 150. Coins update, the HUD shows "Strong Hose (Tier 2)", the panel moves on to Power Washer (+56%, 600), and the spray beam gets thicker.
+- [ ] Clicking Buy quickly several times charges only once.
+- [ ] Washing is noticeably faster after upgrading (server-side power).
+- [ ] At Tier 3 the panel says "Your hose is fully upgraded!" and has no Buy button.
+- [ ] Walking more than about 14 studs from the counter closes the panel.
+- [ ] **Rejoin:** stop, then play again. Coins and tool tier come back, and the first-wash instruction doesn't show again.
+- [ ] **Failed load can't overwrite data:** turn API Services **off**, then play. The red banner appears. Earn some coins, stop, turn API Services back **on**, then play again. Your earlier saved coins come back, not 0 and not the temporary session's coins.
+- [ ] Pacing: the first upgrade is affordable after a few animals (about 5 washes, 3–4 minutes).
+
 ## Early mobile check (pulled forward from Milestone 4)
 
 Use Studio's **Device emulator** (Test → Device, pick a phone), then a real phone if possible.
@@ -39,7 +57,7 @@ Use Studio's **Device emulator** (Test → Device, pick a phone), then a real ph
 - [ ] A full wash is comfortable with thumbs only.
 - [ ] The mud fade looks clear at phone size. This is the doc's #1 technical risk, so note how it feels.
 
-## Quick multiplayer smoke test (optional now, required in Phase 2)
+## Quick multiplayer smoke test (optional now, required in Milestone 4)
 
 Use Test → Clients and Servers → 2 players.
 

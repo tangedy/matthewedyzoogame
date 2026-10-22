@@ -341,17 +341,25 @@ local function applyBay(bay: Types.BaySnapshot?)
 	end
 end
 
+-- Range drives aiming; higher tiers also get a visibly thicker spray.
+local function applyTier(tier: number)
+	local tool = ToolConfig[tier] or ToolConfig[1]
+	range = tool.Range
+	if beam then
+		beam.Width1 = 0.9 + 0.35 * (tool.Tier - 1)
+		beam.Width0 = 0.25 + 0.1 * (tool.Tier - 1)
+	end
+end
+
 function CleaningController.init(initial: Types.InitialState)
-	range = (ToolConfig[initial.ToolTier] or ToolConfig[1]).Range
 	buildEffects()
+	applyTier(initial.ToolTier)
 	buildControls()
 	bindInput()
 	applyBay(initial.Bay)
 
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(applyBay)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(tier: number)
-		range = (ToolConfig[tier] or ToolConfig[1]).Range
-	end)
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(applyTier)
 	Remotes.event("CleaningProgressChanged").OnClientEvent
 		:Connect(function(id: string, _progress: number, showHint: boolean)
 			if id == jobId then

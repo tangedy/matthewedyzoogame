@@ -19,8 +19,12 @@ export type BaySnapshot = {
 	Progress: number?,
 }
 
+-- Loaded: progress saves. Failed/Locked: playing on a temporary profile that is never saved.
+export type DataStatus = "Loaded" | "Failed" | "Locked"
+
 -- Payload of InitialState / RequestInitialState
 export type InitialState = {
+	DataStatus: DataStatus,
 	Coins: number,
 	ToolTier: number,
 	ToolName: string,

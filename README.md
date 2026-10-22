@@ -21,6 +21,7 @@ Everything (map, bays, placeholder animals, UI) is created by scripts at runtime
 ### Studio settings to change
 
 - **Game Settings → Places → Max Players**: set it to `GameConfig.BayCount` (default 4). Extra players can still join, but they won't get a bay.
+- **Game Settings → Security → Enable Studio Access to API Services**: turn this on, and publish the place, to test saving in Studio. Without it, loading fails and you play on a temporary profile that never saves (a red banner says so). Studio saves to its own store (`GameConfig.StudioDataStoreName`), so they never touch live data.
 - Sounds use built-in `rbxasset://` placeholders. Swap in real asset IDs in `GameConfig.Sounds`.
 
 ## Checks
@@ -45,17 +46,20 @@ Server services:
 - **AnimalService** handles selection, the walk in and out, celebration and disposal.
 - **CleaningService** does the server-authoritative spray validation, keeps dirt state and progress, and signals completion.
 - **BayService** handles bay ownership and the per-bay state machine `Empty → Arriving → Washing → Completing → Departing`.
-- **EconomyService** holds coins and tool tier. These are kept in memory only in Phase 1.
+- **PlayerDataService** loads, validates and saves profiles through DataStore. It uses a session lock, autosaves every 60 s, saves on leave and on shutdown, and never saves a profile whose load failed.
+- **EconomyService** pays out completed washes and validates hose upgrade purchases.
 
 Client controllers:
 
 - **CleaningController** handles input, aiming, the spray beam, splash and sound, the mobile SPRAY button, the reticle and the remaining-dirt highlight.
+- **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
 
 ## Status
 
-**Phase 1 (Milestones 1–2)** is implemented but has not been tested in Studio yet. See [TESTING.md](TESTING.md).
+- **Milestones 1–2:** done and tested in Studio.
+- **Milestone 3** (three animals, hose tiers, shop, saving): implemented, not yet tested in Studio. See [TESTING.md](TESTING.md).
 
 The pig, sheep and cow are all in the spawn pool. The first animal each session is always the pig.
 
-**Phase 2 (not started):** DataStore saving (session-locked profiles), the tool shop with tiers 2–3, and the multiplayer and mobile acceptance pass.
+**Next, Milestone 4:** the multiplayer and mobile acceptance pass (bay ownership checks, remote abuse, multi-bay performance).
