@@ -1,0 +1,287 @@
+-- Monetization's saved data (data.Extra.Monetization), per-session state, and what the client
+-- is told about its shop. Saved data is validated the first time it's read each session.
+-- Part of the Monetization feature (no init of its own).
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local Services = script.Parent.Parent.Services
+local PlayerDataService = require(Services.PlayerDataService)
+local ZooService = require(Services.ZooService)
+local MonetizationStock = require(script.Parent.MonetizationStock)
+
+export type PendingAnimal = { Species: string, Mutation: string }
+
+export type Saved = {
+	Receipts: { string }, -- most recent PurchaseIds, oldest first
+	SuperSoapLeft: number, -- seconds; only counts down while the player is online
+	LuckyLeft: number, -- walk-ins
+	Passes: { [string]: boolean }, -- passes granted by this server (purchase or simulation)
+	Once: { [string]: boolean }, -- once-only products bought
+	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
+}
+
+export type Session = {
+	JoinedAt: number, -- os.clock()
+	SoapEndsAt: number, -- Workspace:GetServerTimeNow(); 0 when inactive
+	LuckyRolled: boolean, -- a walk-in was rolled while Lucky Soap was active
+	OwnedPasses: { [string]: boolean }, -- UserOwnsGamePassAsync results and grants
+	LastRequest: { [string]: number },
+	LastOffer: { [string]: number },
+	OffersShown: number,
+	Connections: { RBXScriptConnection },
+}
+
+local MonetizationState = {}
+
+-- Weak keys as a backstop; release() clears both when the player leaves.
+local savedCache: { [Player]: Saved } = setmetatable({}, { __mode = "k" }) :: any
+local sessions: { [Player]: Session } = setmetatable({}, { __mode = "k" }) :: any
+
+local stateRemote = Remotes.event("MonetizationState")
+local noticeRemote = Remotes.event("MonetizationNotice")
+
+local function count(value: any, max: number): number
+	if typeof(value) ~= "number" or value ~= value or value <= 0 then
+		return 0
+	end
+	return math.min(value, max)
+end
+
+local function flags(value: any, valid: { [string]: any }): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	if typeof(value) == "table" then
+		for key, on in value do
+			if typeof(key) == "string" and on == true and valid[key] then
+				out[key] = true
+			end
+		end
+	end
+	return out
+end
+
+local function sanitize(raw: any): Saved
+	local saved: Saved = {
+		Receipts = {},
+		SuperSoapLeft = 0,
+		LuckyLeft = 0,
+		Passes = {},
+		Once = {},
+		PendingAnimals = {},
+	}
+	if typeof(raw) ~= "table" then
+		return saved
+	end
+	if typeof(raw.Receipts) == "table" then
+		for _, id in raw.Receipts do
+			if typeof(id) == "string" and #id <= 100 then
+				table.insert(saved.Receipts, id)
+			end
+		end
+		while #saved.Receipts > MonetizationConfig.ReceiptsKept do
+			table.remove(saved.Receipts, 1)
+		end
+	end
+	saved.SuperSoapLeft = count(raw.SuperSoapLeft, MonetizationConfig.SuperSoap.MaxSeconds)
+	saved.LuckyLeft = math.floor(count(raw.LuckyLeft, MonetizationConfig.LuckySoap.MaxWalkIns))
+	saved.Passes = flags(raw.Passes, MonetizationConfig.PassesByKey)
+	saved.Once = flags(raw.Once, MonetizationConfig.ProductsByKey)
+	if typeof(raw.PendingAnimals) == "table" then
+		for _, entry in raw.PendingAnimals do
+			-- Species is kept even if it's missing from AnimalConfig right now: it was paid for,
+			-- and delivery waits until the species exists again.
+			if
+				typeof(entry) == "table"
+				and typeof(entry.Species) == "string"
+				and typeof(entry.Mutation) == "string"
+				and MutationConfig.ByKey[entry.Mutation]
+			then
+				table.insert(saved.PendingAnimals, { Species = entry.Species, Mutation = entry.Mutation })
+			end
+		end
+	end
+	return saved
+end
+
+-- The player's validated monetization data, or nil while their profile isn't loaded.
+function MonetizationState.saved(player: Player): Saved?
+	local data = PlayerDataService.get(player)
+	if not data then
+		return nil
+	end
+	local cached = savedCache[player]
+	if cached and data.Extra.Monetization == cached then
+		return cached
+	end
+	local saved = sanitize(data.Extra.Monetization)
+	data.Extra.Monetization = saved
+	savedCache[player] = saved
+	return saved
+end
+
+-- The player's session, if it has started (it starts when they join).
+function MonetizationState.peek(player: Player): Session?
+	return sessions[player]
+end
+
+-- Starts (or returns) the player's session.
+function MonetizationState.session(player: Player): Session
+	local session = sessions[player]
+	if not session then
+		session = {
+			JoinedAt = os.clock(),
+			SoapEndsAt = 0,
+			LuckyRolled = false,
+			OwnedPasses = {},
+			LastRequest = {},
+			LastOffer = {},
+			OffersShown = 0,
+			Connections = {},
+		}
+		sessions[player] = session
+	end
+	return session
+end
+
+function MonetizationState.release(player: Player)
+	local session = sessions[player]
+	if session then
+		for _, connection in session.Connections do
+			connection:Disconnect()
+		end
+	end
+	sessions[player] = nil
+	savedCache[player] = nil
+end
+
+-- Simple per-player, per-action rate limit. Returns true when the request may go ahead.
+function MonetizationState.allow(player: Player, action: string, cooldown: number): boolean
+	local session = sessions[player]
+	if not session then
+		return false
+	end
+	local now = os.clock()
+	local last = session.LastRequest[action]
+	if last and now - last < cooldown then
+		return false
+	end
+	session.LastRequest[action] = now
+	return true
+end
+
+function MonetizationState.isDeveloper(player: Player): boolean
+	return RunService:IsStudio() or (game.CreatorId ~= 0 and player.UserId == game.CreatorId)
+end
+
+-- Studio always simulates; a live server only for unconfigured (id 0) items, and then only for
+-- the place owner unless SimulateUnconfiguredLive is on. Real ids in a live game never simulate.
+function MonetizationState.shouldSimulate(player: Player, id: number): boolean
+	if RunService:IsStudio() then
+		return true
+	end
+	if id ~= 0 then
+		return false
+	end
+	return MonetizationConfig.SimulateUnconfiguredLive or (game.CreatorId ~= 0 and player.UserId == game.CreatorId)
+end
+
+function MonetizationState.ownsPass(player: Player, key: string): boolean
+	local session = sessions[player]
+	if session and session.OwnedPasses[key] then
+		return true
+	end
+	local saved = MonetizationState.saved(player)
+	return saved ~= nil and saved.Passes[key] == true
+end
+
+function MonetizationState.soapActive(player: Player): boolean
+	local session = sessions[player]
+	return session ~= nil and session.SoapEndsAt > Workspace:GetServerTimeNow()
+end
+
+-- Price of the hose the player would buy next (the top hose's price once fully upgraded).
+local function nextHosePrice(player: Player): number
+	local data = PlayerDataService.get(player)
+	local tier = if data then data.ToolTier else 1
+	local nextTool = ToolConfig[tier + 1] or ToolConfig[#ToolConfig]
+	return nextTool.Price
+end
+
+-- Cash for a pack: N minutes of current income, at least the floor, never more than a fraction
+-- of the next hose (so a pack can't skip a tool tier).
+function MonetizationState.cashAmount(
+	player: Player,
+	spec: { Minutes: number?, Floor: number?, CapFraction: number? }
+): number
+	local minutes = spec.Minutes or 0
+	local floor = spec.Floor or 0
+	local cap = math.max(1, math.floor(nextHosePrice(player) * (spec.CapFraction or 0)))
+	local fromIncome = math.floor(ZooService.totalIncome(player) * 60 * minutes)
+	return math.max(1, math.min(math.max(floor, fromIncome), cap))
+end
+
+function MonetizationState.payload(player: Player): MonetizationConfig.ShopState
+	local saved = MonetizationState.saved(player)
+	local session = sessions[player]
+	local state: MonetizationConfig.ShopState = {
+		SoapEndsAt = if session and session.SoapEndsAt > Workspace:GetServerTimeNow() then session.SoapEndsAt else 0,
+		LuckyLeft = if saved then saved.LuckyLeft else 0,
+		Passes = {},
+		Once = if saved then table.clone(saved.Once) else {},
+		Stock = {},
+		Cash = {},
+		Unavailable = {},
+		TestMode = MonetizationState.shouldSimulate(player, 0),
+		PendingAnimals = if saved then #saved.PendingAnimals else 0,
+	}
+	for _, pass in MonetizationConfig.Passes do
+		if MonetizationState.ownsPass(player, pass.Key) then
+			state.Passes[pass.Key] = true
+		end
+	end
+	for _, product in MonetizationConfig.Products do
+		if product.Kind == "Cash" then
+			state.Cash[product.Key] = MonetizationState.cashAmount(player, product)
+		elseif product.Kind == "Limited" then
+			local left = MonetizationStock.remaining(product.Key)
+			if left then
+				state.Stock[product.Key] = left
+			end
+			if not (product.Species and AnimalConfig.Animals[product.Species]) then
+				state.Unavailable[product.Key] = true
+			end
+		end
+	end
+	return state
+end
+
+function MonetizationState.push(player: Player)
+	if player.Parent then
+		stateRemote:FireClient(player, MonetizationState.payload(player))
+	end
+end
+
+function MonetizationState.notify(player: Player, text: string, ok: boolean)
+	if player.Parent then
+		noticeRemote:FireClient(player, text, ok)
+	end
+end
+
+function MonetizationState.players(): { Player }
+	local list = {}
+	for player in sessions do
+		if player.Parent == Players then
+			table.insert(list, player)
+		end
+	end
+	return list
+end
+
+return MonetizationState
