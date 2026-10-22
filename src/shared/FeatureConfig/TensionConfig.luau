@@ -2,24 +2,35 @@
 -- meter, the mud shake, grumpy lunges, and the wander-off timer on Mythic and rarer animals.
 --
 -- Each species gets a profile: its rarity's defaults with any per-species override on top.
--- Cleaning is fast (a Pig takes about 3 s, big animals longer with WashTimeMultiplier), so
--- patience is set to bite only when a player dawdles on a big or rare animal.
+-- Patience is sized from the wash itself: at wash start the server estimates how long one
+-- patch at a time would take with the player's hose,
+--   expected = BaseWashSeconds * ToolConfig[1].CleaningPower * WashTimeMultiplier / hose power
+-- (an upper bound: a spray usually hits several patches), then
+--   patience = clamp(expected * PatienceFactor + PatienceSlack, MinPatience, PatienceSeconds).
+-- Common/Rare stay generous; Mythic and rarer are tight but beatable, so the shake actually
+-- happens in normal play rather than only when a player goes AFK.
 
 export type Mood = "Calm" | "Ticklish" | "Grumpy"
 
 export type Profile = {
 	Mood: Mood,
-	PatienceSeconds: number, -- seconds from full to empty (it drains at 1 per second)
+	PatienceSeconds: number, -- cap on patience (seconds from full to empty; drains at 1 per second)
+	PatienceFactor: number, -- patience = expected wash seconds * this + PatienceSlack ...
+	PatienceSlack: number, -- ... seconds of walking/aiming time on top
+	MinPatience: number, -- floor, in seconds
 	ShakeRedirty: number, -- fraction of the already-clean patches the shake muddies again
 	ShakeRadius: number, -- studs from the animal; every character inside is flung and splatted
 	Knockback: number, -- horizontal fling speed (studs/s) at the animal; falls off with distance
 	KnockUp: number, -- upward fling speed (studs/s)
-	WanderOffSeconds: number, -- 0 = never wanders off; otherwise the wash is lost at 0
+	WanderOffSeconds: number, -- 0 = never wanders off; otherwise the cap on the wander-off timer
 }
 
 export type ProfileOverride = {
 	Mood: Mood?,
 	PatienceSeconds: number?,
+	PatienceFactor: number?,
+	PatienceSlack: number?,
+	MinPatience: number?,
 	ShakeRedirty: number?,
 	ShakeRadius: number?,
 	Knockback: number?,
@@ -35,7 +46,11 @@ local TensionConfig = {
 	RefillFraction = 0.7, -- patience refills to this after a shake
 	LowFraction = 0.2, -- below this: warning UI, and the "PatienceLow" hook fires (once per wash)
 	MaxCalmSeconds = 600, -- a single Calm Treat can't freeze patience for longer than this
-	StateSendInterval = 0.2, -- seconds between patience updates sent to the washing player
+	StateSendInterval = 0.2,
+	-- Wander-off timer = clamp(expected wash seconds * WanderFactor, MinWanderSeconds,
+	-- WanderOffSeconds). It runs through shakes, so a player who lets it shake twice can lose it.
+	WanderFactor = 4,
+	MinWanderSeconds = 30, -- seconds between patience updates sent to the washing player
 
 	Squirm = { -- Ticklish
 		IntervalMin = 1,
@@ -104,6 +119,9 @@ local TensionConfig = {
 		Common = {
 			Mood = "Calm",
 			PatienceSeconds = 40,
+			PatienceFactor = 6,
+			PatienceSlack = 12,
+			MinPatience = 15,
 			ShakeRedirty = 0.3,
 			ShakeRadius = 9,
 			Knockback = 35,
@@ -113,6 +131,9 @@ local TensionConfig = {
 		Rare = {
 			Mood = "Calm",
 			PatienceSeconds = 34,
+			PatienceFactor = 5,
+			PatienceSlack = 10,
+			MinPatience = 13,
 			ShakeRedirty = 0.35,
 			ShakeRadius = 10,
 			Knockback = 40,
@@ -122,6 +143,9 @@ local TensionConfig = {
 		Epic = {
 			Mood = "Ticklish",
 			PatienceSeconds = 28,
+			PatienceFactor = 4,
+			PatienceSlack = 7,
+			MinPatience = 10,
 			ShakeRedirty = 0.4,
 			ShakeRadius = 11,
 			Knockback = 48,
@@ -131,6 +155,9 @@ local TensionConfig = {
 		Legendary = {
 			Mood = "Ticklish",
 			PatienceSeconds = 25,
+			PatienceFactor = 3,
+			PatienceSlack = 5,
+			MinPatience = 8,
 			ShakeRedirty = 0.4,
 			ShakeRadius = 13,
 			Knockback = 55,
@@ -140,6 +167,9 @@ local TensionConfig = {
 		Mythic = {
 			Mood = "Grumpy",
 			PatienceSeconds = 22,
+			PatienceFactor = 2.5,
+			PatienceSlack = 4,
+			MinPatience = 7,
 			ShakeRedirty = 0.45,
 			ShakeRadius = 15,
 			Knockback = 65,
@@ -149,6 +179,9 @@ local TensionConfig = {
 		ZooGod = {
 			Mood = "Grumpy",
 			PatienceSeconds = 26,
+			PatienceFactor = 2.5,
+			PatienceSlack = 4.5,
+			MinPatience = 7.5,
 			ShakeRedirty = 0.45,
 			ShakeRadius = 18,
 			Knockback = 75,
@@ -158,6 +191,9 @@ local TensionConfig = {
 		Secret = {
 			Mood = "Grumpy",
 			PatienceSeconds = 26,
+			PatienceFactor = 2.5,
+			PatienceSlack = 4.5,
+			MinPatience = 7.5,
 			ShakeRedirty = 0.5,
 			ShakeRadius = 20,
 			Knockback = 80,
@@ -169,17 +205,24 @@ local TensionConfig = {
 	BySpecies = {
 		Cat = { Mood = "Ticklish" },
 		Goat = { Mood = "Grumpy" },
-		Cow = { Mood = "Calm", PatienceSeconds = 32 },
+		Cow = { Mood = "Calm", PatienceSeconds = 32, MinPatience = 18 },
 		Donkey = { Mood = "Grumpy" },
 		Penguin = { Mood = "Ticklish" },
 		Zebra = { Mood = "Grumpy" },
-		Panda = { Mood = "Calm", PatienceSeconds = 30 },
+		Panda = { Mood = "Calm", PatienceSeconds = 30, MinPatience = 16 },
 		Giraffe = { Mood = "Ticklish" },
 		Hippo = { ShakeRadius = 20, Knockback = 85, KnockUp = 48 }, -- the big one for clips
 		Elephant = { ShakeRadius = 22, Knockback = 90 },
 		Unicorn = { Mood = "Ticklish" },
 		-- Bought, not found: a paid animal must never be lost, and stays gentle.
-		Axolotl = { Mood = "Calm", PatienceSeconds = 40, WanderOffSeconds = 0 },
+		Axolotl = {
+			Mood = "Calm",
+			PatienceSeconds = 40,
+			PatienceFactor = 6,
+			PatienceSlack = 12,
+			MinPatience = 20,
+			WanderOffSeconds = 0,
+		},
 	} :: { [string]: ProfileOverride },
 }
 

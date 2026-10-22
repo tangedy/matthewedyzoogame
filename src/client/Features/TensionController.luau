@@ -29,7 +29,7 @@ local TensionController = {}
 
 local ROW_Y = 162 -- just under the HUD's wash card (y 8..158)
 local ROW_WIDTH = 380
-local ROW_HEIGHT = 28
+local ROW_HEIGHT = 22 -- y 162..184: clear of the index toast (y 214), only grazes the announcement (y 176)
 local MOOD_WIDTH = 104
 local TIMER_WIDTH = 104
 local GAP = 6
@@ -122,6 +122,7 @@ local function buildGui()
 	gui = Instance.new("ScreenGui")
 	gui.Name = "Tension"
 	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 1 -- the HUD announcement (y 176) can overlap the bottom of the row
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	row = Instance.new("Frame")
@@ -540,17 +541,20 @@ function TensionController.init(_initial: Types.InitialState)
 			end
 		end)
 
-		local devCommand = Remotes.event("TensionDev")
-		UserInputService.InputBegan:Connect(function(input, processed)
-			if processed then
-				return
-			end
-			if input.KeyCode == Enum.KeyCode.K then
-				devCommand:FireServer("shake")
-			elseif input.KeyCode == Enum.KeyCode.L then
-				devCommand:FireServer("wander")
-			end
-		end)
+		-- Same check as the server's isDeveloper, so live players' K/L stay free.
+		if RunService:IsStudio() or (game.CreatorId ~= 0 and player.UserId == game.CreatorId) then
+			local devCommand = Remotes.event("TensionDev")
+			UserInputService.InputBegan:Connect(function(input, processed)
+				if processed then
+					return
+				end
+				if input.KeyCode == Enum.KeyCode.K then
+					devCommand:FireServer("shake")
+				elseif input.KeyCode == Enum.KeyCode.L then
+					devCommand:FireServer("wander")
+				end
+			end)
+		end
 	end)
 end
 

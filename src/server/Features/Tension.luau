@@ -26,11 +26,14 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local TensionConfig = require(ReplicatedStorage.Shared.FeatureConfig.TensionConfig)
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Services = script.Parent.Parent.Services
 local BayService = require(Services.BayService)
 local CleaningService = require(Services.CleaningService)
+local EconomyService = require(Services.EconomyService)
 local Hooks = require(Services.Hooks)
 local PlayerDataService = require(Services.PlayerDataService)
 
@@ -83,7 +86,9 @@ local JOB_CHECK_INTERVAL = 0.25
 local DEV_COMMAND_INTERVAL = 0.3
 
 local states: { [Player]: State } = {}
-local calmUntil: { [Player]: number } = {}
+-- Seconds of Calm Treat banked per player. Only counts down while an animal is actually
+-- tense, so a treat bought between washes (or during grace) waits for the next one.
+local calmLeft: { [Player]: number } = {}
 local sessionStarted: { [Player]: boolean } = {} -- has had their first animal this session
 local lastDevAt: { [Player]: number } = {}
 local rng = Random.new()
@@ -101,8 +106,25 @@ local function isFiniteNumber(n: any): boolean
 	return typeof(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
 end
 
--- Rarity defaults with the species override on top. Limited (bought) animals never wander off.
-local function profileFor(species: string): TensionConfig.Profile?
+-- Seconds a wash would take spraying one patch at a time with this player's hose (an upper
+-- bound; CleaningService removes `power` from every patch a spray hits).
+local function expectedWashSeconds(player: Player, species: string, mutation: string?): number
+	local def = AnimalConfig.Animals[species]
+	local multiplier = Hooks.apply("WashTimeMultiplier", def.WashTimeMultiplier, player, species, mutation)
+	if not isFiniteNumber(multiplier) then
+		multiplier = def.WashTimeMultiplier
+	end
+	local tool = EconomyService.getTool(player) or ToolConfig[1]
+	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
+	if not isFiniteNumber(power) or power <= 0 then
+		power = tool.CleaningPower
+	end
+	return GameConfig.BaseWashSeconds * ToolConfig[1].CleaningPower * math.max(0.05, multiplier) / power
+end
+
+-- Rarity defaults with the species override on top, then patience and the wander-off timer
+-- sized from the expected wash time. Limited (bought) animals never wander off.
+local function profileFor(player: Player, species: string, mutation: string?): TensionConfig.Profile?
 	local def = AnimalConfig.Animals[species]
 	if not def then
 		return nil
@@ -117,7 +139,18 @@ local function profileFor(species: string): TensionConfig.Profile?
 	if def.Limited then
 		profile.WanderOffSeconds = 0
 	end
-	profile.PatienceSeconds = math.max(1, profile.PatienceSeconds)
+	local expected = expectedWashSeconds(player, species, mutation)
+	local cap = math.max(1, profile.PatienceSeconds)
+	profile.PatienceSeconds =
+		math.clamp(expected * profile.PatienceFactor + profile.PatienceSlack, math.min(profile.MinPatience, cap), cap)
+	if profile.WanderOffSeconds > 0 then
+		local wanderCap = profile.WanderOffSeconds
+		profile.WanderOffSeconds = math.clamp(
+			expected * TensionConfig.WanderFactor,
+			math.min(TensionConfig.MinWanderSeconds, wanderCap),
+			wanderCap
+		)
+	end
 	return profile
 end
 
@@ -131,17 +164,12 @@ local function rootOf(player: Player): BasePart?
 	return root
 end
 
-local function calmLeft(player: Player, now: number): number
-	local untilAt = calmUntil[player]
-	return if untilAt then math.max(0, untilAt - now) else 0
-end
-
-local function send(state: State, now: number)
+local function send(state: State)
 	local snapshot: TensionSnapshot = {
 		JobId = state.JobId,
 		Mood = state.Profile.Mood,
 		Patience = math.clamp(state.Patience / state.Profile.PatienceSeconds, 0, 1),
-		Calm = calmLeft(state.Player, now),
+		Calm = calmLeft[state.Player] or 0,
 		Wander = state.WanderLeft,
 		Event = state.Event,
 	}
@@ -481,7 +509,7 @@ local function wanderOff(player: Player, state: State)
 	announcement:FireClient(player, (string.gsub(line, "{name}", name)), if def then def.Rarity else "Common")
 end
 
-local function stepState(player: Player, state: State, dt: number, now: number)
+local function stepState(player: Player, state: State, dt: number)
 	if not player.Parent or not state.Model.Parent then
 		endState(player)
 		return
@@ -499,7 +527,16 @@ local function stepState(player: Player, state: State, dt: number, now: number)
 	local profile = state.Profile
 	local anim = state.Anim
 	local shaking = anim ~= nil and anim.Kind == "Shake"
-	local calm = calmLeft(player, now) > 0
+	local banked = calmLeft[player]
+	local calm = banked ~= nil
+	if banked then
+		local left = banked - dt
+		if left > 0 then
+			calmLeft[player] = left
+		else
+			calmLeft[player] = nil
+		end
+	end
 	if not calm and not shaking then
 		state.Patience = math.max(0, state.Patience - dt)
 		if state.WanderLeft then
@@ -543,19 +580,25 @@ local function stepState(player: Player, state: State, dt: number, now: number)
 
 	state.SendIn -= dt
 	if state.SendIn <= 0 or state.Event then
-		send(state, now)
+		send(state)
 	end
 end
 
 local function step(dt: number)
-	local now = os.clock()
 	for player, state in states do
-		stepState(player, state, dt, now)
+		stepState(player, state, dt)
 	end
 end
 
-local function startState(player: Player, jobId: string, species: string, model: Model, bay: Instance?)
-	local profile = profileFor(species)
+local function startState(
+	player: Player,
+	jobId: string,
+	species: string,
+	mutation: string?,
+	model: Model,
+	bay: Instance?
+)
+	local profile = profileFor(player, species, mutation)
 	if not profile then
 		return
 	end
@@ -579,7 +622,7 @@ local function startState(player: Player, jobId: string, species: string, model:
 		Event = nil,
 	}
 	states[player] = state
-	send(state, os.clock())
+	send(state)
 end
 
 local function onWashStarted(player: Player, info: Hooks.WashInfo)
@@ -596,17 +639,22 @@ local function onWashStarted(player: Player, info: Hooks.WashInfo)
 	if not data or data.LifetimeAnimalsWashed < TensionConfig.GraceWashes then
 		return
 	end
-	startState(player, info.JobId, info.Species, info.Model, info.Bay)
+	startState(player, info.JobId, info.Species, info.Mutation, info.Model, info.Bay)
 end
 
--- A Calm Treat freezes patience (and the wander-off timer). Bought treats stack, up to a cap.
+-- A Calm Treat freezes patience (and the wander-off timer). Bought treats stack, up to a cap,
+-- and are banked until the player is washing a tense animal.
 local function onCalmTreat(player: any, seconds: any)
-	if typeof(player) ~= "Instance" or not player:IsA("Player") or not isFiniteNumber(seconds) or seconds <= 0 then
+	if
+		typeof(player) ~= "Instance"
+		or not player:IsA("Player")
+		or not player.Parent
+		or not isFiniteNumber(seconds)
+		or seconds <= 0
+	then
 		return
 	end
-	local now = os.clock()
-	local start = math.max(calmUntil[player] or 0, now)
-	calmUntil[player] = math.min(start + seconds, now + TensionConfig.MaxCalmSeconds)
+	calmLeft[player] = math.min((calmLeft[player] or 0) + seconds, TensionConfig.MaxCalmSeconds)
 	local state = states[player]
 	if state then
 		state.Event = "Calmed"
@@ -635,7 +683,15 @@ local function onDevCommand(player: Player, action: any)
 		if not job or typeof(species) ~= "string" then
 			return
 		end
-		startState(player, job.Id, species, job.Model, job.Model.Parent)
+		local mutation = job.Model:GetAttribute("Mutation")
+		startState(
+			player,
+			job.Id,
+			species,
+			if typeof(mutation) == "string" then mutation else nil,
+			job.Model,
+			job.Model.Parent
+		)
 		state = states[player]
 		if not state then
 			return
@@ -646,6 +702,12 @@ local function onDevCommand(player: Player, action: any)
 	else
 		state.WanderLeft = math.min(state.WanderLeft or 5, 5)
 	end
+end
+
+-- For other features (e.g. Monetization): true while this player's current wash has tension
+-- running, i.e. a Calm Treat would take effect right now rather than being banked.
+function Tension.isActive(player: Player): boolean
+	return states[player] ~= nil
 end
 
 function Tension.init()
@@ -667,7 +729,7 @@ function Tension.init()
 	RunService.Heartbeat:Connect(step)
 	Players.PlayerRemoving:Connect(function(player)
 		endState(player)
-		calmUntil[player] = nil
+		calmLeft[player] = nil
 		sessionStarted[player] = nil
 		lastDevAt[player] = nil
 	end)

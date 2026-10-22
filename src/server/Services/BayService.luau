@@ -185,6 +185,7 @@ local function runOneJob(bay: Bay, owner: Player)
 	coroutine.yield() -- resumed by onJobComplete (or abandonWash)
 
 	if job.Abandoned then
+		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
 		setState(bay, "Departing")
 		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
 		disposeJob(bay)
