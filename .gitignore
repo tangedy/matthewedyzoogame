@@ -1,0 +1,17 @@
+# Rojo build output
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+!assets/**/*.rbxm
+!assets/**/*.rbxmx
+
+# Studio lock / sourcemaps
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json
+
+# selene generated std
+roblox.yml
+
+.DS_Store
