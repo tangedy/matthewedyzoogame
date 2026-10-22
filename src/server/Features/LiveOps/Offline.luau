@@ -104,13 +104,24 @@ function Offline.init()
 	Hooks.on("BayAssigned", function(player: Player)
 		payOut(player)
 	end)
-	Hooks.on("PlayerLeaving", touch) -- PlayerLoaded (and so measure) always fires first
+	Hooks.on("PlayerLeaving", function(player: Player)
+		-- PlayerLoaded (and so measure) always fires first. A player who never got a bay
+		-- (queued while all bays were taken) wasn't paid: carry the absence over to next time.
+		local away = awaySeconds[player]
+		local state = Common.state(player)
+		if not paid[player] and away and state then
+			state.LastSeen = Common.now() - away
+			PlayerDataService.markDirty(player)
+		else
+			touch(player)
+		end
+	end)
 
 	task.spawn(function()
 		while true do
 			task.wait(Config.LastSeenInterval)
 			for _, player in Players:GetPlayers() do
-				if paid[player] or awaySeconds[player] ~= nil then -- only once the absence is measured
+				if paid[player] then -- unpaid absences stay pending (see PlayerLeaving)
 					touch(player)
 				end
 			end

@@ -51,9 +51,11 @@ local function setupLeaderstats(player: Player)
 		folder = created
 	end
 	local parent = folder :: Instance
+	-- The player list sorts by the first stat; Stars is numeric, so it goes first (the
+	-- formatted Cash string would sort as text, putting "$9.5K" above "$120K").
+	local stars = value(parent, "IntValue", "Stars") :: IntValue
 	local cash = value(parent, "StringValue", "Cash") :: StringValue
 	local income = value(parent, "StringValue", "Income") :: StringValue
-	local stars = value(parent, "IntValue", "Stars") :: IntValue
 	if cash.Value == "" then
 		cash.Value = "$0"
 		income.Value = "$0/s"

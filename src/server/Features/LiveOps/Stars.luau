@@ -55,7 +55,12 @@ function Stars.compute(player: Player): number
 	local found = 0
 	for key, discovered in data.Index do
 		if discovered == true and typeof(key) == "string" then
-			found += 1
+			-- Only entries the denominator counts: existing, non-Limited species x known mutation.
+			local species, mutation = string.match(key, "^(.-):(.+)$")
+			local def = species and AnimalConfig.Animals[species]
+			if def and not def.Limited and mutation and MutationConfig.ByKey[mutation] then
+				found += 1
+			end
 		end
 	end
 	local points = countAtLeast(ZooService.totalIncome(player), Config.IncomeThresholds)

@@ -23,7 +23,10 @@ local TAG_NAME = "LiveOpsDailyTag"
 
 local Daily = {}
 
-local pending: { [Player]: string } = {} -- species overridden for the walk-in in progress
+-- Species overridden for the walk-in in progress. Only set when the override was returned,
+-- and cleared on every NextAnimal call, so a walk-in that died before WashStarted (spawn or
+-- path error) can never leave a stale entry that matches a later random animal.
+local pending: { [Player]: string } = {}
 local dailyJob: { [Player]: string } = {} -- job id of the daily animal being washed
 local rng = Random.new()
 
@@ -108,7 +111,8 @@ function Daily.init()
 	local dailyEvent = Remotes.event("LiveOpsDaily") -- (displayName, rarity, mutation, rewardMultiplier)
 
 	Hooks.modify("NextAnimal", function(value: any, player: Player, isFirst: boolean): any
-		if value ~= nil or isFirst or pending[player] or dailyJob[player] then
+		pending[player] = nil -- any entry still here belongs to a walk-in that never started
+		if value ~= nil or isFirst or dailyJob[player] then
 			return value -- another feature already chose, or the daily one is in progress
 		end
 		local state = Common.state(player)
@@ -148,6 +152,10 @@ function Daily.init()
 		addTag(info.Model)
 		local def = AnimalConfig.Animals[species]
 		dailyEvent:FireClient(player, def.DisplayName, def.Rarity, info.Mutation, Config.RewardMultiplier)
+	end)
+	Hooks.on("BayAssigned", function(player: Player)
+		pending[player] = nil -- a new bay's first animal skips NextAnimal
+		dailyJob[player] = nil
 	end)
 	Hooks.on("WashCompleted", function(player: Player, info: Hooks.WashInfo)
 		if dailyJob[player] == info.JobId then

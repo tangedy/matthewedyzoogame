@@ -43,17 +43,17 @@ Developer controls (Studio, or the place owner):
 - Or type `/storm start` / `/storm stop` in chat.
 - Or fire the `LiveOpsDev` remote with `"stormStart"` / `"stormStop"`.
 
-The server rate-limits these to one per second and ignores anyone else. Starting a storm runs one for `DevStormMinutes`. Stopping one also skips the rest of a scheduled storm that is in progress.
+The server rate-limits these to one command per second per developer (remote and both chat paths share the limit) and ignores anyone else. Starting a storm runs one for `DevStormMinutes`. Stopping one also skips the rest of a scheduled storm that is in progress.
 
 ### Offline earnings
-`LastSeen` is saved when the player leaves and refreshed every 60 s while they play. On join, the time away is capped at 2 h, passed through `Hooks.apply("OfflineSeconds", seconds, player)`, and turned into earnings: `ZooService.totalIncome(player) * seconds * 0.5`. The cash is deposited with `ZooService.addToPads` on `BayAssigned`, once the pens exist. Absences under 60 s earn nothing.
+`LastSeen` is saved when the player leaves and refreshed every 60 s while they play. On join, the time away is capped at 2 h, passed through `Hooks.apply("OfflineSeconds", seconds, player)`, and turned into earnings: `ZooService.totalIncome(player) * seconds * 0.5`. The cash is deposited with `ZooService.addToPads` on `BayAssigned`, once the pens exist. Absences under 60 s earn nothing. A player who leaves while still queued for a bay (so never paid) keeps the measured absence: `LastSeen` is written back as "now minus the unpaid absence", so it pays out on the next join.
 
 The owner gets a bouncy "WELCOME BACK!" panel with the amount. Its COLLECT button only closes the panel, because the cash is already on the pads. If the server calculates the earnings before the client controller is listening, the client picks the popup up with the `LiveOpsSync` RemoteFunction. That function answers once per player and never yields.
 
 ### Zoo star rating
 The rating runs from 1 to 5 stars and is built from three metrics:
 - Base income per second: thresholds 10 / 100 / 1K / 10K / 100K.
-- Index completion: 5% / 15% / 30% / 50% of species x mutations, not counting Limited species.
+- Index completion: 5% / 15% / 30% / 50% of species x mutations, not counting Limited species (discovered Limited animals and stale index keys for removed species or mutations do not count either).
 - Pens unlocked: 6 / 8.
 
 Each threshold reached is worth one point, and the points total picks the stars (`StarPoints`). The stars appear in three places:
@@ -64,7 +64,7 @@ Each threshold reached is worth one point, and the points total picks the stars 
 When a zoo reaches a rating it has never had before (saved as `BestStars`), the server announces it to everyone.
 
 ### Leaderstats and leaderboard
-LiveOps owns each player's `leaderstats` folder: `Cash` (StringValue, `UIStyle.formatMoney`), `Income` (StringValue, `$X/s`, base income x the `IncomeMultiplier` modifiers) and `Stars` (IntValue). They update every 2 s.
+LiveOps owns each player's `leaderstats` folder: `Stars` (IntValue), `Cash` (StringValue, `UIStyle.formatMoney`) and `Income` (StringValue, `$X/s`, base income x the `IncomeMultiplier` modifiers). They update every 2 s. `Stars` is created first because the player list sorts by the first stat, and the formatted money strings would sort as text.
 
 A "TOP ZOOS" board stands behind the plaza fountain at (17, 0, -7) and faces -X, toward the welcome sign. It ranks the top 8 players in the server by income per second, with their stars, and refreshes every 5 s.
 
@@ -81,10 +81,13 @@ A "TOP ZOOS" board stands behind the plaza fountain at (17, 0, -7) and faces -X,
 
 Players who had already washed animals before this feature shipped skip the funnel: all steps are marked done and nothing is logged.
 
-`LogEconomyEvent` records three cash sources:
+`LogEconomyEvent` records four cash sources:
 - Wash rewards (`Gameplay`, sku `Wash:<Species>`).
-- Sales (`Gameplay`, sku `Sell:<Species>`).
-- Offline earnings (`TimedReward`).
+- Sales (`Gameplay`, sku `Sell:<Species>`): the sale value only.
+- Pen income (`Gameplay`, sku `PenIncome`): the `IncomeTick` amounts summed per player and logged every `Analytics.IncomeFlushInterval` seconds and when the player leaves.
+- Offline earnings (`TimedReward`, sku `OfflineEarnings`): a pad deposit.
+
+Pad cash counts as a source when it lands on the pads, not when it is collected, so collecting it (or the pad cash paid out with a sale) is not logged again. `endingBalance` is always the wallet (`data.Coins`), so it does not include pad cash that hasn't been collected yet.
 
 Every AnalyticsService call is wrapped in pcall.
 
@@ -109,7 +112,7 @@ Every AnalyticsService call is wrapped in pcall.
 - `Stars`: `IncomeThresholds`, `IndexThresholds`, `PenThresholds`, `StarPoints`.
 - `Leaderstats.UpdateInterval`.
 - `Board`: `Position`, `Size`, `Height`, `Rows`, `UpdateInterval`.
-- `Analytics.PollInterval`.
+- `Analytics.PollInterval`, `Analytics.IncomeFlushInterval`.
 
 ## Check in Studio
 - [ ] Play: the player list shows Cash, Income and Stars for you, and they update within about 2 s of earning or spending.

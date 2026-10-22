@@ -107,10 +107,18 @@ function MudStorm.stop()
 	evaluate()
 end
 
+local lastCommandAt: { [Player]: number } = {}
+
+-- Shared by the remote and both chat paths: developer only, at most one command per second.
 local function devCommand(player: Player, action: string)
 	if not Common.isDeveloper(player) then
 		return
 	end
+	local clock = os.clock()
+	if lastCommandAt[player] and clock - lastCommandAt[player] < 1 then
+		return
+	end
+	lastCommandAt[player] = clock
 	if action == "start" then
 		MudStorm.start()
 	elseif action == "stop" then
@@ -172,16 +180,10 @@ function MudStorm.init()
 		return if active then mult * Config.WashTimeMultiplier else mult
 	end)
 
-	local lastCommandAt: { [Player]: number } = {}
 	Remotes.event("LiveOpsDev").OnServerEvent:Connect(function(player: Player, action: any)
-		if typeof(action) ~= "string" or not Common.isDeveloper(player) then
+		if typeof(action) ~= "string" then
 			return
 		end
-		local now = os.clock()
-		if lastCommandAt[player] and now - lastCommandAt[player] < 1 then
-			return
-		end
-		lastCommandAt[player] = now
 		if action == "stormStart" then
 			devCommand(player, "start")
 		elseif action == "stormStop" then

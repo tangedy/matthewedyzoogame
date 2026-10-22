@@ -63,6 +63,7 @@ local LiveOpsConfig = {
 
 	Analytics = {
 		PollInterval = 5, -- seconds between hose-upgrade / expansion funnel checks
+		IncomeFlushInterval = 120, -- pen income is summed per player and logged this often (and on leave)
 	},
 }
 

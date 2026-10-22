@@ -1,5 +1,8 @@
 -- AnalyticsService: the onboarding funnel (each step logged once per player, remembered in
--- data.Extra.LiveOps.Funnel) and economy sources (wash rewards, sales, offline earnings).
+-- data.Extra.LiveOps.Funnel) and economy sources: wash rewards, sales, and cash earned onto
+-- the pen pads (pen income, batched per player, and offline earnings). Pad cash counts as a
+-- source when it's earned, not when it's collected, so collecting it (or the pad cash paid out
+-- with a sale) is not logged again. endingBalance is always the wallet (data.Coins).
 -- Players who had already washed animals before the funnel existed skip it entirely.
 -- Every AnalyticsService call is wrapped in pcall: it can error in Studio or when throttled.
 
@@ -27,6 +30,8 @@ local STEPS = {
 local CURRENCY = "Cash"
 
 local Analytics = {}
+
+local unloggedIncome: { [Player]: number } = {} -- pen income earned since the last flush
 
 local function logStep(player: Player, step: number)
 	local state = Common.state(player)
@@ -65,6 +70,14 @@ local function logSource(
 			sku
 		)
 	end)
+end
+
+local function flushIncome(player: Player)
+	local amount = unloggedIncome[player]
+	if amount and amount >= 1 then
+		unloggedIncome[player] = amount - math.floor(amount)
+		logSource(player, amount, Enum.AnalyticsEconomyTransactionType.Gameplay, "PenIncome")
+	end
 end
 
 -- Steps that are states rather than events: checked on load and then polled.
@@ -118,9 +131,32 @@ function Analytics.init()
 			logSource(player, value, Enum.AnalyticsEconomyTransactionType.Gameplay, "Sell:" .. tostring(species))
 		end
 	end)
+	Hooks.on("IncomeTick", function(player: Player, amount: number)
+		if typeof(amount) == "number" and amount > 0 and amount < math.huge then
+			unloggedIncome[player] = (unloggedIncome[player] or 0) + amount
+		end
+	end)
+	Hooks.on("PlayerLeaving", function(player: Player)
+		flushIncome(player) -- profile still loaded here
+		unloggedIncome[player] = nil
+	end)
 	Offline.onEarned = function(player: Player, amount: number)
+		-- Deposited on the pads, so the wallet balance doesn't include it yet.
 		logSource(player, amount, Enum.AnalyticsEconomyTransactionType.TimedReward, "OfflineEarnings")
 	end
+	Players.PlayerRemoving:Connect(function(player)
+		task.defer(function() -- after PlayerLeaving's flush, whichever handler runs first
+			unloggedIncome[player] = nil
+		end)
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(LiveOpsConfig.Analytics.IncomeFlushInterval)
+			for _, player in Players:GetPlayers() do
+				flushIncome(player)
+			end
+		end
+	end)
 
 	task.spawn(function()
 		while true do
