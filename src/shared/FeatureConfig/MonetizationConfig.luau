@@ -113,7 +113,7 @@ local products: { Product } = {
 	{
 		Key = "AutoCollect2h",
 		Id = 0,
-		Robux = 99,
+		Robux = 49,
 		DisplayName = "Auto-Collect 2h",
 		Description = "Pens pay themselves for 2 hours while you play. Buying again stacks the time, up to 8 hours.",
 		Tab = "Boosts",
@@ -204,7 +204,7 @@ local passes: { Pass } = {
 	{
 		Key = "AutoCollectForever",
 		Id = 0,
-		Robux = 495, -- 5x the 2-hour auto-collect
+		Robux = 399,
 		DisplayName = "Auto-Collect Forever",
 		Description = "Pens pay themselves forever. You never have to walk the collect pads again.",
 		Order = 3,
