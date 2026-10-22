@@ -2,7 +2,7 @@
 -- Income cash per second while it lives in one of your pens (times its mutation multiplier).
 -- SpawnWeight is relative. RequiredToolTier and RarityConfig.RequiredCleaningPower both gate
 -- which animals can walk in, so a hose only rolls animals it has the clean power to wash.
--- Scripted teases (the 10th animal, and one rarity ahead after each upgrade) skip that gate.
+-- Scripted walk-ins of a rarity this hose cannot wash skip that gate.
 -- WashTimeMultiplier scales total dirt relative to BaseWashSeconds.
 -- Values are tuning proposals, not final economy.
 

@@ -14,6 +14,7 @@ local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
+local CleanGateService = require(script.Parent.CleanGateService)
 local DirtRenderer = require(script.Parent.DirtRenderer)
 local Hooks = require(script.Parent.Hooks)
 local MutationPayout = require(script.Parent.MutationPayout)
@@ -48,29 +49,40 @@ local function weightedPick<T>(entries: { T }, weightOf: (T) -> number): T?
 end
 
 -- First animal of a session is deterministic; later ones come from the weighted pool of
--- species the player's hose has the clean power to wash.
+-- species the player's hose has the clean power to wash. Rarities that still need Clean
+-- Now are mixed in by CleanGateService, with their chance taken from Common.
 function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Player?): string
 	if isFirst then
 		return AnimalConfig.FirstAnimal
 	end
 	local tool = ToolConfig[toolTier]
-	local power = if tool then tool.CleaningPower else 0
-	local pool = {}
+	local base = if tool then tool.CleaningPower else 0
+	local power = if player then CleanGateService.washPower(player, toolTier) else base
+	local weights: { [string]: number } = {}
 	for key, def in AnimalConfig.Animals do
+		-- Tool tier is the usual gate. Super Soap can also wash the next tier, and those
+		-- animals join the normal pool instead of the Clean Now chances.
+		local unlocked = def.RequiredToolTier <= toolTier and CleanPower.canClean(base, def.Rarity)
 		if
-			def.RequiredToolTier <= toolTier
+			(unlocked or CleanPower.canClean(power, def.Rarity))
 			and def.SpawnWeight > 0
 			and not def.Limited
-			and CleanPower.canClean(power, def.Rarity)
 			and AnimalBuilder.has(def.TemplateName)
 		then
-			table.insert(pool, key)
+			local weight = def.SpawnWeight
+			weights[key] = if player then math.max(0, Hooks.apply("SpawnWeight", weight, player, key)) else weight
 		end
+	end
+	if player then
+		weights = CleanGateService.mix(player, weights, power)
+	end
+	local pool = {}
+	for key in weights do
+		table.insert(pool, key)
 	end
 	table.sort(pool)
 	return weightedPick(pool, function(key)
-		local weight = AnimalConfig.Animals[key].SpawnWeight
-		return if player then math.max(0, Hooks.apply("SpawnWeight", weight, player, key)) else weight
+		return weights[key]
 	end) or AnimalConfig.FirstAnimal
 end
 

@@ -17,16 +17,16 @@ local player = Players.LocalPlayer
 
 local CleanGateController = {}
 
-local product = MonetizationConfig.ProductsByKey.CleanNow
-
 local tier = 1
 local soapEndsAt = 0
 local bay: Types.BaySnapshot? = nil
 local nextClickAt = 0
+local cleanKey = "CleanNow"
 
 local panel: Frame
 local title: TextLabel
 local body: TextLabel
+local cleanButton: TextButton
 local marker: BillboardGui
 
 local function hosePower(): number
@@ -69,14 +69,20 @@ local function refresh()
 			or rarity.Rainbow
 		then Color3.new(1, 1, 1)
 		else rarity.Color
-	local need = CleanPower.required(rarityKey)
 	local have = hosePower()
+	local need = CleanPower.required(rarityKey)
 	local hose = CleanPower.hoseName(rarityKey)
+	local steps = CleanPower.stepsAbove(have, rarityKey) or 0
+	local offer = MonetizationConfig.productForCleanSteps(steps) or MonetizationConfig.ProductsByKey.CleanNow
+	cleanKey = offer.Key
+	cleanButton.Text = `Clean Now · {offer.Robux} R$`
 	local powerLine = `Needs {CleanPower.format(need)} clean power. Your hose has {CleanPower.format(have)}.`
+	local above = if steps == 1 then "1 rarity above" else `{steps} rarities above`
+	local priceLine = if steps > 0 then `\n{above} the next one you can't wash, so this is {offer.Robux} R$.` else ""
 	if hose then
-		body.Text = `{powerLine}\nThe {hose} can wash this. Let it go, or clean it now.`
+		body.Text = `{powerLine}\nThe {hose} can wash this. Let it go, or clean it now.{priceLine}`
 	else
-		body.Text = `{powerLine}\nNo hose can wash this yet. Let it go, or clean it now.`
+		body.Text = `{powerLine}\nNo hose can wash this yet. Let it go, or clean it now.{priceLine}`
 	end
 end
 
@@ -105,7 +111,7 @@ local function build()
 	panel.Name = "Prompt"
 	panel.AnchorPoint = Vector2.new(0.5, 1)
 	panel.Position = UDim2.new(0.5, 0, 1, -16)
-	panel.Size = UDim2.fromOffset(420, 168)
+	panel.Size = UDim2.fromOffset(440, 196)
 	panel.BackgroundColor3 = Color3.fromRGB(28, 32, 48)
 	panel.Visible = false
 	panel.Parent = gui
@@ -121,7 +127,7 @@ local function build()
 	body = Instance.new("TextLabel")
 	body.BackgroundTransparency = 1
 	body.Position = UDim2.fromOffset(16, 48)
-	body.Size = UDim2.new(1, -32, 0, 52)
+	body.Size = UDim2.new(1, -32, 0, 78)
 	body.TextWrapped = true
 	body.Parent = panel
 	UIStyle.text(body, Color3.fromRGB(230, 236, 255), nil, 2)
@@ -129,8 +135,7 @@ local function build()
 	body.TextSize = 18
 
 	local leave = button("Let it go", Color3.fromRGB(88, 98, 120), Color3.new(1, 1, 1), 0.27)
-	local clean =
-		button(`Clean Now · {product.Robux} R$`, Color3.fromRGB(255, 196, 48), Color3.fromRGB(40, 28, 8), 0.73)
+	cleanButton = button("Clean Now", Color3.fromRGB(255, 196, 48), Color3.fromRGB(40, 28, 8), 0.73)
 	leave.Activated:Connect(function()
 		if os.clock() < nextClickAt then
 			return
@@ -138,12 +143,12 @@ local function build()
 		nextClickAt = os.clock() + 0.5
 		Remotes.event("LetAnimalGo"):FireServer()
 	end)
-	clean.Activated:Connect(function()
+	cleanButton.Activated:Connect(function()
 		if os.clock() < nextClickAt then
 			return
 		end
 		nextClickAt = os.clock() + 0.5
-		Remotes.event("MonetizationBuy"):FireServer(product.Key)
+		Remotes.event("MonetizationBuy"):FireServer(cleanKey)
 	end)
 
 	marker = Instance.new("BillboardGui")

@@ -17,6 +17,7 @@ export type Product = {
 	Order: number,
 	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck"
 	Hidden: boolean?, -- offered in the moment (not a shop card)
+	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
 	Seconds: number?, -- AutoCollect: play-time added per purchase
 	Color: Color3,
 	OncePerPlayer: boolean?, -- can only be bought once (an intro price)
@@ -178,6 +179,7 @@ local products: { Product } = {
 		Kind = "CleanNow",
 		Color = GOLD,
 		Hidden = true,
+		CleanSteps = 0, -- the next rarity this hose cannot wash
 	},
 	{
 		Key = "TruckAnimal",
@@ -237,10 +239,46 @@ local passes: { Pass } = {
 	},
 }
 
+-- One hidden product per step above the cheapest unwashable rarity. Roblox charges a
+-- fixed catalog price, so each step is its own developer product. Ids stay 0 until published.
+-- Epic through Secret is at most 4 steps above the next animal a hose cannot wash.
+local cleanNowBase = 39
+for _, product in products do
+	if product.Key == "CleanNow" then
+		cleanNowBase = product.Robux
+		break
+	end
+end
+for steps = 1, 4 do
+	table.insert(products, {
+		Key = `CleanNow{steps}`,
+		Id = 0,
+		Robux = cleanNowBase + 100 * steps,
+		DisplayName = "Clean Now",
+		Description = `Instantly clean one animal {steps} {if steps == 1 then "rarity" else "rarities"} above what your hose can reach.`,
+		Tab = "Boosts",
+		Order = 99,
+		Kind = "CleanNow",
+		Color = GOLD,
+		Hidden = true,
+		CleanSteps = steps,
+	})
+end
+
 local productsByKey: { [string]: Product } = {}
 for _, product in products do
 	productsByKey[product.Key] = product
 end
+
+local function productForCleanSteps(steps: number): Product?
+	for _, product in products do
+		if product.Kind == "CleanNow" and (product.CleanSteps or 0) == steps then
+			return product
+		end
+	end
+	return nil
+end
+
 local passesByKey: { [string]: Pass } = {}
 for _, pass in passes do
 	passesByKey[pass.Key] = pass
@@ -249,6 +287,7 @@ end
 return {
 	Products = products,
 	ProductsByKey = productsByKey,
+	productForCleanSteps = productForCleanSteps,
 	Passes = passes,
 	PassesByKey = passesByKey,
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },

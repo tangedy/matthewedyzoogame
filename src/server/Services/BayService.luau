@@ -34,6 +34,7 @@ type Job = {
 	Paid: boolean,
 	WaitingThread: thread?,
 	Abandoned: boolean?, -- set by abandonWash: the animal walks off unpaid
+	NeedsPurchase: boolean?, -- rarity this hose cannot wash; Clean Now or let it go
 }
 
 type Bay = {
@@ -133,11 +134,8 @@ local function runOneJob(bay: Bay, owner: Player)
 			mutationKey = override.Mutation
 		end
 	end
-	-- A scripted tease (10th animal, or the rarity after a hose upgrade) replaces the roll.
-	local tease = CleanGateService.roll(owner)
-	if tease then
-		animalKey = tease
-	end
+	-- Seeing a rarity this hose cannot wash clears the tiny bonus that was feeding it.
+	local needsPurchase = CleanGateService.observe(owner, animalKey)
 	bay.FirstAnimalGiven = true
 	local def = AnimalConfig.Animals[animalKey]
 
@@ -155,6 +153,7 @@ local function runOneJob(bay: Bay, owner: Player)
 		),
 		Model = model,
 		Paid = false,
+		NeedsPurchase = needsPurchase,
 	}
 	bay.Job = job
 	announce(owner, animalKey, mutationKey)
@@ -217,6 +216,9 @@ local function runOneJob(bay: Bay, owner: Player)
 		end
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
 		GuideService.onWashCompleted(owner)
+		if not job.NeedsPurchase then
+			CleanGateService.onWashed(owner)
+		end
 	end
 	AnimalService.celebrate(model)
 

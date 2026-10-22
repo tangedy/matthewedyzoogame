@@ -17,6 +17,24 @@ function CleanPower.canClean(power: number, rarityKey: string): boolean
 	return typeof(power) == "number" and power + 1e-4 >= CleanPower.required(rarityKey)
 end
 
+-- How many rarity steps this animal sits above the cheapest one `power` cannot wash.
+-- 0 is that next animal. nil means this hose can already wash it (or the rarity is unknown).
+function CleanPower.stepsAbove(power: number, rarityKey: string): number?
+	if CleanPower.canClean(power, rarityKey) then
+		return nil
+	end
+	local rarity = RarityConfig.ByKey[rarityKey]
+	if not rarity then
+		return nil
+	end
+	for _, entry in RarityConfig.List do
+		if not CleanPower.canClean(power, entry.Key) then
+			return math.max(0, rarity.Order - entry.Order)
+		end
+	end
+	return nil
+end
+
 -- The cheapest hose that can wash this rarity, or nil when none of them can.
 function CleanPower.hoseName(rarityKey: string): string?
 	local need = CleanPower.required(rarityKey)
