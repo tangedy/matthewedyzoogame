@@ -11,8 +11,10 @@ local EconomyService = require(Services.EconomyService)
 local CleaningService = require(Services.CleaningService)
 local BayService = require(Services.BayService)
 local DevService = require(Services.DevService)
+local ZooService = require(Services.ZooService)
 
-BayService.init(WorldBuilder.build())
+WorldBuilder.init()
+ZooService.init()
 PlayerDataService.init()
 EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
@@ -34,6 +36,8 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		ToolName = if tool then tool.Name else "",
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		Bay = BayService.getSnapshot(player),
+		Zoo = ZooService.getZooSummary(player),
+		Index = if data then data.Index else nil,
 	}
 	initialStatePending[player] = nil
 	return state

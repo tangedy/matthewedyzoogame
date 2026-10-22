@@ -34,35 +34,56 @@ stylua src && selene src
 
 | Path | Becomes | Purpose |
 | --- | --- | --- |
-| `src/shared` | `ReplicatedStorage.Shared` | `GameConfig`, `ToolConfig`, `AnimalConfig`, `Types`, `Remotes` |
+| `src/shared` | `ReplicatedStorage.Shared` | `GameConfig`, `ToolConfig`, `AnimalConfig`, `RarityConfig`, `MutationConfig`, `UIStyle`, `Types`, `Remotes` |
 | `src/server` | `ServerScriptService.Server` | `ServerBootstrap` + `Services/` |
 | `src/client` | `StarterPlayerScripts.Client` | `ClientBootstrap` + `Controllers/` |
 
 Server services:
 
-- **WorldBuilder** builds the ground and wash bays.
-- **AnimalBuilder** builds the placeholder block animals and their dirt patches.
+- **WorldBuilder** builds the ground, wash bays, and each bay's zoo pens and expansion stand.
+- **AnimalBuilder** builds animals: real models from `ServerStorage.AnimalTemplates` when present (see the contract at the top of the file), otherwise block placeholders. It also applies the rarity looks.
 - **DirtRenderer** handles how dirt looks. It's the only place to change when trying decals or texture masks.
 - **AnimalService** handles selection, the walk in and out, celebration and disposal.
 - **CleaningService** does the server-authoritative spray validation, keeps dirt state and progress, and signals completion.
 - **BayService** handles bay ownership and the per-bay state machine `Empty → Arriving → Washing → Completing → Departing`.
 - **PlayerDataService** loads, validates and saves profiles through DataStore. It uses a session lock, autosaves every 60 s, saves on leave and on shutdown, and never saves a profile whose load failed.
-- **EconomyService** pays out completed washes and validates hose upgrade purchases.
+- **EconomyService** pays out completed washes, validates hose upgrade purchases, and handles coin spending and grants.
+- **ZooService** runs the Steal a Brainrot-style zoo:
+  - Washed animals wait in the cache.
+  - You carry an animal to a pen to place it or swap it.
+  - You can sell animals from the cache or from a pen.
+  - Penned animals earn cash per second into a collect pad.
+  - It also handles zoo expansion and index discoveries.
 
 Client controllers:
 
 - **CleaningController** handles input, aiming, the spray beam, splash and sound, the mobile SPRAY button, the reticle and the remaining-dirt highlight.
+- **OnboardingController** shows the first-wash "Wash me!" marker and the "you can afford an upgrade" hint.
 - **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
+- **ZooController** shows what you're carrying and the "cache full" hint, puts other players' prompts out of reach, and animates rainbow labels.
+- **IndexController** shows the Index button and panel (species × mutation) and new-discovery toasts.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
 
 ## Status
 
 - **Milestones 1–2:** done and tested in Studio.
 - **Milestone 3** (three animals, hose tiers, shop, saving): shop and purchases verified in a Studio playtest. Saving still needs a published place to test.
-- **Milestone 4** (multiplayer and mobile): server hardening verified in a solo playtest. A real 2-player test and a phone test are still needed. See [TESTING.md](TESTING.md).
+- **Milestone 4** (multiplayer and mobile): server hardening verified in a solo playtest. A real 2-player test and a phone test are still needed.
+- **Milestone 5** (presentation): mud splatters, a muddy-to-clean body tint, mud bursts, soap foam, a "Squeaky clean!" banner, onboarding markers, a shop hint and shorter downtime. Verified in a Studio playtest, except the markers, which still need checking by eye.
+
+See [TESTING.md](TESTING.md). Everything in the implementation design doc is now built. Real animal art and real sound assets are the remaining production work: the code takes them through `AnimalBuilder` (the model contract) and `GameConfig.Sounds`.
 
 Developer keys (Studio and place owner only): **C** cleans the current animal, **G** grants coins.
 
-The pig, sheep and cow are all in the spawn pool. The first animal each session is always the pig.
+**Zoo loop (Steal a Brainrot style)**, which replaces roadmap Phases A–B:
 
-**Next, Milestone 5:** presentation (better animal assets, improved dirt look, sound and effects, economy tuning).
+- **Bays:** a bay is built only while a player owns it, so there are no empty lanes.
+- **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead.
+- **Full cache:** while the cache is full, no new animal walks in.
+- **Income:** penned animals earn cash per second onto the green pad in front of their pen. Step on the pad to collect it.
+- **Rarity:** each of the 22 species has a fixed tier: Common, Rare, Epic, Legendary, Mythic, Zoo God or Secret. Better hoses (5 tiers) unlock rarer tiers.
+- **Mutations:** every walk-in rolls Normal, Gold (×1.25), Diamond (×1.5) or Rainbow (×10).
+- **Index:** 22 species × 4 mutations = 88 entries.
+- **UI:** Steal a Brainrot-style chunky outlined text, rarity colours (an animated rainbow for Zoo God), and $ cash with K/M/B suffixes.
+
+**Next:** Phase C (moods and patience) and the remaining roadmap phases.

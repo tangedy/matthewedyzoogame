@@ -1,6 +1,6 @@
 # Studio test checklist
 
-Milestones 1 and 2 passed in Studio. Claude ran parts of Milestones 3 and 4 in a solo Studio playtest through Studio MCP; those checks are marked ✅ below. The rest still need you: anything that needs saving (a published place), two real players, or a phone.
+Milestones 1 and 2 passed in Studio. Claude ran parts of Milestones 3–5 and the zoo loop in solo Studio playtests through Studio MCP; those checks are marked ✅ below. The rest still need you: anything that needs saving (a published place), two real players, or a phone.
 
 Watch the **Output** window for `[BayService]` / `[PlayerDataService]` warnings or script errors the whole time.
 
@@ -76,6 +76,50 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] Aim assist never snaps to a patch hidden behind the body or out of range.
 - [ ] A full wash is comfortable with thumbs only. Opening the shop with the tap prompt works.
 - [ ] The mud fade looks clear at phone size. This is the doc's #1 technical risk, so note how it feels.
+
+## Milestone 5: presentation
+
+Verified in a Studio playtest:
+
+- [x] ✅ Mud patches have 2 splatters each (24 patches, 48 splatters on the pig).
+- [x] ✅ The animal arrives mud-tinted and its colour brightens as it's cleaned, back to its true colour at 100%.
+- [x] ✅ "Squeaky clean!" appears above the animal on completion.
+- [x] ✅ The next animal can be sprayed about 6–7 s after the last one finished.
+- [x] ✅ The first time an upgrade is affordable, a yellow banner says "You can afford the Strong Hose!…" and the marker is attached to the bay's upgrade counter.
+- [x] ✅ No script errors in Output.
+
+Check by eye (the screenshot tool couldn't render these):
+
+- [ ] On the first wash of a session, a bobbing **"Wash me! ▼"** marker floats over the animal's head and disappears once you've cleaned about 15%.
+- [ ] The **"Upgrade! ▼"** marker floats over the HOSE UPGRADES stand and disappears when you open the shop.
+- [ ] Each patch that comes clean bursts into mud chunks with a squelch, and soap bubbles appear where the spray hits the animal.
+- [ ] The mud reads as brown mud, not black spots, from normal play distance. If not, tune `MUD_COLOR` in `AnimalBuilder` and `DirtRenderer`.
+- [ ] Doc pass criteria: a new player finishes the first wash without help, the remaining dirt is easy to find, the dirty-to-clean change is obvious, and washing (not menus or waiting) stays the focus.
+
+## Zoo loop: cache, carry, income, tiers, mutations
+
+Verified in a Studio playtest (forced washes with the C dev key):
+
+- [x] ✅ Only the occupied bay is built (`Workspace.WashBays` holds just `Bay1` in solo play).
+- [x] ✅ Wash rewards are paid in cash and scale with income and mutation (Pig $45, Gold Sheep $112). A first discovery pays double.
+- [x] ✅ Each washed animal walks into the cache. After 3, the bay shows `CacheFull` and no new animal arrives until there's room.
+- [x] ✅ Picking up from the cache puts a small copy of the animal on your head, and `CarryChanged` reports it.
+- [x] ✅ Using a pen's gate prompt while carrying an animal places it. On an occupied pen it swaps: the old animal sells for 60 s of its income plus its uncollected cash (+$201 for a Pig).
+- [x] ✅ A penned animal fills its pad at its income rate (Pig: $12 after 4 s), and stepping on the pad collects it.
+- [x] ✅ Once the cache has room again, washing resumes.
+- [x] ✅ No script errors.
+
+Check by eye or with saving:
+
+- [ ] **Nameplates:** each animal shows its mutation (if any), name, rarity in its tier colour, and green `$X/s`. Zoo God text cycles through a rainbow, and Secret is black with a white outline.
+- [ ] **HUD:** big green cash with `+$X/s` on the left, and the INDEX button below it. The wash panel at the top shows name, rarity, mutation and a black-outlined clean bar.
+- [ ] **Carrying:** the "CARRYING …" banner appears while you hold an animal. Dying or resetting puts the animal back in the cache.
+- [ ] **Hints:** the "Cache full!" hint shows when the line is paused. For a new player, "Pick me up!" and "Place here!" markers guide the first placement.
+- [ ] **Selling from the cache:** hold F at a waiting animal to sell it for 60 s of its income.
+- [ ] **Hose shop:** shows `$` prices and "unlocks Epic animals" (and so on). Rarer tiers only walk in after buying the matching hose.
+- [ ] **Announcements:** a Mythic, Zoo God or Secret walk-in, or any Rainbow mutation, shows a server-wide message.
+- [ ] **Saving (published place):** pens, uncollected cash, cache contents and the index all come back after rejoining. Saves made before this change convert over (Legendary becomes Gold, Mythic becomes Rainbow).
+- [ ] **Two players:** each gets their own bay, a second bay appears and disappears with its player, and nobody can use another player's prompts or pads.
 
 ## Report back
 

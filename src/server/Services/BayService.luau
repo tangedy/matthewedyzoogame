@@ -1,5 +1,8 @@
 -- Bay assignment, ownership, and the per-bay animal lifecycle:
---   Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
+--   [CacheFull ->] Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
+-- Bays are built when a player is given a slot and destroyed when they leave. After a wash
+-- the animal walks into the bay's cache (Departing). While the cache is full, no new animal
+-- walks in (CacheFull) until the owner places or sells one.
 --
 -- BayService owns job state. Each owned bay runs one thread that walks the state machine;
 -- releasing the bay cancels that thread and disposes of whatever the job left behind.
@@ -9,17 +12,22 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
+local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local AnimalService = require(script.Parent.AnimalService)
 local CleaningService = require(script.Parent.CleaningService)
 local EconomyService = require(script.Parent.EconomyService)
+local WorldBuilder = require(script.Parent.WorldBuilder)
+local ZooService = require(script.Parent.ZooService)
 
 type Job = {
 	Id: string,
 	AnimalKey: string,
+	Mutation: string,
 	Reward: number,
-	Model: Model,
+	Model: Model?, -- nil once handed over to the cache
 	Paid: boolean,
 	WaitingThread: thread?,
 }
@@ -42,12 +50,13 @@ type Bay = {
 
 local BayService = {}
 
-local bays: { Bay } = {}
+local bayBySlot: { [number]: Bay } = {}
 local bayByOwner: { [Player]: Bay } = {}
-local waiting: { Player } = {} -- players who joined while every bay was taken, oldest first
+local waiting: { Player } = {} -- players who joined while every slot was taken, oldest first
 
 local bayStateChanged = Remotes.event("BayStateChanged")
 local washCompleted = Remotes.event("WashCompleted")
+local announcement = Remotes.event("Announcement")
 
 local function snapshot(bay: Bay): Types.BaySnapshot
 	local job = bay.Job
@@ -57,6 +66,8 @@ local function snapshot(bay: Bay): Types.BaySnapshot
 		State = bay.State,
 		JobId = job and job.Id,
 		AnimalName = def and def.DisplayName,
+		Rarity = def and def.Rarity,
+		Mutation = job and job.Mutation,
 		Reward = job and job.Reward,
 		Progress = job and CleaningService.getProgress(job.Id),
 	}
@@ -66,12 +77,6 @@ local function setState(bay: Bay, state: Types.BayState)
 	bay.State = state
 	if bay.Owner then
 		bayStateChanged:FireClient(bay.Owner, snapshot(bay))
-	end
-end
-
-local function setLabel(bay: Bay)
-	if bay.Label then
-		bay.Label.Text = if bay.Owner then bay.Owner.DisplayName .. "'s Wash Bay" else "Wash Bay " .. bay.Index
 	end
 end
 
@@ -96,24 +101,49 @@ local function onJobComplete(bay: Bay, job: Job)
 	end
 end
 
+local function announce(owner: Player, animalKey: string, mutationKey: string)
+	local def = AnimalConfig.Animals[animalKey]
+	local rarity = RarityConfig.ByKey[def.Rarity]
+	local mutation = MutationConfig.ByKey[mutationKey]
+	if not (rarity.Announce or mutation.Announce) then
+		return
+	end
+	local name = if mutationKey == MutationConfig.Default
+		then def.DisplayName
+		else `{mutation.DisplayName} {def.DisplayName}`
+	announcement:FireAllClients(`{owner.DisplayName} found a {rarity.DisplayName} {name}!`, def.Rarity)
+end
+
 local function runOneJob(bay: Bay, owner: Player)
+	-- Hold the line while the cache is full; the owner has to place or sell first.
+	if not ZooService.cacheHasRoom(owner) then
+		setState(bay, "CacheFull")
+		while not ZooService.cacheHasRoom(owner) do
+			task.wait(0.5)
+		end
+	end
+
 	setState(bay, "Empty")
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
-	local animalKey = AnimalService.pickNext(not bay.FirstAnimalGiven, tier)
+	local isFirst = not bay.FirstAnimalGiven
+	local animalKey = AnimalService.pickNext(isFirst, tier)
+	local mutationKey = AnimalService.pickMutation(isFirst)
 	bay.FirstAnimalGiven = true
 	local def = AnimalConfig.Animals[animalKey]
 
 	local jobId = HttpService:GenerateGUID(false)
-	local model, patches = AnimalService.spawn(animalKey, jobId, bay.Entrance.CFrame, bay.Model)
+	local model, patches = AnimalService.spawn(animalKey, mutationKey, jobId, bay.Entrance.CFrame, bay.Model)
 	local job: Job = {
 		Id = jobId,
 		AnimalKey = animalKey,
-		Reward = math.max(0, def.BaseReward),
+		Mutation = mutationKey,
+		Reward = math.max(0, ZooService.washReward(animalKey, mutationKey)),
 		Model = model,
 		Paid = false,
 	}
 	bay.Job = job
+	announce(owner, animalKey, mutationKey)
 
 	setState(bay, "Arriving")
 	AnimalService.moveTo(model, bay.WashPosition.CFrame, GameConfig.ArriveDuration)
@@ -138,15 +168,34 @@ local function runOneJob(bay: Bay, owner: Player)
 	setState(bay, "Completing")
 	if not job.Paid then
 		job.Paid = true
-		if EconomyService.awardWash(owner, job.Reward) then
+		-- First wash of this species + mutation is an index discovery with a bonus on top.
+		local bonus = 0
+		if ZooService.discover(owner, animalKey, mutationKey) then
+			bonus = math.floor(job.Reward * GameConfig.DiscoveryBonusMultiplier)
+		end
+		if EconomyService.awardWash(owner, job.Reward + bonus) then
 			local updated = EconomyService.getProfile(owner)
-			washCompleted:FireClient(owner, jobId, job.Reward, if updated then updated.Coins else 0)
+			washCompleted:FireClient(owner, jobId, job.Reward + bonus, if updated then updated.Coins else 0)
 		end
 	end
 	AnimalService.celebrate(model)
 
+	-- Walk into the cache. Room was checked before this animal walked in, and only this
+	-- thread adds to the cache, so it still fits.
 	setState(bay, "Departing")
-	AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey)
+	if record and slot then
+		local pos = model:GetPivot().Position
+		local facing = (slot.Position - pos) * Vector3.new(1, 0, 1)
+		if facing.Magnitude > 0.1 then
+			AnimalService.moveTo(model, CFrame.lookAt(slot.Position, slot.Position + facing), GameConfig.DepartDuration)
+		end
+		AnimalService.moveTo(model, slot, 0.5) -- turn to face out of the cache
+		job.Model = nil
+		ZooService.adoptIntoCache(owner, record, model)
+	else
+		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+	end
 	disposeJob(bay)
 	setState(bay, "Empty")
 	task.wait(GameConfig.NextAnimalDelay)
@@ -164,58 +213,61 @@ local function runBay(bay: Bay, owner: Player)
 	end
 end
 
-function BayService.init(bayModels: { Model })
-	for _, model in bayModels do
-		local post = model:FindFirstChild("SignPost")
-		local sign = post and post:FindFirstChild("Sign")
-		table.insert(bays, {
-			Name = model.Name,
-			Index = (model:GetAttribute("BayIndex") or #bays + 1) :: number,
-			Model = model,
-			Entrance = model:FindFirstChild("Entrance") :: BasePart,
-			WashPosition = model:FindFirstChild("WashPosition") :: BasePart,
-			Exit = model:FindFirstChild("Exit") :: BasePart,
-			Spawn = model:FindFirstChild("Spawn") :: SpawnLocation,
-			Label = sign and sign:FindFirstChild("BayLabel") :: TextLabel?,
-			Owner = nil,
-			State = "Empty",
-			Job = nil,
-			Thread = nil,
-			FirstAnimalGiven = false,
-		})
-	end
+local function makeBay(index: number): Bay
+	local model = WorldBuilder.buildBay(index)
+	local post = model:FindFirstChild("SignPost")
+	local sign = post and post:FindFirstChild("Sign")
+	return {
+		Name = model.Name,
+		Index = index,
+		Model = model,
+		Entrance = model:FindFirstChild("Entrance") :: BasePart,
+		WashPosition = model:FindFirstChild("WashPosition") :: BasePart,
+		Exit = model:FindFirstChild("Exit") :: BasePart,
+		Spawn = model:FindFirstChild("Spawn") :: SpawnLocation,
+		Label = sign and sign:FindFirstChild("BayLabel") :: TextLabel?,
+		Owner = nil,
+		State = "Empty",
+		Job = nil,
+		Thread = nil,
+		FirstAnimalGiven = false,
+	}
 end
 
--- Returns false when every bay is taken; the player can still walk around and watch.
+-- Builds a bay in the lowest free slot. Returns false when every slot is taken (the player
+-- is queued and gets the next bay that frees up).
 function BayService.assign(player: Player): boolean
 	if bayByOwner[player] then
 		return true
 	end
-	local free: Bay?
-	for _, bay in bays do
-		if not bay.Owner then
-			free = bay
+	local index: number? = nil
+	for i = 1, GameConfig.BayCount do
+		if not bayBySlot[i] then
+			index = i
 			break
 		end
 	end
-	if not free then
+	if not index then
 		if not table.find(waiting, player) then
 			table.insert(waiting, player)
 			warn(`[BayService] No free bay for {player.Name}; queued ({#waiting} waiting)`)
 		end
 		return false
 	end
-	local bay = free :: Bay
 
+	local bay = makeBay(index)
+	bayBySlot[index] = bay
 	bay.Owner = player
-	bay.FirstAnimalGiven = false
 	bayByOwner[player] = bay
-	setLabel(bay)
+	if bay.Label then
+		bay.Label.Text = player.DisplayName .. "'s Zoo"
+	end
 	player.RespawnLocation = bay.Spawn
 	local character = player.Character
 	if character then
 		character:PivotTo(bay.Spawn.CFrame + Vector3.new(0, 3, 0))
 	end
+	ZooService.attach(player, bay.Model)
 	bay.Thread = task.spawn(runBay, bay, player)
 	return true
 end
@@ -237,10 +289,11 @@ function BayService.release(player: Player)
 		task.cancel(thread)
 	end
 	disposeJob(bay) -- unfinished washes are never paid
-	bay.State = "Empty"
-	setLabel(bay)
+	ZooService.detach(player)
+	bayBySlot[bay.Index] = nil
+	bay.Model:Destroy()
 
-	-- Hand the freed bay to the longest-waiting player still in the server.
+	-- Hand the freed slot to the longest-waiting player still in the server.
 	while #waiting > 0 do
 		local nextPlayer = table.remove(waiting, 1) :: Player
 		if nextPlayer.Parent then

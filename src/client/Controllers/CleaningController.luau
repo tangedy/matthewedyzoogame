@@ -40,6 +40,7 @@ local hintHighlight: Highlight? = nil
 local impactPart: Part
 local impactAttachment: Attachment
 local splash: ParticleEmitter
+local foam: ParticleEmitter
 local beam: Beam
 local spraySound: Sound
 local fallbackNozzle: Attachment? = nil
@@ -172,8 +173,15 @@ local function pulseHint(animal: Model?)
 	end
 	for _, patch in patches:GetChildren() do
 		if patch:IsA("BasePart") then
+			local color = HINT_MUD:Lerp(HINT_GLOW, 0.35 + 0.5 * pulse)
 			patch.Material = Enum.Material.Neon
-			patch.Color = HINT_MUD:Lerp(HINT_GLOW, 0.35 + 0.5 * pulse)
+			patch.Color = color
+			for _, splat in patch:GetChildren() do
+				if splat:IsA("BasePart") then
+					splat.Material = Enum.Material.Neon
+					splat.Color = color
+				end
+			end
 		end
 	end
 end
@@ -204,6 +212,24 @@ local function buildEffects()
 	splash.Color = ColorSequence.new(SPRAY_COLOR)
 	splash.LightEmission = 0.4
 	splash.Parent = impactAttachment
+
+	-- Soap bubbles where the spray lands on the animal
+	foam = Instance.new("ParticleEmitter")
+	foam.Enabled = false
+	foam.Rate = 18
+	foam.Lifetime = NumberRange.new(0.8, 1.4)
+	foam.Speed = NumberRange.new(1, 2.5)
+	foam.SpreadAngle = Vector2.new(180, 180)
+	foam.Acceleration = Vector3.new(0, 2, 0)
+	foam.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(0.7, 0.4),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	foam.Transparency = NumberSequence.new(0.2, 0.6)
+	foam.Color = ColorSequence.new(Color3.fromRGB(240, 250, 255))
+	foam.LightEmission = 0.2
+	foam.Parent = impactAttachment
 
 	beam = Instance.new("Beam")
 	beam.Enabled = false
@@ -314,6 +340,7 @@ end
 local function stopEffects()
 	beam.Enabled = false
 	splash.Enabled = false
+	foam.Enabled = false
 	if spraySound.IsPlaying then
 		spraySound:Stop()
 	end
@@ -389,6 +416,7 @@ local function onHeartbeat()
 	beam.Attachment0 = getNozzle(root)
 	beam.Enabled = true
 	splash.Enabled = sprayHit ~= nil
+	foam.Enabled = onTarget
 	if not spraySound.IsPlaying then
 		spraySound:Play()
 	end

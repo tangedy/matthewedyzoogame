@@ -6,7 +6,10 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -15,7 +18,7 @@ local player = Players.LocalPlayer
 
 local ShopController = {}
 
-local FONT = Enum.Font.FredokaOne
+local FONT = UIStyle.Font
 local PANEL_COLOR = Color3.fromRGB(25, 30, 45)
 local BUY_COLOR = Color3.fromRGB(80, 200, 110)
 local DISABLED_COLOR = Color3.fromRGB(110, 110, 120)
@@ -52,7 +55,25 @@ local function label(props: { [string]: any }): TextLabel
 	for key, value in props do
 		(l :: any)[key] = value
 	end
+	UIStyle.text(l, l.TextColor3)
 	return l
+end
+
+-- "Unlocks Epic animals" for the tiers of species that first walk in at this hose tier.
+local function unlocksText(toolTier: number): string
+	local tiers: { [string]: boolean } = {}
+	for _, def in AnimalConfig.Animals do
+		if def.RequiredToolTier == toolTier then
+			tiers[def.Rarity] = true
+		end
+	end
+	local names = {}
+	for _, rarity in RarityConfig.List do
+		if tiers[rarity.Key] then
+			table.insert(names, rarity.DisplayName)
+		end
+	end
+	return if #names > 0 then `, unlocks {table.concat(names, " & ")} animals` else ""
 end
 
 local function refresh()
@@ -65,9 +86,9 @@ local function refresh()
 	if nextTool then
 		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextTool.Name}`
-		gainLabel.Text = `Cleaning speed +{gain}%`
+		gainLabel.Text = `Cleaning speed +{gain}%{unlocksText(nextTool.Tier)}`
 		buyButton.Visible = true
-		buyButton.Text = `Buy for {nextTool.Price} coins`
+		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
 		local affordable = coins >= nextTool.Price
 		buyButton.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
 	else
@@ -173,7 +194,7 @@ local function buildGui()
 		end
 		if coins < nextTool.Price then
 			-- Instant feedback; the server would reject it anyway.
-			setMessage(`Not enough coins. You need {nextTool.Price - coins} more.`, false)
+			setMessage(`Not enough cash. You need {UIStyle.formatMoney(nextTool.Price - coins)} more.`, false)
 			return
 		end
 		awaitingResult = true

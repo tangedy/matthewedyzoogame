@@ -166,6 +166,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 	end
 
 	local progress = progressOf(job)
+	DirtRenderer.setGrime(job.Model, progress)
 	if isComplete(job) then
 		job.Active = false -- lock before anything else so no further cleaning is accepted
 		progressChanged:FireClient(player, job.Id, 1, false)
@@ -232,6 +233,7 @@ function CleaningService.forceComplete(player: Player): boolean
 			DirtRenderer.clear(patch.Part)
 		end
 	end
+	DirtRenderer.setGrime(job.Model, 1)
 	progressChanged:FireClient(player, job.Id, 1, false)
 	task.spawn(job.OnComplete)
 	return true

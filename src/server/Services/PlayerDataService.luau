@@ -12,11 +12,30 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 
-local SCHEMA_VERSION = 1
+-- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
+-- v3: species have fixed rarities and walk-ins roll a mutation instead; adds the cache and
+-- each pen's uncollected cash. v2 rarities map onto mutations when migrating.
+local SCHEMA_VERSION = 3
+
+export type CachedAnimal = {
+	Id: string,
+	Species: string,
+	Mutation: string,
+}
+
+export type OwnedAnimal = {
+	Id: string,
+	Species: string,
+	Mutation: string,
+	Pen: number,
+	Pending: number, -- cash earned but not yet collected from the pen's pad
+}
 
 export type SavedData = {
 	SchemaVersion: number,
@@ -24,6 +43,11 @@ export type SavedData = {
 	ToolTier: number,
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
+	ZooSize: number,
+	Animals: { OwnedAnimal },
+	Cache: { CachedAnimal },
+	Index: { [string]: boolean }, -- "Species:Mutation" -> discovered
+	NextAnimalId: number,
 }
 
 type Profile = {
@@ -50,7 +74,45 @@ local function defaults(): SavedData
 		ToolTier = 1,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
+		ZooSize = GameConfig.Zoo.StartPens,
+		Animals = {},
+		Cache = {},
+		Index = {},
+		NextAnimalId = 1,
 	}
+end
+
+function PlayerDataService.indexKey(species: string, mutation: string): string
+	return species .. ":" .. mutation
+end
+
+-- v2 stored a rolled rarity per animal; the closest v3 equivalent is a mutation.
+local V2_RARITY_TO_MUTATION = {
+	Common = "Normal",
+	Rare = "Normal",
+	Epic = "Normal",
+	Legendary = "Gold",
+	Mythic = "Rainbow",
+}
+
+local function validMutation(raw: any, version: number): string?
+	if typeof(raw) ~= "string" then
+		return nil
+	end
+	local key = if version < 3 then V2_RARITY_TO_MUTATION[raw] else raw
+	return if key and MutationConfig.ByKey[key] then key else nil
+end
+
+local function isValidZooSize(size: number): boolean
+	if size == GameConfig.Zoo.StartPens then
+		return true
+	end
+	for _, step in GameConfig.Zoo.Expansions do
+		if step.Pens == size then
+			return true
+		end
+	end
+	return false
 end
 
 local function cleanCount(value: any): number
@@ -72,6 +134,74 @@ local function sanitize(raw: any): SavedData
 	data.TutorialCompleted = raw.TutorialCompleted == true
 	local tier = cleanCount(raw.ToolTier)
 	data.ToolTier = if ToolConfig[tier] then tier else 1
+
+	-- v2 fields. A v1 record simply has none of them and keeps the defaults.
+	local zooSize = cleanCount(raw.ZooSize)
+	data.ZooSize = if isValidZooSize(zooSize) then zooSize else GameConfig.Zoo.StartPens
+	data.NextAnimalId = math.max(cleanCount(raw.NextAnimalId), 1)
+
+	local version = cleanCount(raw.SchemaVersion)
+	if typeof(raw.Index) == "table" then
+		for key, discovered in raw.Index do
+			if typeof(key) == "string" and discovered == true then
+				local species, variant = string.match(key, "^(%w+):(%w+)$")
+				local mutation = validMutation(variant, version)
+				if species and AnimalConfig.Animals[species] and mutation then
+					data.Index[PlayerDataService.indexKey(species, mutation)] = true
+				end
+			end
+		end
+	end
+
+	local usedIds: { [string]: boolean } = {}
+	local function validAnimal(animal: any): (string?, string?)
+		if typeof(animal) ~= "table" or typeof(animal.Id) ~= "string" or usedIds[animal.Id] then
+			return nil, nil
+		end
+		if typeof(animal.Species) ~= "string" or not AnimalConfig.Animals[animal.Species] then
+			return nil, nil
+		end
+		local mutation = validMutation(if version < 3 then animal.Rarity else animal.Mutation, version)
+		if not mutation then
+			return nil, nil
+		end
+		usedIds[animal.Id] = true
+		return animal.Species, mutation
+	end
+
+	if typeof(raw.Animals) == "table" then
+		local usedPens: { [number]: boolean } = {}
+		for _, animal in raw.Animals do
+			local pen = if typeof(animal) == "table" then cleanCount(animal.Pen) else 0
+			if pen < 1 or pen > data.ZooSize or usedPens[pen] then
+				continue
+			end
+			local species, mutation = validAnimal(animal)
+			if species and mutation then
+				usedPens[pen] = true
+				table.insert(data.Animals, {
+					Id = animal.Id,
+					Species = species,
+					Mutation = mutation,
+					Pen = pen,
+					Pending = cleanCount(animal.Pending),
+				})
+				data.Index[PlayerDataService.indexKey(species, mutation)] = true
+			end
+		end
+	end
+
+	if typeof(raw.Cache) == "table" then
+		for _, animal in raw.Cache do
+			if #data.Cache >= GameConfig.Cache.Slots then
+				break
+			end
+			local species, mutation = validAnimal(animal)
+			if species and mutation then
+				table.insert(data.Cache, { Id = animal.Id, Species = species, Mutation = mutation })
+			end
+		end
+	end
 	return data
 end
 
@@ -155,7 +285,14 @@ local function save(profile: Profile, release: boolean): boolean
 		task.wait()
 	end
 	profile.Saving = true
+	-- Deep enough copy that edits during the async write can't change what's being saved.
 	local snapshot = table.clone(profile.Data)
+	snapshot.Animals = {}
+	for i, animal in profile.Data.Animals do
+		snapshot.Animals[i] = table.clone(animal) -- Pending changes every income tick
+	end
+	snapshot.Cache = table.clone(profile.Data.Cache)
+	snapshot.Index = table.clone(profile.Data.Index)
 	local lostLock = false
 	local ok, err = pcall(function()
 		ds:UpdateAsync(profile.Key, function(record)

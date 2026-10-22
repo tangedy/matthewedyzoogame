@@ -1,49 +1,182 @@
--- Animal selection, spawning, scripted movement, celebration, and disposal.
+-- Animal selection, spawning, scripted movement, celebration, carrying, and disposal.
 -- Movement functions yield; BayService runs them inside the bay's thread so that
 -- cancelling the thread (owner left) stops them with nothing left connected.
 
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
+local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
+local DirtRenderer = require(script.Parent.DirtRenderer)
 
 local AnimalService = {}
 
 local rng = Random.new()
 
--- First animal of a session is deterministic; later ones come from the weighted pool
--- of animals the player's tool tier can handle.
+local function weightedPick<T>(entries: { T }, weightOf: (T) -> number): T?
+	local total = 0
+	for _, entry in entries do
+		total += weightOf(entry)
+	end
+	local roll = rng:NextNumber(0, total)
+	for _, entry in entries do
+		roll -= weightOf(entry)
+		if roll <= 0 then
+			return entry
+		end
+	end
+	return entries[#entries]
+end
+
+-- First animal of a session is deterministic; later ones come from the weighted pool of
+-- species the player's hose can handle (better hoses unlock rarer tiers).
 function AnimalService.pickNext(isFirst: boolean, toolTier: number): string
 	if isFirst then
 		return AnimalConfig.FirstAnimal
 	end
-	local total = 0
 	local pool = {}
 	for key, def in AnimalConfig.Animals do
 		if def.RequiredToolTier <= toolTier and AnimalBuilder.has(def.TemplateName) then
-			total += def.SelectionWeight
-			table.insert(pool, { key = key, weight = def.SelectionWeight })
+			table.insert(pool, key)
 		end
 	end
-	table.sort(pool, function(a, b)
-		return a.key < b.key
-	end)
-	local roll = rng:NextNumber(0, total)
-	for _, entry in pool do
-		roll -= entry.weight
-		if roll <= 0 then
-			return entry.key
-		end
-	end
-	return AnimalConfig.FirstAnimal
+	table.sort(pool)
+	return weightedPick(pool, function(key)
+		return AnimalConfig.Animals[key].SpawnWeight
+	end) or AnimalConfig.FirstAnimal
 end
 
-function AnimalService.spawn(animalKey: string, jobId: string, at: CFrame, parent: Instance)
+-- Weighted mutation roll. The first animal of a session is always Normal.
+function AnimalService.pickMutation(isFirst: boolean): string
+	if isFirst then
+		return MutationConfig.Default
+	end
+	local picked = weightedPick(MutationConfig.List, function(m)
+		return m.Weight
+	end)
+	return if picked then picked.Key else MutationConfig.Default
+end
+
+local function income(animalKey: string, mutationKey: string): number
+	local m = MutationConfig.ByKey[mutationKey] or MutationConfig.ByKey.Normal
+	return AnimalConfig.Animals[animalKey].Income * m.IncomeMultiplier
+end
+
+local function addNameplate(model: Model, animalKey: string, mutationKey: string, maxDistance: number)
+	local head = model:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then
+		return
+	end
 	local def = AnimalConfig.Animals[animalKey]
-	local model, patches = AnimalBuilder.build(def.TemplateName)
+	UIStyle.nameplate(head, {
+		Name = def.DisplayName,
+		Rarity = def.Rarity,
+		Mutation = mutationKey,
+		IncomePerSecond = income(animalKey, mutationKey),
+	}, maxDistance)
+end
+
+-- A clean, idle animal for a pen or the cache.
+function AnimalService.buildZooAnimal(animalKey: string, mutationKey: string): Model
+	local def = AnimalConfig.Animals[animalKey]
+	local model = AnimalBuilder.build(def.TemplateName, { Mutation = mutationKey, Rarity = def.Rarity, Clean = true })
+	model:SetAttribute("AnimalKey", animalKey)
+	DirtRenderer.setGrime(model, 1)
+	addNameplate(model, animalKey, mutationKey, 60)
+	return model
+end
+
+-- A small copy of the animal riding above the carrier's head, welded so it follows them.
+function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, head: BasePart): Model
+	local model = AnimalService.buildZooAnimal(animalKey, mutationKey)
+	model.Name = "CarriedAnimal"
+	local _, size = model:GetBoundingBox()
+	local largest = math.max(size.X, size.Y, size.Z)
+	if largest > GameConfig.Cache.CarryMaxSize then
+		model:ScaleTo(GameConfig.Cache.CarryMaxSize / largest)
+	end
+	local root = model.PrimaryPart :: BasePart
+	model:PivotTo(head.CFrame * CFrame.new(0, head.Size.Y / 2 + 0.3, 0))
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.Anchored = false
+			part.Massless = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+			if part ~= root then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = root
+				weld.Part1 = part
+				weld.Parent = part
+			end
+		end
+	end
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = head
+	weld.Part1 = root
+	weld.Parent = root
+	model.Parent = head.Parent
+	return model
+end
+
+-- Sold or swapped out: a puff of sparkles, then gone.
+function AnimalService.poof(model: Model)
+	local body = model:FindFirstChild("Body")
+	if body and body:IsA("BasePart") then
+		local attachment = Instance.new("Attachment")
+		attachment.WorldPosition = body.Position
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Enabled = false
+		emitter.Speed = NumberRange.new(4, 8)
+		emitter.SpreadAngle = Vector2.new(180, 180)
+		emitter.Lifetime = NumberRange.new(0.5, 0.9)
+		emitter.Size = NumberSequence.new(0.8, 0)
+		emitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+		emitter.Parent = attachment
+		attachment.Parent = Workspace.Terrain
+		emitter:Emit(25)
+		Debris:AddItem(attachment, 1.5)
+	end
+	model:Destroy()
+end
+
+-- Cash burst and chime when a collect pad pays out.
+function AnimalService.collectEffect(pad: BasePart)
+	local attachment = Instance.new("Attachment")
+	attachment.WorldPosition = pad.Position
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Enabled = false
+	emitter.Speed = NumberRange.new(5, 9)
+	emitter.SpreadAngle = Vector2.new(30, 30)
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Acceleration = Vector3.new(0, -25, 0)
+	emitter.Lifetime = NumberRange.new(0.6, 0.9)
+	emitter.Size = NumberSequence.new(0.5, 0.2)
+	emitter.Color = ColorSequence.new(UIStyle.CashColor)
+	emitter.Parent = attachment
+	local sound = Instance.new("Sound")
+	sound.SoundId = GameConfig.Sounds.Complete
+	sound.PlaybackSpeed = 1.4
+	sound.Volume = 0.5
+	sound.Parent = attachment
+	attachment.Parent = Workspace.Terrain
+	emitter:Emit(18)
+	sound:Play()
+	Debris:AddItem(attachment, 1.5)
+end
+
+function AnimalService.spawn(animalKey: string, mutationKey: string, jobId: string, at: CFrame, parent: Instance)
+	local def = AnimalConfig.Animals[animalKey]
+	local model, patches = AnimalBuilder.build(def.TemplateName, { Mutation = mutationKey, Rarity = def.Rarity })
 	model:SetAttribute("JobId", jobId)
 	model:SetAttribute("AnimalKey", animalKey)
+	DirtRenderer.setGrime(model, 0) -- arrives filthy
 	model:PivotTo(at)
 
 	local sparkle = Instance.new("ParticleEmitter")
@@ -64,7 +197,24 @@ function AnimalService.spawn(animalKey: string, jobId: string, at: CFrame, paren
 	sound.Volume = 0.6
 	sound.Parent = model:FindFirstChild("Body")
 
+	addNameplate(model, animalKey, mutationKey, 80)
+
 	model.Parent = parent
+
+	-- Rarer tiers and any mutation get a reveal as they walk in.
+	local rarity = RarityConfig.ByKey[def.Rarity]
+	local mutated = mutationKey ~= MutationConfig.Default
+	if rarity.Order > 2 or mutated then
+		sparkle.Color = ColorSequence.new(rarity.Color) -- the completion sparkle keeps this colour too
+		sparkle:Emit(10 * rarity.Order)
+		local reveal = Instance.new("Sound")
+		reveal.SoundId = GameConfig.Sounds.Complete
+		reveal.PlaybackSpeed = 0.8 + rarity.Order * 0.1
+		reveal.Volume = 0.7
+		reveal.Parent = model:FindFirstChild("Body")
+		reveal:Play()
+		Debris:AddItem(reveal, 3)
+	end
 	return model, patches
 end
 
@@ -95,6 +245,30 @@ function AnimalService.celebrate(model: Model)
 		if sound then
 			sound:Play()
 		end
+	end
+
+	-- "Squeaky clean!" pops above the animal for the length of the celebration.
+	local head = model:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "CleanBanner"
+		billboard.Size = UDim2.fromOffset(220, 50)
+		billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+		billboard.MaxDistance = 80
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Text = "Squeaky clean!"
+		label.TextScaled = true
+		label.Font = Enum.Font.FredokaOne
+		label.TextColor3 = Color3.fromRGB(150, 230, 255)
+		label.TextStrokeTransparency = 0
+		label.TextStrokeColor3 = Color3.fromRGB(20, 60, 110)
+		label.Parent = billboard
+		billboard.Parent = head
+		task.delay(GameConfig.CelebrationDuration, function()
+			billboard:Destroy()
+		end)
 	end
 
 	local base = model:GetPivot()

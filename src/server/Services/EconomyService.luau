@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local EconomyService = {}
@@ -36,6 +37,30 @@ function EconomyService.awardWash(player: Player, amount: number): boolean
 	return true
 end
 
+-- Coins from zoo releases and index discoveries. Amount always comes from server config.
+function EconomyService.addCoins(player: Player, amount: number): boolean
+	local data = PlayerDataService.get(player)
+	if not data or typeof(amount) ~= "number" or amount ~= amount or amount <= 0 or amount == math.huge then
+		return false
+	end
+	data.Coins += math.floor(amount)
+	PlayerDataService.markDirty(player)
+	coinsChanged:FireClient(player, data.Coins)
+	return true
+end
+
+-- Deducts a server-priced cost. Returns false (and changes nothing) if the player can't afford it.
+function EconomyService.spend(player: Player, amount: number): boolean
+	local data = PlayerDataService.get(player)
+	if not data or typeof(amount) ~= "number" or amount ~= amount or amount < 0 or data.Coins < amount then
+		return false
+	end
+	data.Coins -= amount
+	PlayerDataService.markDirty(player)
+	coinsChanged:FireClient(player, data.Coins)
+	return true
+end
+
 -- Developer coin grant. The amount is a server constant; the client never supplies it.
 function EconomyService.grant(player: Player, amount: number): boolean
 	local data = PlayerDataService.get(player)
@@ -62,7 +87,11 @@ local function purchaseToolUpgrade(player: Player)
 		return
 	end
 	if data.Coins < nextTool.Price then
-		purchaseResult:FireClient(player, false, `Not enough coins. You need {nextTool.Price - data.Coins} more.`)
+		purchaseResult:FireClient(
+			player,
+			false,
+			`Not enough cash. You need {UIStyle.formatMoney(nextTool.Price - data.Coins)} more.`
+		)
 		return
 	end
 

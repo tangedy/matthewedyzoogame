@@ -15,6 +15,10 @@ local EVENTS = {
 	"ToolTierChanged", -- (tier: number, name: string)
 	"WashCompleted", -- (jobId: string, reward: number, coins: number)
 	"PurchaseResult", -- (success: boolean, message: string)
+	"ZooChanged", -- (ZooSummary)
+	"IndexChanged", -- (index: { [string]: boolean }, newKey: string?)
+	"CarryChanged", -- (CarryInfo?) what the player is carrying, nil when nothing
+	"Announcement", -- (text: string, rarity: string) to everyone
 }
 
 local FUNCTIONS = {

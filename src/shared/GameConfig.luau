@@ -2,7 +2,8 @@
 
 local GameConfig = {
 	-- World
-	BayCount = 4, -- set the place's Max Players to match (Game Settings > Places)
+	-- Bays are built only while a player owns one, at fixed slots; BayCount caps how many.
+	BayCount = 8, -- set the place's Max Players to match (Game Settings > Places)
 	BaySpacing = 70,
 	BayPadSize = Vector3.new(44, 1, 34),
 
@@ -24,11 +25,12 @@ local GameConfig = {
 	PatchCleanThreshold = 0.05, -- a patch below this fraction snaps to clean
 	HintProgress = 0.85, -- progress at which remaining patches get highlighted
 
-	-- Lifecycle timings (seconds)
-	ArriveDuration = 3,
-	DepartDuration = 3,
+	-- Lifecycle timings (seconds). Kept short so there's almost always an animal to wash:
+	-- about 6 s between finishing one animal and being able to spray the next.
+	ArriveDuration = 2.5,
+	DepartDuration = 2,
 	CelebrationDuration = 1.5,
-	NextAnimalDelay = 1,
+	NextAnimalDelay = 0.5,
 
 	-- Persistence. Studio uses a separate store so test data never touches live players.
 	DataStoreName = "PlayerData_v1",
@@ -37,6 +39,35 @@ local GameConfig = {
 	SessionLockExpiry = 300, -- a lock not refreshed for this long is considered abandoned
 	LockRetryAttempts = 6,
 	LockRetryDelay = 4,
+
+	-- Economy (cash). An animal's value is expressed in seconds of its income.
+	WashRewardSeconds = 15, -- finishing a wash pays this many seconds of the animal's income
+	SellValueSeconds = 60, -- selling (or swapping out) an animal pays this many seconds of income
+	DiscoveryBonusMultiplier = 1, -- first wash of a species+mutation pays this much extra
+	IncomeTickSeconds = 1, -- how often pens accumulate cash
+
+	-- Zoo: pens beside each bay, one row along X behind the pad. Each pen earns its animal's
+	-- income into a collect pad in front of it; stepping on the pad collects it.
+	Zoo = {
+		MaxPens = 8,
+		StartPens = 4,
+		Expansions = { -- bought in order
+			{ Pens = 6, Price = 2500 },
+			{ Pens = 8, Price = 25000 },
+		},
+		PenSize = Vector3.new(10, 1, 12), -- interior floor
+		PenSpacing = 11,
+		PenRowZ = -25, -- pen centres, relative to the bay centre
+	},
+
+	-- Cache: every washed animal waits here until the owner picks it up and carries it to a pen.
+	-- While the cache is full, no new animal walks in.
+	Cache = {
+		Slots = 3,
+		SlotSpacing = 7,
+		Origin = Vector3.new(8, 0, 9), -- first slot, relative to the bay centre; slots run +X
+		CarryMaxSize = 3.5, -- carried animals are scaled so their largest side is about this
+	},
 
 	-- Shop
 	ShopCloseDistance = 14, -- the shop panel closes when you walk this far from the station
@@ -48,6 +79,7 @@ local GameConfig = {
 	Sounds = {
 		Spray = "rbxasset://sounds/impact_water.mp3",
 		Complete = "rbxasset://sounds/electronicpingshort.wav",
+		PatchClear = "rbxasset://sounds/impact_water.mp3",
 	},
 }
 
