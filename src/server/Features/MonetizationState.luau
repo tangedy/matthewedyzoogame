@@ -22,6 +22,7 @@ export type PendingAnimal = { Species: string, Mutation: string }
 export type Saved = {
 	Receipts: { string }, -- most recent PurchaseIds, oldest first
 	SuperSoapLeft: number, -- seconds; only counts down while the player is online
+	AutoCollectLeft: number, -- seconds; only counts down while the player is online
 	LuckyLeft: number, -- walk-ins
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
@@ -31,6 +32,7 @@ export type Saved = {
 export type Session = {
 	JoinedAt: number, -- os.clock()
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow(); 0 when inactive
+	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
 	LuckyRolled: boolean, -- a walk-in was rolled while Lucky Soap was active
 	PendingOnce: { [string]: boolean }, -- once-only products with a prompt open or a receipt due
 	OwnedPasses: { [string]: boolean }, -- UserOwnsGamePassAsync results and grants
@@ -72,6 +74,7 @@ local function sanitize(raw: any): Saved
 	local saved: Saved = {
 		Receipts = {},
 		SuperSoapLeft = 0,
+		AutoCollectLeft = 0,
 		LuckyLeft = 0,
 		Passes = {},
 		Once = {},
@@ -91,6 +94,7 @@ local function sanitize(raw: any): Saved
 		end
 	end
 	saved.SuperSoapLeft = count(raw.SuperSoapLeft, MonetizationConfig.SuperSoap.MaxSeconds)
+	saved.AutoCollectLeft = count(raw.AutoCollectLeft, MonetizationConfig.AutoCollect.MaxSeconds)
 	saved.LuckyLeft = math.floor(count(raw.LuckyLeft, MonetizationConfig.LuckySoap.MaxWalkIns))
 	saved.Passes = flags(raw.Passes, MonetizationConfig.PassesByKey)
 	saved.Once = flags(raw.Once, MonetizationConfig.ProductsByKey)
@@ -139,6 +143,7 @@ function MonetizationState.session(player: Player): Session
 		session = {
 			JoinedAt = os.clock(),
 			SoapEndsAt = 0,
+			AutoCollectEndsAt = 0,
 			LuckyRolled = false,
 			PendingOnce = {},
 			OwnedPasses = {},
@@ -208,6 +213,14 @@ function MonetizationState.soapActive(player: Player): boolean
 	return session ~= nil and session.SoapEndsAt > Workspace:GetServerTimeNow()
 end
 
+function MonetizationState.autoCollectActive(player: Player): boolean
+	if MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey) then
+		return true
+	end
+	local session = sessions[player]
+	return session ~= nil and session.AutoCollectEndsAt > Workspace:GetServerTimeNow()
+end
+
 -- Price of the hose the player would buy next (the top hose's price once fully upgraded).
 local function nextHosePrice(player: Player): number
 	local data = PlayerDataService.get(player)
@@ -234,6 +247,9 @@ function MonetizationState.payload(player: Player): MonetizationConfig.ShopState
 	local session = sessions[player]
 	local state: MonetizationConfig.ShopState = {
 		SoapEndsAt = if session and session.SoapEndsAt > Workspace:GetServerTimeNow() then session.SoapEndsAt else 0,
+		AutoCollectEndsAt = if session and session.AutoCollectEndsAt > Workspace:GetServerTimeNow()
+			then session.AutoCollectEndsAt
+			else 0,
 		LuckyLeft = if saved then saved.LuckyLeft else 0,
 		Passes = {},
 		Once = if saved then table.clone(saved.Once) else {},

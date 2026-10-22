@@ -1,8 +1,11 @@
 -- Client entry point: fetches initial state once, then starts the controllers.
+-- UIPlatform starts first so ScreenGuis are scaled as soon as they are created
+-- and action bindings see the real input mode.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local UIPlatform = require(script.Parent.UI)
 local Controllers = script.Parent.Controllers
 local HUDController = require(Controllers.HUDController)
 local CleaningController = require(Controllers.CleaningController)
@@ -27,6 +30,8 @@ if not ok or typeof(initial) ~= "table" then
 		Bay = nil,
 	}
 end
+
+UIPlatform.start()
 
 HUDController.init(initial)
 CleaningController.init(initial)

@@ -465,6 +465,17 @@ local function collect(player: Player, penIndex: number)
 	refreshPens(player)
 end
 
+-- Collects every pen that has at least $1 waiting. Used by the auto-collect purchase.
+function ZooService.collectAll(player: Player)
+	local data = PlayerDataService.get(player)
+	if not data then
+		return
+	end
+	for i = 1, math.min(data.ZooSize, GameConfig.Zoo.MaxPens) do
+		collect(player, i)
+	end
+end
+
 local function expand(player: Player)
 	local data = PlayerDataService.get(player)
 	if not data then

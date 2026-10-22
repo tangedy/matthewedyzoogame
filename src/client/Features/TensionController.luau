@@ -186,6 +186,8 @@ local function buildGui()
 	splatGui.ResetOnSpawn = false
 	splatGui.IgnoreGuiInset = true
 	splatGui.DisplayOrder = 5 -- over the HUD
+	-- Blotches are sized from ViewportSize. A parent UIScale would shrink them off the screen edges.
+	splatGui:SetAttribute("UIPlatformExclude", true)
 	splatGui.Parent = gui.Parent
 end
 

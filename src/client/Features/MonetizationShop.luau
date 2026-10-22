@@ -10,6 +10,7 @@ local Workspace = game:GetService("Workspace")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local Modals = require(script.Parent.Parent.UI.Modals)
 
 type ShopState = MonetizationConfig.ShopState
 
@@ -42,6 +43,7 @@ local TAB_ACTIVE_COLOR = Color3.fromRGB(255, 90, 200)
 
 local panel: Frame
 local panelScale: UIScale
+local dim: TextButton
 local shopButton: TextButton
 local grid: ScrollingFrame
 local gridLayout: UIGridLayout
@@ -60,6 +62,10 @@ end
 
 local function clock(seconds: number): string
 	local s = math.max(0, math.floor(seconds))
+	local hours = s // 3600
+	if hours > 0 then
+		return string.format("%d:%02d:%02d", hours, (s % 3600) // 60, s % 60)
+	end
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
@@ -202,6 +208,16 @@ local function refreshCard(card: Card, state: ShopState)
 		elseif product.Kind == "LuckySoap" and state.LuckyLeft > 0 then
 			statusText = `ACTIVE: {state.LuckyLeft} LEFT`
 			statusColor = Color3.fromRGB(255, 220, 90)
+		elseif product.Kind == "AutoCollect" then
+			if state.Passes.AutoCollectForever then
+				buyable = false
+				buyText = "OWNED"
+				statusText = "FOREVER"
+				statusColor = OWNED_COLOR
+			elseif state.AutoCollectEndsAt > Workspace:GetServerTimeNow() then
+				statusText = `ACTIVE {clock(state.AutoCollectEndsAt - Workspace:GetServerTimeNow())}`
+				statusColor = UIStyle.CashColor
+			end
 		elseif product.Kind == "Cash" then
 			statusText = `+{UIStyle.formatMoney(state.Cash[product.Key] or 0)}`
 			statusColor = UIStyle.CashColor
@@ -260,6 +276,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	local button, buttonScale = chunkyButton(gui, MonetizationConfig.ShopColor, "SHOP")
 	shopButton = button
 	shopButton.Name = "ShopButton"
+	shopButton.ZIndex = 10
 	shopButton.AnchorPoint = Vector2.new(0, 0.5)
 	shopButton.Position = UDim2.new(0, 16, 0.5, 62)
 	shopButton.Size = UDim2.fromOffset(170, 44)
@@ -292,10 +309,12 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.fromScale(0.94, 0.86)
 	panel.BackgroundColor3 = UIStyle.PanelColor
-	panel.BackgroundTransparency = 0.04
+	panel.BackgroundTransparency = 0
 	panel.Visible = false
 	panel.ZIndex = 5
 	panel.Parent = gui
+	dim = Modals.dim(gui, MonetizationShop.close)
+	Modals.bind("RobuxShop", MonetizationShop.close)
 	UIStyle.border(panel, 4)
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MaxSize = Vector2.new(680, 480)
@@ -406,6 +425,8 @@ function MonetizationShop.open(tab: string?)
 	if tab then
 		showTab(tab)
 	end
+	Modals.claim("RobuxShop")
+	dim.Visible = true
 	if not panel.Visible then
 		panel.Visible = true
 		pop(panelScale, 0.6, 0.4)
@@ -415,6 +436,9 @@ end
 
 function MonetizationShop.close()
 	panel.Visible = false
+	if dim then
+		dim.Visible = false
+	end
 end
 
 return MonetizationShop

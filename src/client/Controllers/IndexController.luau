@@ -11,6 +11,7 @@ local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local Modals = require(script.Parent.Parent.UI.Modals)
 
 local player = Players.LocalPlayer
 
@@ -23,6 +24,7 @@ local speciesOrder: { string } = {}
 
 local button: TextButton
 local panel: Frame
+local dim: TextButton
 local toast: TextLabel
 local cells: { [string]: TextLabel } = {}
 local toastToken = 0
@@ -72,6 +74,8 @@ local function buildGui()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Index"
 	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 30
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	-- Under the cash display, left side
@@ -80,6 +84,7 @@ local function buildGui()
 	button.Position = UDim2.new(0, 16, 0.5, 14)
 	button.Size = UDim2.fromOffset(170, 40)
 	button.BackgroundColor3 = Color3.fromRGB(255, 190, 40)
+	button.ZIndex = 10
 	button.Parent = gui
 	UIStyle.text(button)
 	UIStyle.border(button, 3)
@@ -93,8 +98,9 @@ local function buildGui()
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.fromScale(0.92, 0.82)
 	panel.BackgroundColor3 = UIStyle.PanelColor
-	panel.BackgroundTransparency = 0.05
+	panel.BackgroundTransparency = 0
 	panel.Visible = false
+	panel.ZIndex = 5
 	panel.Parent = gui
 	UIStyle.border(panel, 4)
 	local constraint = Instance.new("UISizeConstraint")
@@ -118,9 +124,7 @@ local function buildGui()
 	UIStyle.text(close)
 	UIStyle.border(close, 3)
 	close.Text = "X"
-	close.Activated:Connect(function()
-		panel.Visible = false
-	end)
+	close.ZIndex = 6
 
 	-- Header: mutation names
 	local nameWidth = 0.4
@@ -194,8 +198,22 @@ local function buildGui()
 	toastConstraint.MaxSize = Vector2.new(600, 30)
 	toastConstraint.Parent = toast
 
+	local function closePanel()
+		panel.Visible = false
+		dim.Visible = false
+	end
+
+	dim = Modals.dim(gui, closePanel)
+	Modals.bind("Index", closePanel)
+	close.Activated:Connect(closePanel)
 	button.Activated:Connect(function()
-		panel.Visible = not panel.Visible
+		if panel.Visible then
+			closePanel()
+		else
+			Modals.claim("Index")
+			dim.Visible = true
+			panel.Visible = true
+		end
 	end)
 end
 

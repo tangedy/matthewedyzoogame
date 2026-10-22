@@ -268,7 +268,8 @@ local function buildGui()
 	gui = Instance.new("ScreenGui")
 	gui.Name = "Monetization"
 	gui.ResetOnSpawn = false
-	gui.DisplayOrder = 5 -- above the hose shop when the Cash tab auto-opens
+	gui.DisplayOrder = 31 -- above the index dim, so SHOP still clicks while the index is open
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	clickSound = sound("rbxasset://sounds/electronicpingshort.wav", 0.5)

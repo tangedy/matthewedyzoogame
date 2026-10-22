@@ -23,12 +23,14 @@ local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Parent.Services
 local CleaningService = require(Services.CleaningService)
 local Hooks = require(Services.Hooks)
 local PlayerDataService = require(Services.PlayerDataService)
+local ZooService = require(Services.ZooService)
 local MonetizationGrants = require(script.Parent.MonetizationGrants)
 local MonetizationState = require(script.Parent.MonetizationState)
 local MonetizationStock = require(script.Parent.MonetizationStock)
@@ -43,6 +45,124 @@ local passesById: { [number]: Pass } = {}
 local processing: { [string]: boolean } = {} -- PurchaseIds being granted right now
 
 local offerRemote: RemoteEvent
+local standByPlayer: { [Player]: Model } = {}
+local purchaseFromStand: (Player, string) -> ()
+
+local function clock(seconds: number): string
+	local s = math.max(0, math.floor(seconds))
+	local hours = s // 3600
+	if hours > 0 then
+		return string.format("%d:%02d:%02d", hours, (s % 3600) // 60, s % 60)
+	end
+	return string.format("%d:%02d", s // 60, s % 60)
+end
+
+-- Booth just left of pen 1, beside the stables. Two prompts: 2 hours (E) and forever (R).
+local function ensureStand(bay: Model): Model?
+	local zoo = bay:FindFirstChild("Zoo")
+	local existing = zoo and zoo:FindFirstChild("AutoCollectStand")
+	if existing and existing:IsA("Model") then
+		return existing
+	end
+	local pen = zoo and zoo:FindFirstChild("Pen1")
+	local floor = pen and pen:FindFirstChild("Floor")
+	if not zoo or not floor or not floor:IsA("BasePart") then
+		return nil
+	end
+	local stand = Instance.new("Model")
+	stand.Name = "AutoCollectStand"
+	local counter = Instance.new("Part")
+	counter.Name = "Counter"
+	counter.Anchored = true
+	counter.Size = Vector3.new(6, 3.2, 2.4)
+	counter.Position = floor.Position + Vector3.new(-floor.Size.X / 2 - 5, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
+	counter.Color = Color3.fromRGB(70, 190, 90)
+	counter.Material = Enum.Material.SmoothPlastic
+	counter.TopSurface = Enum.SurfaceType.Smooth
+	counter.BottomSurface = Enum.SurfaceType.Smooth
+	counter.Parent = stand
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromOffset(220, 40)
+	billboard.StudsOffset = Vector3.new(0, 3.4, 0)
+	billboard.MaxDistance = 60
+	billboard.Parent = counter
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.Parent = billboard
+	UIStyle.text(label, UIStyle.CashColor, nil, 3)
+	label.Text = "AUTO COLLECT"
+	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
+	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
+	local function prompt(name: string, text: string, key: Enum.KeyCode): ProximityPrompt
+		local created = Instance.new("ProximityPrompt")
+		created.Name = name
+		created.ActionText = text
+		created.ObjectText = "Stables"
+		created.HoldDuration = 0.4
+		created.MaxActivationDistance = 12
+		created.RequiresLineOfSight = false
+		created.KeyboardKeyCode = key
+		created.Parent = counter
+		return created
+	end
+	prompt("TimedPrompt", `{product.DisplayName} ({product.Robux} R$)`, Enum.KeyCode.E)
+	prompt("ForeverPrompt", `{pass.DisplayName} ({pass.Robux} R$)`, Enum.KeyCode.R)
+	stand.Parent = zoo
+	return stand
+end
+
+local function refreshStand(player: Player)
+	local stand = standByPlayer[player]
+	if not stand or not stand.Parent then
+		return
+	end
+	local counter = stand:FindFirstChild("Counter")
+	local timed = counter and counter:FindFirstChild("TimedPrompt") :: ProximityPrompt?
+	local forever = counter and counter:FindFirstChild("ForeverPrompt") :: ProximityPrompt?
+	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
+	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
+	local owns = MonetizationState.ownsPass(player, pass.Key)
+	if forever then
+		forever.Enabled = not owns
+		forever.ActionText = if owns then "Owned" else `{pass.DisplayName} ({pass.Robux} R$)`
+	end
+	if timed then
+		timed.Enabled = not owns
+		local left = MonetizationGrants.autoCollectLeft(player)
+		timed.ActionText = if owns
+			then "Owned forever"
+			elseif left > 0 then `Auto-Collect {clock(left)} ({product.Robux} R$)`
+			else `{product.DisplayName} ({product.Robux} R$)`
+	end
+end
+
+local function bindStand(player: Player, bay: Model)
+	local stand = ensureStand(bay)
+	if not stand then
+		return
+	end
+	standByPlayer[player] = stand
+	local counter = stand:FindFirstChild("Counter")
+	local timed = counter and counter:FindFirstChild("TimedPrompt") :: ProximityPrompt?
+	local forever = counter and counter:FindFirstChild("ForeverPrompt") :: ProximityPrompt?
+	if timed and not timed:GetAttribute("Bound") then
+		timed:SetAttribute("Bound", true)
+		timed.Triggered:Connect(function(who: Player)
+			if who == player then
+				purchaseFromStand(player, "AutoCollect2h")
+			end
+		end)
+	end
+	if forever and not forever:GetAttribute("Bound") then
+		forever:SetAttribute("Bound", true)
+		forever.Triggered:Connect(function(who: Player)
+			if who == player then
+				purchaseFromStand(player, "AutoCollectForever")
+			end
+		end)
+	end
+	refreshStand(player)
+end
 
 -- Receipts ------------------------------------------------------------------------------
 
@@ -135,6 +255,10 @@ local function buyProduct(player: Player, product: Product)
 		MonetizationState.notify(player, "Start washing an animal first!", false)
 		return
 	end
+	if product.Kind == "AutoCollect" and MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey) then
+		MonetizationState.notify(player, "You already own Auto-Collect Forever!", false)
+		return
+	end
 	if product.Kind == "Limited" then
 		if not (product.Species and AnimalConfig.Animals[product.Species]) then
 			MonetizationState.notify(player, "Coming soon!", false)
@@ -203,6 +327,8 @@ local function onBuy(player: Player, key: any)
 		buyPass(player, pass)
 	end
 end
+
+purchaseFromStand = onBuy
 
 -- Offers --------------------------------------------------------------------------------
 
@@ -336,6 +462,16 @@ local function connectHooks()
 		end
 	end)
 
+	Hooks.on("BayAssigned", function(player: Player, bay: Model)
+		bindStand(player, bay)
+	end)
+
+	Hooks.on("IncomeTick", function(player: Player)
+		if MonetizationState.autoCollectActive(player) then
+			ZooService.collectAll(player)
+		end
+	end)
+
 	Hooks.on("PlayerLoaded", function(player: Player)
 		if not player.Parent then
 			return
@@ -347,6 +483,9 @@ local function connectHooks()
 		end
 		if session.SoapEndsAt == 0 and saved.SuperSoapLeft > 0 then
 			session.SoapEndsAt = Workspace:GetServerTimeNow() + saved.SuperSoapLeft
+		end
+		if session.AutoCollectEndsAt == 0 and saved.AutoCollectLeft > 0 then
+			session.AutoCollectEndsAt = Workspace:GetServerTimeNow() + saved.AutoCollectLeft
 		end
 		for key in saved.Passes do
 			MonetizationGrants.applyPass(player, key)
@@ -377,6 +516,10 @@ local function connectHooks()
 		if session and saved and session.SoapEndsAt > 0 then
 			saved.SuperSoapLeft = math.max(0, session.SoapEndsAt - Workspace:GetServerTimeNow())
 		end
+		if session and saved and session.AutoCollectEndsAt > 0 then
+			saved.AutoCollectLeft = math.max(0, session.AutoCollectEndsAt - Workspace:GetServerTimeNow())
+		end
+		standByPlayer[player] = nil
 	end)
 end
 
@@ -403,6 +546,20 @@ local function runLoop()
 					MonetizationState.push(player)
 				end
 			end
+			local timedCollect = session
+				and saved
+				and session.AutoCollectEndsAt > 0
+				and not MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey)
+			if timedCollect then
+				saved.AutoCollectLeft = math.max(0, session.AutoCollectEndsAt - now)
+				PlayerDataService.markDirty(player)
+				if saved.AutoCollectLeft <= 0 then
+					session.AutoCollectEndsAt = 0
+					MonetizationState.notify(player, "Auto-Collect ran out!", false)
+					MonetizationState.push(player)
+				end
+			end
+			refreshStand(player)
 		end
 		if sinceDelivery >= MonetizationConfig.PendingDeliverySeconds then
 			sinceDelivery = 0

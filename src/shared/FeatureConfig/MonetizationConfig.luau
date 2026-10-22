@@ -15,7 +15,8 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect"
+	Seconds: number?, -- AutoCollect: play-time added per purchase
 	Color: Color3,
 	OncePerPlayer: boolean?, -- can only be bought once (an intro price)
 	IntroKey: string?, -- the shop shows this cheaper once-only product instead, until it's used
@@ -43,6 +44,7 @@ export type Pass = {
 -- What the server tells a client about its shop (MonetizationState remote).
 export type ShopState = {
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow() when Super Soap runs out; 0 when inactive
+	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
 	LuckyLeft: number, -- walk-ins left on Lucky Soap
 	Passes: { [string]: boolean }, -- owned game passes
 	Once: { [string]: boolean }, -- once-only products already bought
@@ -107,6 +109,18 @@ local products: { Product } = {
 		Order = 3,
 		Kind = "LuckySoap",
 		Color = GOLD,
+	},
+	{
+		Key = "AutoCollect2h",
+		Id = 0,
+		Robux = 99,
+		DisplayName = "Auto-Collect 2h",
+		Description = "Pens pay themselves for 2 hours while you play. Buying again stacks the time, up to 8 hours.",
+		Tab = "Boosts",
+		Order = 4,
+		Kind = "AutoCollect",
+		Color = GREEN,
+		Seconds = 2 * 3600,
 	},
 	-- Cash
 	{
@@ -187,6 +201,15 @@ local passes: { Pass } = {
 		Order = 2,
 		Color = PURPLE,
 	},
+	{
+		Key = "AutoCollectForever",
+		Id = 0,
+		Robux = 495, -- 5x the 2-hour auto-collect
+		DisplayName = "Auto-Collect Forever",
+		Description = "Pens pay themselves forever. You never have to walk the collect pads again.",
+		Order = 3,
+		Color = GREEN,
+	},
 }
 
 local productsByKey: { [string]: Product } = {}
@@ -223,6 +246,10 @@ return {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",
 		TagColor = GOLD,
+	},
+	AutoCollect = {
+		MaxSeconds = 8 * 3600, -- stacked 2-hour purchases stop here
+		PassKey = "AutoCollectForever",
 	},
 	-- Sold out between the stock check and the receipt: cash instead (the Robux can't be refunded).
 	-- max(Floor, min(120 min of income, the full next hose)): never less than Floor at any tier.

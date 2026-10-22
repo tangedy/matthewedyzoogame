@@ -27,6 +27,10 @@ local function screenGui(name: string, ignoreInset: boolean, order: number): Scr
 	gui.IgnoreGuiInset = ignoreInset
 	gui.DisplayOrder = order
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	-- The storm banner is placed against the topbar inset in viewport pixels.
+	if name == "LiveOpsTop" then
+		gui:SetAttribute("UIPlatformExclude", true)
+	end
 	gui.Parent = player:WaitForChild("PlayerGui")
 	return gui
 end

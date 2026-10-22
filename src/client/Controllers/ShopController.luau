@@ -10,6 +10,7 @@ local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local Modals = require(script.Parent.Parent.UI.Modals)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -103,15 +104,24 @@ local function setMessage(text: string, ok: boolean)
 	messageLabel.TextColor3 = if ok then OK_COLOR else ERROR_COLOR
 end
 
+local dim: TextButton
+
 local function close()
 	openStation = nil
 	panel.Visible = false
+	if dim then
+		dim.Visible = false
+	end
 end
 
 local function open(station: BasePart)
 	openStation = station
 	setMessage("", true)
 	refresh()
+	Modals.claim("HoseShop")
+	if dim then
+		dim.Visible = true
+	end
 	panel.Visible = true
 end
 
@@ -119,7 +129,11 @@ local function buildGui()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Shop"
 	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 32
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
+	dim = Modals.dim(gui, close)
+	Modals.bind("HoseShop", close)
 
 	panel = Instance.new("Frame")
 	panel.Name = "ShopPanel"
@@ -127,8 +141,9 @@ local function buildGui()
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.fromOffset(360, 250)
 	panel.BackgroundColor3 = PANEL_COLOR
-	panel.BackgroundTransparency = 0.1
+	panel.BackgroundTransparency = 0
 	panel.Visible = false
+	panel.ZIndex = 5
 	panel.Parent = gui
 	round(panel, 14)
 	local constraint = Instance.new("UISizeConstraint")

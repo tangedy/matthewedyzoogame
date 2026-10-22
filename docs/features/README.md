@@ -20,7 +20,7 @@ New systems plug into the game without editing core services, so several can be 
   - `CleaningService.getActiveJob(player)` and `CleaningService.redirty(jobId, fraction)`
   - `ZooService.addToPads(player, amount)`, `ZooService.totalIncome(player)`, `ZooService.income(species, mutation)`
   - `EconomyService.addCoins(player, amount)` and `EconomyService.spend(player, amount)`
-- **UI:** use `UIStyle` (chunky outlined text, rarity and mutation labels, `formatMoney`, `border`). Each controller builds its own ScreenGui and never edits `HUDController`.
+- **UI:** use `UIStyle` (chunky outlined text, rarity and mutation labels, `formatMoney`, `border`). Each controller builds its own ScreenGui and never edits `HUDController`. `UIPlatform` scales that ScreenGui and maps actions; see [Cross-platform UI](../ui-platform.md). Set attribute `UIPlatformExclude` on viewport-space guis (reticles, full-screen effects).
 
 ## Rules that still apply
 

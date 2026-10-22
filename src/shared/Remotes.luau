@@ -13,7 +13,7 @@ local EVENTS = {
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
 	"CoinsChanged", -- (coins: number)
 	"ToolTierChanged", -- (tier: number, name: string)
-	"WashCompleted", -- (jobId: string, reward: number, coins: number)
+	"WashCompleted", -- (jobId: string, reward: number, coins: number, discoveryBonus: number)
 	"PurchaseResult", -- (success: boolean, message: string)
 	"ZooChanged", -- (ZooSummary)
 	"IndexChanged", -- (index: { [string]: boolean }, newKey: string?)

@@ -31,6 +31,10 @@ local warnedBuild: { [string]: boolean } = {}
 
 local function clock(seconds: number): string
 	local s = math.max(0, math.floor(seconds))
+	local hours = s // 3600
+	if hours > 0 then
+		return string.format("%d:%02d:%02d", hours, (s % 3600) // 60, s % 60)
+	end
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
@@ -42,6 +46,15 @@ function MonetizationGrants.soapLeft(player: Player): number
 	end
 	local saved = MonetizationState.saved(player)
 	return if saved then saved.SuperSoapLeft else 0
+end
+
+function MonetizationGrants.autoCollectLeft(player: Player): number
+	local session = MonetizationState.peek(player)
+	if session and session.AutoCollectEndsAt > 0 then
+		return math.max(0, session.AutoCollectEndsAt - Workspace:GetServerTimeNow())
+	end
+	local saved = MonetizationState.saved(player)
+	return if saved then saved.AutoCollectLeft else 0
 end
 
 -- Limited animals --------------------------------------------------------------------------
@@ -201,6 +214,19 @@ function MonetizationGrants.product(
 			return false, nil
 		end
 		return true, `+{UIStyle.formatMoney(amount)}!`
+	elseif kind == "AutoCollect" then
+		local add = product.Seconds or (2 * 3600)
+		local left = math.min(
+			MonetizationGrants.autoCollectLeft(player) + add,
+			MonetizationConfig.AutoCollect.MaxSeconds
+		)
+		saved.AutoCollectLeft = left
+		local session = MonetizationState.peek(player)
+		if session then
+			session.AutoCollectEndsAt = Workspace:GetServerTimeNow() + left
+		end
+		ZooService.collectAll(player)
+		return true, `Auto-Collect for {clock(left)}! Your pens pay themselves.`
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -256,6 +282,8 @@ function MonetizationGrants.applyPass(player: Player, key: string)
 		end
 	elseif key == "FireHoseRig" then
 		unlockTopHose(player)
+	elseif key == "AutoCollectForever" and first then
+		ZooService.collectAll(player)
 	end
 end
 

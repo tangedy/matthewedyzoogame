@@ -206,7 +206,13 @@ local function runOneJob(bay: Bay, owner: Player)
 		end
 		if EconomyService.awardWash(owner, job.Reward + bonus) then
 			local updated = EconomyService.getProfile(owner)
-			washCompleted:FireClient(owner, jobId, job.Reward + bonus, if updated then updated.Coins else 0)
+			washCompleted:FireClient(
+				owner,
+				jobId,
+				job.Reward + bonus,
+				if updated then updated.Coins else 0,
+				bonus
+			)
 		end
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
 	end

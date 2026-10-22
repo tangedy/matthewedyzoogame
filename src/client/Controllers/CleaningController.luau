@@ -2,7 +2,7 @@
 -- spraying; the server decides what actually gets cleaned.
 --
 -- Desktop: hold left mouse, aim with the pointer. Gamepad: hold R2, aim with the reticle.
--- Touch: hold the SPRAY button, aim with the center-screen reticle.
+-- Touch: hold the native Spray button (ContextActionService), aim with the center reticle.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,6 +15,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local player = Players.LocalPlayer
 
@@ -45,10 +46,6 @@ local beam: Beam
 local spraySound: Sound
 local fallbackNozzle: Attachment? = nil
 local reticle: Frame
-
-local function isTouchUI(): boolean
-	return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
-end
 
 local function getRoot(): BasePart?
 	local character = player.Character
@@ -251,11 +248,31 @@ local function buildEffects()
 	spraySound.Parent = SoundService
 end
 
-local function buildControls()
+local function onSpray(state: Enum.UserInputState, input: InputObject?)
+	if state == Enum.UserInputState.Cancel or input == nil then
+		mouseHeld, touchHeld, padHeld = false, false, false
+		return
+	end
+	if state ~= Enum.UserInputState.Begin and state ~= Enum.UserInputState.End then
+		return
+	end
+	local down = state == Enum.UserInputState.Begin
+	if input.KeyCode == Enum.KeyCode.ButtonR2 then
+		padHeld = down
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+		mouseHeld = down
+	else
+		touchHeld = down
+	end
+end
+
+local function buildReticle()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SprayControls"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true -- GUI coordinates == viewport coordinates
+	-- The reticle is placed in viewport pixels. ResponsiveScale would move it off the aim point.
+	gui:SetAttribute("UIPlatformExclude", true)
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	reticle = Instance.new("Frame")
@@ -271,67 +288,12 @@ local function buildControls()
 	local round = Instance.new("UICorner")
 	round.CornerRadius = UDim.new(1, 0)
 	round.Parent = reticle
-
-	-- Large hold button above the jump button, away from the movement thumbstick.
-	local button = Instance.new("TextButton")
-	button.Name = "SprayButton"
-	button.AnchorPoint = Vector2.new(1, 1)
-	button.Position = UDim2.new(1, -30, 1, -225)
-	button.Size = UDim2.fromOffset(115, 115)
-	button.BackgroundColor3 = Color3.fromRGB(60, 150, 230)
-	button.BackgroundTransparency = 0.15
-	button.Text = "SPRAY"
-	button.TextColor3 = Color3.new(1, 1, 1)
-	button.Font = Enum.Font.FredokaOne
-	button.TextSize = 26
-	button.AutoButtonColor = false
-	button.Visible = UserInputService.TouchEnabled
-	button.Parent = gui
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = button
-
-	local function press(down: boolean)
-		touchHeld = down
-		button.BackgroundTransparency = if down then 0 else 0.15
-	end
-	button.InputBegan:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.Touch
-			or input.UserInputType == Enum.UserInputType.MouseButton1
-		then
-			press(true)
-		end
-	end)
-	button.InputEnded:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.Touch
-			or input.UserInputType == Enum.UserInputType.MouseButton1
-		then
-			press(false)
-		end
-	end)
 end
 
 local function bindInput()
-	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			mouseHeld = true
-		elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
-			padHeld = true
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			mouseHeld = false
-		elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
-			padHeld = false
-		end
-	end)
-	-- Losing focus mid-hold shouldn't leave the hose stuck on.
+	-- Native touch button on phones; mouse and R2 everywhere else. No second Spray button.
+	UIPlatform.ActionMap.bindTemplate("Spray", onSpray)
+	-- Losing focus mid-hold shouldn't leave the hose stuck on. Cancel covers most cases.
 	UserInputService.WindowFocusReleased:Connect(function()
 		mouseHeld, touchHeld, padHeld = false, false, false
 	end)
@@ -357,7 +319,7 @@ local function onHeartbeat()
 	-- Where the player is pointing on screen. Touch and gamepad aim with a fixed reticle placed
 	-- above the character (the camera centers on the character, which would block the view).
 	local shiftLock = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-	local assisted = touchHeld or padHeld or isTouchUI()
+	local assisted = touchHeld or padHeld or UIPlatform.get().inputMode ~= "KeyboardMouse"
 	local viewport = camera.ViewportSize
 	local screenPoint = if assisted
 		then Vector2.new(viewport.X / 2, viewport.Y * GameConfig.CenterAimHeight)
@@ -456,7 +418,7 @@ end
 function CleaningController.init(initial: Types.InitialState)
 	buildEffects()
 	applyTier(initial.ToolTier)
-	buildControls()
+	buildReticle()
 	bindInput()
 	applyBay(initial.Bay)
 

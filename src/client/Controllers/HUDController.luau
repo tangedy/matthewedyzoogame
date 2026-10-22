@@ -6,13 +6,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local player = Players.LocalPlayer
 
@@ -47,6 +47,7 @@ local currentJobId: string? = nil
 local currentState: Types.BayState? = nil
 local currentProgress = 0
 local hintShowing = false
+local inputMode: UIPlatform.InputMode = "KeyboardMouse"
 
 local function textLabel(parent: Instance, props: { [string]: any }, color: Color3?): TextLabel
 	local l = Instance.new("TextLabel")
@@ -200,6 +201,13 @@ local function buildGui()
 	}, UIStyle.CashColor)
 end
 
+-- Phone controls are small and the screen scale already lifts this line. A tablet
+-- jump button is tall enough that the same offset sits on top of it.
+local function placeToast(profile: UIPlatform.Profile)
+	local lift = if profile.inputMode == "Touch" and profile.formFactor ~= "Mobile" then 260 else 140
+	toast.Position = UDim2.new(0.5, 0, 1, -lift)
+end
+
 local function showToast(text: string?)
 	if text then
 		toast.Text = text
@@ -238,7 +246,7 @@ local function refreshToast()
 	if currentState == "Washing" then
 		if not tutorialCompleted and currentProgress < 0.1 then
 			showToast(
-				if UserInputService.TouchEnabled
+				if inputMode == "Touch"
 					then "Hold SPRAY to wash. Wash off all the mud!"
 					else "Hold to spray. Wash off all the mud!"
 			)
@@ -310,8 +318,13 @@ local function showAnnouncement(text: string, rarityKey: string)
 	end)
 end
 
-local function playPayout(reward: number)
-	payout.Text = "+" .. UIStyle.formatMoney(reward)
+local function playPayout(reward: number, discoveryBonus: number)
+	if discoveryBonus > 0 then
+		local wash = reward - discoveryBonus
+		payout.Text = `+{UIStyle.formatMoney(wash)} WASH\n+{UIStyle.formatMoney(discoveryBonus)} NEW`
+	else
+		payout.Text = "+" .. UIStyle.formatMoney(reward)
+	end
 	payout.Visible = true
 	payout.TextTransparency = 0
 	payout.Position = UDim2.fromScale(0.5, 0.42)
@@ -327,22 +340,40 @@ end
 
 -- Persistent warning: the doc requires explaining when progress can't be saved.
 local function showDataWarning(status: Types.DataStatus)
+	-- Left column, under the SHOP button. A full-width footer covered the index, the
+	-- shop, and the phone thumbstick.
 	local warning = textLabel(gui, {
 		Name = "DataWarning",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -8),
-		Size = UDim2.new(0.9, 0, 0, 20),
+		AnchorPoint = Vector2.new(0, 0),
+		Position = UDim2.new(0, 16, 0.5, 100),
+		Size = UDim2.fromOffset(210, 52),
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = if status == "Locked"
-			then "Your save is open on another server. Progress this session won't save. Rejoin in a minute."
-			else "Couldn't load your save. Progress this session won't save. Rejoin to try again.",
+			then "Your save is open on another server. Progress this session won't save."
+			else "Couldn't load your save. Progress this session won't save.",
 	}, Color3.fromRGB(255, 110, 100))
+	warning.TextScaled = false
+	warning.TextSize = 16
 	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(720, 20)
+	constraint.MaxSize = Vector2.new(220, 64)
 	constraint.Parent = warning
 end
 
 function HUDController.init(initial: Types.InitialState)
 	buildGui()
+	local profile = UIPlatform.get()
+	inputMode = profile.inputMode
+	placeToast(profile)
+	UIPlatform.onChanged(function(nextProfile)
+		local inputChanged = nextProfile.inputMode ~= inputMode
+		inputMode = nextProfile.inputMode
+		placeToast(nextProfile)
+		if inputChanged then
+			refreshToast()
+		end
+	end)
 	tutorialCompleted = initial.TutorialCompleted
 	cashLabel.Text = UIStyle.formatMoney(initial.Coins)
 	toolLabel.Text = initial.ToolName
@@ -397,15 +428,17 @@ function HUDController.init(initial: Types.InitialState)
 			barStroke.Color = Color3.new(0, 0, 0):Lerp(Color3.fromRGB(255, 255, 255), pulse * 0.35)
 		end
 	end)
-	Remotes.event("WashCompleted").OnClientEvent:Connect(function(jobId: string, reward: number, coins: number)
-		if jobId == currentJobId then
-			setProgress(1, true)
+	Remotes.event("WashCompleted").OnClientEvent:Connect(
+		function(jobId: string, reward: number, coins: number, discoveryBonus: number?)
+			if jobId == currentJobId then
+				setProgress(1, true)
+			end
+			tutorialCompleted = true
+			cashLabel.Text = UIStyle.formatMoney(coins)
+			playPayout(reward, discoveryBonus or 0)
+			refreshToast()
 		end
-		tutorialCompleted = true
-		cashLabel.Text = UIStyle.formatMoney(coins)
-		playPayout(reward)
-		refreshToast()
-	end)
+	)
 end
 
 return HUDController

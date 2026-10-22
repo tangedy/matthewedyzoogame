@@ -1,0 +1,179 @@
+# Cross-platform UI
+
+The game builds its ScreenGuis in code. `src/client/UI` measures the device, scales those guis, and binds actions. This page is the Studio-side setup that matches that code: where `UIScale`, `UIAspectRatioConstraint`, and `UISizeConstraint` go, and where they must not.
+
+`ClientBootstrap` calls `UIPlatform.start()` before any controller runs. You do not add a second LocalScript.
+
+## What decides the layout
+
+Two signals, read on every change:
+
+| Signal | Used for | Values |
+| --- | --- | --- |
+| `camera.ViewportSize.X` | Structural layout and `UIScale` | **Mobile** under 600 wide, **Tablet** 600–1024, **PC** wider than 1024 |
+| `UserInputService.PreferredInput` | Which physical inputs are live | `Touch`, `KeyboardAndMouse`, `Gamepad` |
+
+`TouchEnabled`, `KeyboardEnabled`, and `GamepadEnabled` are not read. A touchscreen laptop reports all three as true, so they cannot decide layout.
+
+`PreferredInput` and `ViewportSize` are independent. A 900px-wide iPad with a keyboard is a **Tablet** form factor (the UI scales as a tablet) and **KeyboardAndMouse** input (no virtual Spray button). A landscape phone wider than 600px is a **Tablet** by the width rule above.
+
+While the game is running, `PlayerGui` shows the current reading as attributes: `UIFormFactor`, `UIInputMode`, `UIScale`.
+
+## ScreenGui checklist
+
+For every new ScreenGui under `PlayerGui`:
+
+1. `ResetOnSpawn` = **false**. The controllers build the gui once.
+2. `ZIndexBehavior` = **Sibling**.
+3. `ScreenInsets` = **CoreUISafeInsets** for HUD text (clears the top bar). Use **DeviceSafeInsets** only on a gui whose buttons sit against the physical screen edge.
+4. Leave `IgnoreGuiInset` **off** for ordinary HUD. Turn it on only when children are positioned in raw viewport pixels (the reticle, the mud splat, the storm banner). Those guis are excluded from scaling, below.
+5. Do **not** parent `UIAspectRatioConstraint` or `UISizeConstraint` to the ScreenGui. A ScreenGui is not a GuiObject. The engine ignores both constraints there.
+6. Do **not** add your own `UIScale` named `ResponsiveScale`. The scaler creates that one child and drives it. A second scale on the ScreenGui fights it. Scales on a **child** frame are fine: pop and bounce animations multiply with the screen scale.
+
+### Which existing guis are scaled
+
+The scaler does **not** touch every ScreenGui. `PlayerGui` also holds engine and plugin guis (`TouchGui`, `ContextActionGui`, `Freecam`). Scaling those shrinks the thumbstick, the jump button, and the native Spray button.
+
+| ScreenGui | Scaled | Why |
+| --- | --- | --- |
+| HUD, Shop, Index, Zoo, Onboarding, Tension, Monetization, LiveOps, LiveOpsPopups | Yes | Named game HUD. Child pop-scales multiply with the screen scale. |
+| SprayControls | No | The reticle position is a viewport pixel. |
+| TensionSplat | No | Mud blotches are sized from `ViewportSize`. |
+| LiveOpsTop | No | The storm banner is aligned to the top-bar inset. |
+| TouchGui, ContextActionGui, Freecam, Chat, BubbleChat, Backpack | Never | Engine or Studio UI. `UIPlatformInclude` does not override this. |
+
+A new game ScreenGui is scaled only if its name is added to `GAME_GUIS` in `ScaleDriver`, or you set attribute `UIPlatformInclude` (boolean) to **true** before parenting it. Set `UIPlatformExclude` (or call `UIPlatform.setExcluded(gui, true)`) to keep a named game gui at scale 1.
+
+## The one UIScale
+
+Explorer shape the script maintains:
+
+```text
+PlayerGui
+  HUD                     ScreenGui
+    ResponsiveScale       UIScale          -- script-owned, Scale is driven
+    Wallet                Frame
+    WashPanel             Frame
+      UIScale                                -- animation only, multiplies
+```
+
+`ResponsiveScale.Scale` follows the viewport:
+
+- Width 360 or below maps to **0.62**. Width 1280 or above maps to **1**. In between, a smoothstep so the ends do not kink.
+- A short window (height under 720) shrinks a little more.
+- The form factor then clamps that number: Mobile 0.55–0.80, Tablet 0.55–0.95, PC 0.55–1.00. A normal window already sits inside the clamp, so dragging across 600 or 1024 does not pop.
+- PC never goes above 1. The existing desktop offsets stay the size they were built at.
+- The first value is applied immediately. Later changes ease in over about 180ms on one shared heartbeat, not a tween per gui.
+
+`UISizeConstraint` runs before this scale. A panel with `MaxSize` 360×250 at screen scale 0.7 draws at about 252×175, and its children shrink with it. That is what you want for the hose shop and the index. Do not also hand-scale those offsets.
+
+## UIAspectRatioConstraint
+
+Parent it to the frame, image, or button that must keep its shape. Never to the ScreenGui, and never to a bar that is supposed to stretch.
+
+### Square icon or action chip
+
+Use this for an index-style button, a close button, or any icon that should stay square when the parent row changes height.
+
+1. Select the `ImageButton` or `TextButton`.
+2. Insert **UIAspectRatioConstraint**.
+3. Set:
+   - `AspectRatio` = **1** (width ÷ height).
+   - `AspectType` = **FitWithinMaxSize**. The button stays inside the size you already set instead of overflowing the row.
+   - `DominantAxis` = **Height** when the button sits in a horizontal row. Use **Width** when it sits in a vertical stack.
+4. Insert **UISizeConstraint** on the **same** object (next section) so a scaled phone cannot shrink the hit target to nothing, and a desktop row cannot grow it without limit.
+
+`FitWithinMaxSize` letterboxes inside the box. `ScaleWithParentSize` forces the ratio even if the widget pokes out of its parent. Use `ScaleWithParentSize` only for a full-bleed illustration, not for HUD chrome.
+
+### Card with art
+
+Wash cards and shop panels are wider than they are tall. Put the constraint on the **card frame**, not on the title label.
+
+1. Select the card `Frame`.
+2. Insert **UIAspectRatioConstraint**.
+3. Set `AspectRatio` to the authored width ÷ height. A 380×150 wash card is **2.533**.
+4. `AspectType` = **FitWithinMaxSize**.
+5. `DominantAxis` = **Width** if the card is centered and should get shorter rather than narrower. Use **Height** if it should get narrower rather than shorter.
+
+Do not put a second aspect constraint on the text or the clean-meter inside the card. Those should fill the card (`UDim2` scale) and let the card hold the ratio.
+
+### Leave these without an aspect constraint
+
+- Cash and toast labels. They are one line of `TextScaled` text and must use the width they are given.
+- The clean meter and patience bar. They stretch on purpose.
+- The reticle. It is a fixed 18×18 circle in viewport pixels, on an excluded ScreenGui.
+
+From code, the same placement is `UIPlatform.constrain(frame, { aspectRatio = 1, dominantAxis = Enum.DominantAxis.Height, minSize = Vector2.new(44, 44), maxSize = Vector2.new(72, 72) })`. That parents `UIPlatformAspect` and `UIPlatformSize` to the frame.
+
+## UISizeConstraint
+
+Parent it to the widget whose box you want to floor or cap. It clamps the widget's size **before** `ResponsiveScale` multiplies the result.
+
+### Centered toast, announcement, or banner
+
+This is the pattern already on the HUD announcement, the bottom toast, and the onboarding banner.
+
+1. Select the label or banner.
+2. Size it with scale on X so it tracks the screen, for example `UDim2.new(0.9, 0, 0, 34)`.
+3. Insert **UISizeConstraint**.
+4. Set `MaxSize` to the longest length that still looks like a caption, not a stretched headline. The HUD uses **720×34** for announcements and toasts, **560×40** for the onboarding banner.
+5. Leave `MinSize` at 0, 0 for text. `TextScaled` fills whatever height remains.
+
+### Modal panel
+
+Shop and index already do this. Keep it.
+
+1. Select the panel `Frame`.
+2. Size with a mix: scale so a phone can shrink it, offset or `MaxSize` so a desktop does not grow it. The shop is `UDim2.new(0.9, 0, 0, 250)` with `MaxSize` **360×250**. The index is `UDim2.fromScale(0.92, 0.82)` with `MaxSize` **600×560**.
+3. Insert **UISizeConstraint** on the panel only. Do not also cap every row inside it. The rows should be scale-sized against the panel so they follow the cap.
+
+### Touch target
+
+For a button a thumb has to hit (close, buy, index):
+
+1. Insert **UISizeConstraint** on the button.
+2. `MinSize` = **44×44**. This floor is applied before the screen scale, so on a phone at scale 0.62 the drawn size is about 27px. That is acceptable for a button that also has padding around it. Buttons that must stay physically large belong on the native touch controls (next section), which are **not** inside `ResponsiveScale`.
+3. `MaxSize` = the desktop cap, for example **72×72** for an icon and **360×50** for a wide buy button.
+
+`MinSize` larger than `MaxSize` is ignored on the axis that conflicts. Set the max on both axes.
+
+## Actions (keyboard, mouse, gamepad, touch button)
+
+`UIPlatform.ActionMap` binds through `ContextActionService`.
+
+- `PreferredInput == Touch`: the engine draws the virtual button. There is no Spray `TextButton` in a ScreenGui.
+- Keyboard, mouse, and gamepad: the same action name is bound to real keys, and `createTouchButton` is false, so no duplicate button is drawn.
+- A touch can also fake a mouse click. In touch mode the mouse button is not bound, so Spray does not fire twice.
+
+The catalog lives in `ActionMap.Templates`:
+
+| Action | Bound now | Keyboard / mouse | Gamepad | Touch button |
+| --- | --- | --- | --- | --- |
+| Spray | Yes. `CleaningController` holds it to wash. | Left mouse | R2 | Above the jump button |
+| Interact | No. Binding it would take **E** and **ButtonX** from ProximityPrompts. | E | ButtonX | Stacked above Spray |
+| Sprint | No. Binding it would take **LeftShift** and **ButtonL3** from the character controller. | Left Shift | L3 | Above the thumbstick |
+
+To turn Interact or Sprint on from a controller:
+
+```lua
+local UIPlatform = require(script.Parent.Parent.UI)
+
+UIPlatform.ActionMap.bindTemplate("Interact", function(state, _input)
+	if state == Enum.UserInputState.Begin then
+		-- your action
+	end
+	return Enum.ContextActionResult.Pass
+end)
+```
+
+Add a new action by putting a spec next to `Spray` in `ActionMap.Templates` (`name`, `title`, `keyboardMouse`, `gamepad`, `touch`, `touchPosition`, `touchSize`) and calling `bindTemplate`. Touch positions are the button's center. Re-bind happens automatically when `PreferredInput` changes. Button size and position update when the width band changes, without building a new button.
+
+Clicks that land on an `Active` gui (buttons, text boxes) do not start Spray. That replaces the old `gameProcessed` check on `InputBegan`.
+
+## Trying it in Studio
+
+1. Play with the device emulator. Changing the emulator width updates `PlayerGui.UIFormFactor` and `UIScale`.
+2. The emulator's mouse still reports `PreferredInput` as `KeyboardAndMouse`, so the Spray touch button stays hidden. Switch the emulator to touch input, or test on a phone, to see the native button.
+3. Drag the Studio window across about 600px and about 1024px wide. The HUD should ease to the new scale and not jump backward.
+4. On desktop, hold left mouse to spray and aim with the cursor. On a gamepad, hold R2 and aim with the center reticle. On touch, hold Spray and aim with the center reticle.
+5. Click a shop or index button with the mouse. The hose must not start spraying.
