@@ -1313,10 +1313,10 @@ local SPECS: { [string]: Spec } = {
 			ball("Forehead", 3.6, head.CFrame * CFrame.new(0, h.Y / 2 - 0.7, 0.5), skin, model)
 			for _, side in { -1, 1 } do
 				local ear = head.CFrame
-					* CFrame.new(side * (h.X / 2 + 1.0), 0.3, h.Z / 2 - 0.2)
+					* CFrame.new(side * (h.X / 2 + 0.8), 0.3, h.Z / 2 - 0.2)
 					* CFrame.Angles(0, side * math.rad(-12), 0)
-				disc("Ear", 3.2, 0.3, ear, skin, model)
-				disc("EarInner", 2.4, 0.1, ear * CFrame.new(0, -0.1, -0.2), PINK_DARK:Lerp(skin, 0.5), model)
+				disc("Ear", 3.0, 0.3, ear, skin, model)
+				disc("EarInner", 2.2, 0.1, ear * CFrame.new(0, -0.1, -0.2), PINK_DARK:Lerp(skin, 0.5), model)
 			end
 
 			-- Trunk hangs down, then curls forward at the tip. Tusks curve up and out.
@@ -1615,7 +1615,7 @@ local SPECS: { [string]: Spec } = {
 			end
 
 			-- Feather ruff where the eagle front meets the lion body.
-			ball("Ruff", 2.2, body.CFrame * CFrame.new(0, 0.9, -b.Z / 2 + 0.1), feather, model)
+			ball("Ruff", 1.6, body.CFrame * CFrame.new(0, 0.9, -b.Z / 2 + 0.1), feather, model)
 			for i = 0, 2 do
 				wedge(
 					"ChestFeather",
@@ -1875,7 +1875,6 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(255, 120, 30),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 0.95,
-		SkipRump = true,
 		CenterZ = true,
 		Decorate = function(model, body, head, spec)
 			local b, h = body.Size, head.Size
@@ -2492,13 +2491,12 @@ local SPECS: { [string]: Spec } = {
 		LegHeight = 0.6,
 		LegThickness = 0.45,
 		LegColor = Color3.fromRGB(255, 150, 185),
-		HeadSize = Vector3.new(2.6, 1.5, 1.8),
+		HeadSize = Vector3.new(2.3, 1.5, 1.8), -- no wider than the body so front side patches stay visible
 		HeadLift = -0.35,
 		BodyColor = Color3.fromRGB(255, 170, 200),
 		HeadColor = Color3.fromRGB(255, 170, 200),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 0.8,
-		SkipRump = true,
 		CenterZ = true,
 		Decorate = function(model, body, head, spec)
 			local b, h = body.Size, head.Size

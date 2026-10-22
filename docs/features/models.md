@@ -55,8 +55,8 @@ Building blocks for future specs: `ball`, `rod` (axis Y), `disc` (axis Z), `wedg
 
 ## Known limits
 
-- Cache slots are 7 studs apart (`GameConfig.Cache.SlotSpacing`). The widest animals (Elephant with its ears, about 9 studs) overlap a neighbour's slot a little. This was already true before this change.
-- `ShopController.unlocksText` counts every species with `RequiredToolTier == 1`, so the tier-1 hose will say it unlocks "Mythic" animals because of the Limited Axolotl. That controller isn't owned by this feature. The fix there is to skip `def.Limited`.
+- Cache slots are 7 studs apart (`GameConfig.Cache.SlotSpacing`). The widest animals (Elephant with its ears, about 8.6 studs) overlap a neighbour's slot a little. This was already true before this change.
+- `ShopController.unlocksText` counts every species at a tier, Limited ones included. Today it is only called for the next hose to buy (tier 2 and up), so the tier-1 Axolotl never shows up there. If it is ever called for tier 1, skipping `def.Limited` in it would keep the Axolotl out.
 - None of this was checked in Studio while it was being built (it was verified statically). Run the checklist below.
 
 ## Check in Studio
@@ -76,9 +76,9 @@ require(game.ServerScriptService.Server.Services.AnimalBuilder).audit()
   end
   ```
 - [ ] **Griffon**: the beak hooks downward, the front legs are yellow with talons and the back legs have paws. The wings lie on the back like a tent and don't hang over the body sides.
-- [ ] **Phoenix**: stands on two gold legs. The wings rise in a V with glowing flame tips, and fire particles come off the wings, crest and tail. The flame tail droops behind.
+- [ ] **Phoenix**: stands on two gold legs. The wings rise in a V with glowing flame tips, and fire particles come off the wings, crest and tail. The flame tail droops behind. Mud patches show on the rump between the tail feathers.
 - [ ] **Kitsune**: nine tails fan out behind the rump and none of them cross the body sides or top. Three tail tips and two orbs give off blue fox-fire, and the ears are triangles with red insides.
-- [ ] **Axolotl**: pink, smiling, with three glowing gill stalks on each side of the head. It never walks in by itself.
+- [ ] **Axolotl**: pink, smiling, with three glowing gill stalks on each side of the head. The head is no wider than the body and mud shows on the rump around the tail. It never walks in by itself.
 - [ ] **Dragon**: its jaws glow, and fire wisps and embers stream forward from the mouth. The wings rise from the shoulders and don't clip the neck. The tail curls beside the hind legs and ends in a spade, and the Zoo God halo floats above the horns.
 - [ ] **Kaiju**: the cyan dorsal plates glow up the back and along the tail, with atomic breath from the jaws and sparks off the top plate. It reads as an upright giant.
 - [ ] **Elephant**: the trunk curls, the tusks curve up, the ears sit behind the head and the halo sits above the forehead dome.
