@@ -1,8 +1,8 @@
 -- Zoo star rating, 1 to 5. Points come from base income per second, index completion and
 -- pens unlocked (thresholds in LiveOpsConfig.Stars); the total points pick the stars.
--- Shown on a billboard above the bay sign, replicated as the Player attribute "ZooStars"
--- (the client HUD widget reads it), and announced server-wide when a zoo reaches a star
--- rating it has never had before.
+-- Replicated as the Player attribute "ZooStars", shown in the leaderboards, and announced
+-- server-wide when a zoo reaches a star rating it has never had before. (The bay-sign and
+-- HUD star displays were removed.)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,7 +10,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local LiveOpsConfig = require(ReplicatedStorage.Shared.FeatureConfig.LiveOpsConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
-local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Common = require(script.Parent.Common)
 local Services = script.Parent.Parent.Parent.Services
 local Hooks = require(Services.Hooks)
@@ -25,7 +24,6 @@ local EMPTY = "#4A4A55"
 local Stars = {}
 
 local current: { [Player]: number } = {}
-local signLabels: { [Player]: TextLabel } = {}
 
 local function indexTotal(): number
 	local species = 0
@@ -86,28 +84,6 @@ function Stars.richText(stars: number): string
 	return `<font color="{FILLED}">{filled}</font><font color="{EMPTY}">{empty}</font>`
 end
 
--- Our own billboard on the SignPost, sitting just above the core "<name>'s Zoo" label.
-local function buildSign(player: Player, bay: Model)
-	local post = bay:FindFirstChild("SignPost")
-	if not post or not post:IsA("BasePart") then
-		return
-	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "LiveOpsStars"
-	billboard.Size = UDim2.fromOffset(200, 40)
-	billboard.StudsOffset = Vector3.new(0, 5.5, 0) -- same anchor as the core Sign
-	billboard.SizeOffset = Vector2.new(0, 1.2) -- shifted up by its own height
-	billboard.MaxDistance = 80
-	billboard.Parent = post
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.RichText = true
-	label.Parent = billboard
-	UIStyle.text(label, nil, nil, 3)
-	label.Text = Stars.richText(Stars.get(player))
-	signLabels[player] = label
-end
-
 local function update(player: Player)
 	local state = Common.state(player)
 	if not state then
@@ -120,10 +96,6 @@ local function update(player: Player)
 	end
 	current[player] = stars
 	player:SetAttribute(Common.STARS_ATTRIBUTE, stars)
-	local label = signLabels[player]
-	if label and label.Parent then
-		label.Text = Stars.richText(stars)
-	end
 	if stars > state.BestStars then
 		-- The first measurement of a session only records the rating; later gains are news.
 		if previous ~= nil then
@@ -136,9 +108,8 @@ local function update(player: Player)
 end
 
 function Stars.init()
-	Hooks.on("BayAssigned", function(player: Player, bay: Model)
+	Hooks.on("BayAssigned", function(player: Player)
 		if player.Parent then
-			buildSign(player, bay)
 			update(player)
 		end
 	end)
@@ -155,7 +126,6 @@ function Stars.init()
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		current[player] = nil
-		signLabels[player] = nil
 	end)
 end
 

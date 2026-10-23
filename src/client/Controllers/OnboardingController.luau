@@ -2,6 +2,7 @@
 --   * First cycle: a candy-colored trail on the ground — wash, pick up from the cache,
 --     place in a pen, visit the hose stand. Each mark points at that destination. The
 --     server remembers the step.
+--   * Whenever the trail is showing, a big all-caps instruction sits at the top of the screen.
 --   * After that the trail only comes back for the delivery truck while it's parked, or
 --     for the hose stand once the next hose is affordable.
 --   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
@@ -14,6 +15,7 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -72,6 +74,8 @@ local cacheCount = 0
 local carrying = false
 local pickedUp = false -- the player has picked an animal up before
 local trail: Folder
+local instruction: TextLabel
+local instructionScale: UIScale
 type TrailSegment = { left: Part, right: Part }
 
 local segments: { TrailSegment } = {}
@@ -162,40 +166,62 @@ local function truckTarget(): BasePart?
 	return nil
 end
 
-local function guideTarget(): BasePart?
+-- Where the trail leads right now, and the instruction shown at the top of the screen.
+local function guideTarget(): (BasePart?, string?)
 	local bay = bayModel()
 	if not bay then
-		return nil
+		return nil, nil
 	end
 	if guideStep == "Wash" then
 		local animal = bay:FindFirstChild("Animal")
 		if animal and animal:IsA("Model") and animal.PrimaryPart then
-			return animal.PrimaryPart
+			return animal.PrimaryPart, "WASH THE ANIMAL!"
 		end
-		return partNamed(bay, "WashPosition")
+		return partNamed(bay, "WashPosition"), "WASH THE ANIMAL!"
 	elseif guideStep == "Pickup" then
-		return partNamed(bay:FindFirstChild("Cache"), "Slot1")
+		return partNamed(bay:FindFirstChild("Cache"), "Slot1"), "PICK UP YOUR CLEAN ANIMAL!"
 	elseif guideStep == "Place" then
 		local zoo = bay:FindFirstChild("Zoo")
-		return partNamed(zoo and zoo:FindFirstChild("Pen1"), "GatePost")
+		return partNamed(zoo and zoo:FindFirstChild("Pen1"), "GatePost"), "PUT IT IN A PEN!"
 	elseif guideStep == "Upgrade" then
-		return upgradeCounter()
+		return upgradeCounter(), "VISIT THE HOSE SHOP!"
 	end
 	-- Guide finished: only the truck (it leaves soon) or an affordable hose.
 	local truck = truckTarget()
 	if truck then
-		return truck
+		return truck, "A DELIVERY TRUCK IS HERE! CHECK IT OUT!"
 	end
 	if upgradeAffordable() and not shopVisitedForTier[tier] then
-		return upgradeCounter()
+		return upgradeCounter(), "YOU CAN AFFORD A HOSE UPGRADE!"
 	end
-	return nil
+	return nil, nil
+end
+
+local shownInstruction: string? = nil
+local function setInstruction(text: string?)
+	if text == shownInstruction then
+		return
+	end
+	shownInstruction = text
+	instruction.Visible = text ~= nil
+	if text then
+		instruction.Text = text
+		instructionScale.Scale = 0.6
+		TweenService
+			:Create(
+				instructionScale,
+				TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{ Scale = 1 }
+			)
+			:Play()
+	end
 end
 
 local function updateTrail(dt: number)
-	local target = guideTarget()
+	local target, text = guideTarget()
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	setInstruction(if target then text else nil)
 	if not target or not root or not character then
 		hideTrail()
 		return
@@ -339,6 +365,26 @@ local function applyBay(bay: Types.BaySnapshot?)
 end
 
 local function buildGui()
+	-- Big instruction across the top, under the event bar, while the trail is showing.
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "GuideInstruction"
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 4
+	gui.Parent = player:WaitForChild("PlayerGui")
+	instruction = Instance.new("TextLabel")
+	instruction.Name = "Instruction"
+	instruction.AnchorPoint = Vector2.new(0.5, 0)
+	instruction.Position = UDim2.new(0.5, 0, 0, 62)
+	instruction.Size = UDim2.new(0.9, 0, 0, 58)
+	instruction.Visible = false
+	instruction.Parent = gui
+	UIStyle.text(instruction, Color3.new(1, 1, 1), Color3.fromRGB(20, 40, 90), 4)
+	local maxSize = Instance.new("UITextSizeConstraint")
+	maxSize.MaxTextSize = 54
+	maxSize.Parent = instruction
+	instructionScale = Instance.new("UIScale")
+	instructionScale.Parent = instruction
+
 	trail = Instance.new("Folder")
 	trail.Name = "GuideTrail"
 	trail.Parent = Workspace

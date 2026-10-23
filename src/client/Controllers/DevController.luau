@@ -17,6 +17,8 @@ function DevController.init()
 			devCommand:FireServer("clean")
 		elseif input.KeyCode == Enum.KeyCode.G then
 			devCommand:FireServer("grant")
+		elseif input.KeyCode == Enum.KeyCode.V then
+			devCommand:FireServer("gallery") -- animal gallery in the sky; again to come back
 		end
 	end)
 end

@@ -2,7 +2,6 @@
 --   Storm         mud storm sky and rain (the countdown lives in the top-bar counter)
 --   VariantBanner one short top-bar strip: current event and the next one
 --   Popups        WELCOME BACK offline earnings panel and the DAILY DIRTY ANIMAL banner
---   Stars    zoo star rating widget above the cash counter
 -- Everything shown comes from the server (replicated attributes and LiveOps remotes); the
 -- client never decides an outcome. Developers can press M to start or stop a Mud Storm.
 
@@ -14,7 +13,6 @@ local UserInputService = game:GetService("UserInputService")
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Popups = require(script.Popups)
-local Stars = require(script.Stars)
 local Storm = require(script.Storm)
 local VariantBanner = require(script.VariantBanner)
 
@@ -56,7 +54,6 @@ local function start()
 
 	Storm.start(top)
 	VariantBanner.start(top)
-	Stars.start(hud)
 	Popups.start(hud, modal)
 	bindDevKey()
 
