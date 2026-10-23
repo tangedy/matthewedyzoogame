@@ -1,7 +1,7 @@
--- Contextual onboarding. The opening lesson is the wash and nothing else: a trail to the
--- baby elephant and a "Wash me!" marker. Pens, the cache, and the hose stand stay quiet
--- until those opening washes are done. After that the trail only returns for a parked
--- delivery truck or a hose the player can already afford.
+-- Contextual onboarding. The opening lesson is the wash and nothing else: a rainbow
+-- trail to the first pig and a "Wash me!" marker. Pens, the cache, and the hose stand
+-- stay quiet until those opening washes are done. After that the trail only returns
+-- for a parked delivery truck or a hose the player can already afford.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -99,7 +100,63 @@ end
 
 local function bayModel(): Instance?
 	local bays = Workspace:FindFirstChild("WashBays")
-	return bays and bayName and bays:FindFirstChild(bayName)
+	if bayName and bays then
+		local named = bays:FindFirstChild(bayName)
+		if named then
+			return named
+		end
+	end
+	if not bays then
+		return nil
+	end
+	for _, bay in bays:GetChildren() do
+		if bay:GetAttribute("OwnerUserId") == player.UserId then
+			bayName = bay.Name
+			return bay
+		end
+	end
+	return nil
+end
+
+-- The pig the player is supposed to wash, including while it is still walking in.
+local function washTarget(bay: Instance): BasePart?
+	local function partOf(model: Instance): BasePart?
+		if not model:IsA("Model") then
+			return nil
+		end
+		local primary = model.PrimaryPart
+		if primary then
+			return primary
+		end
+		local head = model:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			return head
+		end
+		return model:FindFirstChildWhichIsA("BasePart")
+	end
+	local animal = bay:FindFirstChild("Animal")
+	local standing = animal and partOf(animal)
+	if standing then
+		return standing
+	end
+	for _, child in bay:GetChildren() do
+		if child:GetAttribute("ScriptedIntro") == true then
+			local queued = partOf(child)
+			if queued then
+				return queued
+			end
+		end
+	end
+	local pad = bay:FindFirstChild("WashPosition")
+	return if pad and pad:IsA("BasePart") then pad else nil
+end
+
+-- Rainbow arrows for the first intro pig, and for the wash step if that lesson is still open.
+local function firstPigLesson(): boolean
+	if introLeft >= GameConfig.Intro.AutoSellCount then
+		return true
+	end
+	return guideStep == "Wash" and not tutorialCompleted
 end
 
 local function trailArm(name: string): Part
@@ -159,12 +216,8 @@ local function guideTarget(): (BasePart?, string?)
 	if not bay then
 		return nil, nil
 	end
-	if guideStep == "Wash" then
-		local animal = bay:FindFirstChild("Animal")
-		if animal and animal:IsA("Model") and animal.PrimaryPart then
-			return animal.PrimaryPart, nil
-		end
-		return partNamed(bay, "WashPosition"), nil
+	if firstPigLesson() or guideStep == "Wash" then
+		return washTarget(bay), "WASH THE ANIMAL!"
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or an affordable hose.
 	local truck = truckTarget()
@@ -222,7 +275,11 @@ local function updateTrail(dt: number)
 	local base = march % spacing
 	local generation = math.floor(march / spacing)
 
-	rayParams.FilterDescendantsInstances = { trail, character }
+	local ignore: { Instance } = { trail, character }
+	if target.Parent and target.Parent:IsA("Model") and target.Parent ~= Workspace then
+		table.insert(ignore, target.Parent)
+	end
+	rayParams.FilterDescendantsInstances = ignore
 	-- The floor under the player is the path's height; pads and ramps may lift a mark a
 	-- little, but nothing taller (fences, animals) can.
 	local humanoid = character:FindFirstChildOfClass("Humanoid")

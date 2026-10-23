@@ -17,6 +17,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local CutsceneService = require(script.Parent.CutsceneService)
 local DirtRenderer = require(script.Parent.DirtRenderer)
 local Hooks = require(script.Parent.Hooks)
 local HoseBuilder = require(script.Parent.HoseBuilder)
@@ -127,7 +128,7 @@ end
 -- the animal is under the cursor, so the side facing the camera is washed no matter where the
 -- player stands. Without it the ray comes from the hose nozzle.
 local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, aimOrigin: any)
-	if player:GetAttribute("InCutscene") == true then
+	if CutsceneService.blocksCleaning(player) then
 		return
 	end
 	-- Rate cap first: cheap, and the accepted step below is measured from this clock.

@@ -502,6 +502,7 @@ function BayService.assign(player: Player): boolean
 	bayBySlot[index] = bay
 	bay.Owner = player
 	bayByOwner[player] = bay
+	bay.Model:SetAttribute("OwnerUserId", player.UserId)
 	if bay.Label then
 		bay.Label.Text = player.DisplayName .. "'s Zoo"
 	end

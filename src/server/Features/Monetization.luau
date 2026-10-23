@@ -185,18 +185,6 @@ local function bindStand(player: Player, bay: Model)
 		end
 		refreshStand(player)
 	end
-	local zoo = bay:FindFirstChild("Zoo")
-	if zoo then
-		for _, child in zoo:GetChildren() do
-			if child:GetAttribute("FlexSide") == "Right" then
-				local post = child:FindFirstChild("GatePost")
-				local unlock = post and post:FindFirstChild("UnlockPrompt")
-				if unlock and unlock:IsA("ProximityPrompt") then
-					bindPrompt(unlock, player, "SidePasture")
-				end
-			end
-		end
-	end
 end
 
 -- Receipts ------------------------------------------------------------------------------
@@ -249,7 +237,7 @@ local function processPurchase(
 	local pasture = MonetizationState.unlockPasture(player)
 	PlayerDataService.saveNow(player)
 	if pasture then
-		local extra = "Left pasture unlocked forever!"
+		local extra = "Medium cages unlocked!"
 		message = if message then `{message} {extra}` else extra
 	end
 	if message then
@@ -339,7 +327,7 @@ local function buyProduct(player: Player, product: Product)
 		PlayerDataService.markDirty(player)
 	end
 	if product.Kind == "SidePasture" and MonetizationState.sidePastureOpen(player) then
-		MonetizationState.notify(player, "You already own the right pasture.", false)
+		MonetizationState.notify(player, "You already own that large cage.", false)
 		return
 	end
 	if product.Kind == "Limited" then
@@ -605,7 +593,7 @@ local function connectHooks()
 						MonetizationGrants.applyPass(player, pass.Key)
 						if MonetizationState.unlockPasture(player) then
 							PlayerDataService.saveNow(player)
-							MonetizationState.notify(player, "Left pasture unlocked forever!", true)
+							MonetizationState.notify(player, "Medium cages unlocked!", true)
 						end
 						MonetizationState.push(player)
 					elseif not ok then

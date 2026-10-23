@@ -12,7 +12,7 @@
 --   Zoo.ExpandCounter              barn upgrade, beside the path entrance
 --   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan / BarnMega   a roof on red posts over each lane
 --   Zoo.Pen23 / Pen24   the mega barn: two gargantuan pens behind the last barn
---   Zoo.Pen25 / Pen26   the Robux pastures, at the road in front of the six stalls
+--   Zoo.Pen25-28   four road cages: large, medium, medium, large, facing the street
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,15 +43,10 @@ local STALL_PITCH = 14
 local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
--- Two pens the size of a large pasture. They used to sit behind the six stalls.
--- The barn ladder still starts from that old spot. The cages themselves move to the
--- road (FLEX_CENTER) so a walk down the street sees them first.
-local FLEX_DEPTH = 24
-local FLEX_LAT_SIZE = 42
-local FLEX_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + FLEX_LAT_SIZE / 2
-local BARN_ANCHOR = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
--- Depth 16 is in front of the wash lane (that lane starts at depth 32) and behind the sign.
-local FLEX_CENTER = 16
+-- The barn ladder still starts where the old road pastures sat, behind the stalls.
+-- The paid cages themselves sit on the road edge, in front of that ladder.
+local PASTURE_DEPTH = 24
+local BARN_ANCHOR = (WALK_END - 8) + 4 + PASTURE_DEPTH / 2
 
 -- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
 local LARGE_DEPTH = STALL_DEPTH * 1.5
@@ -65,7 +60,7 @@ local ROOF_OVER = 1 -- roof and posts sit just outside the pen
 local LANE_GAP = 4
 local ROW_GAP = 3
 
-local BARN_FRONT = BARN_ANCHOR + FLEX_DEPTH / 2 + 8
+local BARN_FRONT = BARN_ANCHOR + PASTURE_DEPTH / 2 + 8
 local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
 	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
@@ -530,78 +525,63 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 	addPen(megaFirst, MEGA_CENTER, -MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
 	addPen(megaFirst + 1, MEGA_CENTER, MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
 
-	local flexColor = Color3.fromRGB(130, 220, 255)
-	local function flexPen(index: number, lateral: number, side: string, lockText: string)
-		-- At the road, in front of the stalls. The gate faces the street.
-		addPen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex", plot.Look)
-		local built = zoo:FindFirstChild("Pen" .. index)
-		local builtFloor = built and built:FindFirstChild("Floor")
-		if builtFloor and builtFloor:IsA("BasePart") then
-			local classLabel = billboardLabel(builtFloor, "2 MEDIUM\nOR 1 LARGE", Vector3.new(0, 8, 0), Vector2.new(240, 80), flexColor)
-			classLabel.Name = "ClassLabel"
-			classLabel.TextWrapped = true
-		end
+	-- Squares on the property line, gates toward the street. Fronts share one line so
+	-- the pads sit on the plot, not in the road. Outers are the large cages.
+	local MEDIUM_SIZE = 16
+	local LARGE_SIZE = 24
+	local CAGE_GAP = 2
+	local PATH_GAP = 3
+	local CAGE_FRONT = 6
+	local halfPath = GameConfig.SidewalkWidth / 2
+	local mediumLat = halfPath + PATH_GAP + MEDIUM_SIZE / 2
+	local largeLat = mediumLat + MEDIUM_SIZE / 2 + CAGE_GAP + LARGE_SIZE / 2
+	for offset, spec in GameConfig.Zoo.RoadCages do
+		local index = GameConfig.Zoo.MaxPens + offset
+		local large = spec.Class == "PastureLarge"
+		local size = if large then LARGE_SIZE else MEDIUM_SIZE
+		local sign = if spec.Side == "Left" then 1 else -1
+		local lateral = sign * (if large then largeLat else mediumLat)
+		local depth = CAGE_FRONT + size / 2
+		addPen(index, depth, lateral, size, size, spec.Class, plot.Look)
 		local pen = zoo:FindFirstChild("Pen" .. index)
 		if not pen then
-			return
+			continue
 		end
-		pen:SetAttribute("FlexSide", side)
-		local function sideSlot(name: string, latOffset: number)
-			local pos = PlotLayout.point(plot, FLEX_CENTER, lateral + latOffset, FLOOR_Y)
-			makeMarker(name, CFrame.lookAt(pos, pos + plot.Look), pen)
+		pen:SetAttribute("RoadUnlock", spec.Unlock)
+		local builtFloor = pen:FindFirstChild("Floor")
+		local labelColor = if large then Color3.fromRGB(255, 196, 80) else Color3.fromRGB(130, 220, 255)
+		if builtFloor and builtFloor:IsA("BasePart") then
+			local classLabel = billboardLabel(builtFloor, spec.Label, Vector3.new(0, 7, 0), Vector2.new(180, 40), labelColor)
+			classLabel.Name = "ClassLabel"
 		end
-		sideSlot("SlotMedium1", -FLEX_LAT_SIZE * 0.22)
-		sideSlot("SlotMedium2", FLEX_LAT_SIZE * 0.22)
 		local lock = Instance.new("Model")
 		lock.Name = "FlexLock"
-		-- Across the road face, so the lock reads from the street.
 		local bar = makePart({
 			Name = "Bar",
-			Size = Vector3.new(0.8, 8, FLEX_LAT_SIZE - 6),
-			Position = PlotLayout.point(plot, FLEX_CENTER - FLEX_DEPTH / 2 + 1.2, lateral, 4),
+			Size = Vector3.new(0.8, 7, size - 4),
+			Position = PlotLayout.point(plot, CAGE_FRONT + 1.2, lateral, 3.5),
 			Color = Color3.fromRGB(176, 48, 40),
 			Material = Enum.Material.Wood,
 			Parent = lock,
 		})
-		local lockLabel = billboardLabel(bar, lockText, Vector3.new(0, 6.5, 0), Vector2.new(240, 80), Color3.fromRGB(255, 230, 120))
+		local lockLabel = billboardLabel(bar, spec.Lock, Vector3.new(0, 5.5, 0), Vector2.new(220, 56), Color3.fromRGB(255, 230, 120))
 		lockLabel.Name = "LockLabel"
 		lockLabel.TextWrapped = true
 		local lockGui = lockLabel.Parent :: BillboardGui
 		lockGui.MaxDistance = 80
 		lock.Parent = pen
-		local post = pen:FindFirstChild("GatePost")
-		if post then
-			local sell2 = makePrompt("PenPrompt2", "Sell", 1, post, Enum.KeyCode.F)
-			sell2.UIOffset = Vector2.new(0, -90)
-			sell2.GamepadKeyCode = Enum.KeyCode.ButtonY
-			sell2.Enabled = false
-			sell2:SetAttribute("RestEnabled", true)
-			local pet2 = makePrompt("PetPrompt2", "Set pet", 0.4, post, Enum.KeyCode.G)
-			pet2.UIOffset = Vector2.new(0, 150)
-			pet2.GamepadKeyCode = Enum.KeyCode.ButtonL1
-			pet2.Enabled = false
-			pet2:SetAttribute("RestEnabled", true)
-			if side == "Right" then
-				local unlock = makePrompt("UnlockPrompt", "Unlock (99 ROBUX)", 0.4, post)
-				unlock.ObjectText = "Right pasture"
+		if spec.Unlock == "Cash" then
+			local post = pen:FindFirstChild("GatePost")
+			if post then
+				local price = spec.Price or 500000
+				local unlock = makePrompt("UnlockPrompt", `Unlock ({UIStyle.formatMoney(price)})`, 0.6, post)
+				unlock.ObjectText = "Large cage"
 				unlock.Enabled = false
 				unlock:SetAttribute("RestEnabled", true)
 			end
 		end
-		local classLabel = pen:FindFirstChild("ClassLabel", true)
-		if classLabel and classLabel:IsA("TextLabel") then
-			classLabel.TextWrapped = true
-			local gui = classLabel.Parent
-			if gui and gui:IsA("BillboardGui") then
-				gui.Size = UDim2.fromOffset(240, 80)
-			end
-		end
 		WorldBuilder.setShown(pen, false)
 	end
-	local flexLeft = GameConfig.Zoo.MaxPens + 1
-	-- Positive lateral is the left side when walking in from the road.
-	flexPen(flexLeft, FLEX_LATERAL, "Left", "SPEND ANY ROBUX")
-	flexPen(flexLeft + 1, -FLEX_LATERAL, "Right", "99 ROBUX\nOR AXOLOTL")
 
 	-- Barn upgrade, beside the mouth of the sidewalk.
 	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)

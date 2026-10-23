@@ -96,13 +96,21 @@ function CutsceneController.init(initial: Types.InitialState)
 		freeze(humanoid)
 	end
 
-	janitor:Add(function()
+	local cameraLock: RBXScriptConnection? = nil
+	local function release()
+		if cameraLock then
+			cameraLock:Disconnect()
+			cameraLock = nil
+		end
 		local current = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 		thaw(current)
-		camera.CameraType = Enum.CameraType.Custom
-		camera.CameraSubject = current or previousSubject
+		if camera.CameraType == Enum.CameraType.Scriptable then
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = current or previousSubject
+		end
 		Remotes.event("CutsceneFinished"):FireServer()
-	end)
+	end
+	janitor:Add(release)
 
 	task.spawn(function()
 		local folder = Workspace:WaitForChild("CutsceneShowcase", 8)
@@ -149,11 +157,15 @@ function CutsceneController.init(initial: Types.InitialState)
 	end)
 
 	-- Keep the scriptable camera if something else tries to take it during the shot.
-	janitor:Add(RunService.RenderStepped:Connect(function()
+	-- Held aside so release() can drop it before the camera is given back. A janitor
+	-- that disconnected this afterwards could leave the camera stuck on the showcase,
+	-- and the hose ray would never hit the pig.
+	cameraLock = RunService.RenderStepped:Connect(function()
 		if camera.CameraType ~= Enum.CameraType.Scriptable then
 			camera.CameraType = Enum.CameraType.Scriptable
 		end
-	end))
+	end)
+	janitor:Add(cameraLock)
 end
 
 return CutsceneController

@@ -229,7 +229,7 @@ local products: { Product } = {
 		Id = 0,
 		Robux = 1000,
 		DisplayName = "Axolotl",
-		Description = "Limited Mythic! Only 1,000 will ever exist. Never restocked. Includes the right pasture.",
+		Description = "Limited Mythic! Only 1,000 will ever exist. Never restocked. Includes the first large cage.",
 		Tab = "Limited",
 		Order = 1,
 		Kind = "Limited",
@@ -238,13 +238,14 @@ local products: { Product } = {
 		Mutation = "Normal",
 		Stock = 1000,
 	},
-	-- Prompt on the right twin pasture, not a shop card. The Axolotl grants the same pen.
+	-- Kept so a receipt for the old right pasture still grants the first large cage.
+	-- The cage itself is included with the Axolotl; nothing in the world prompts this.
 	{
 		Key = "SidePasture",
 		Id = 0,
 		Robux = 99,
-		DisplayName = "Right Pasture",
-		Description = "Unlock the right twin pasture forever. Two medium animals, or one large.",
+		DisplayName = "Large Cage",
+		Description = "Unlock the first large cage. Included with the Axolotl.",
 		Tab = "Boosts",
 		Order = 50,
 		Kind = "SidePasture",

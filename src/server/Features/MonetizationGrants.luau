@@ -168,7 +168,7 @@ local function grantLimited(
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
 	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false
-	local bonus = if side then " Right pasture unlocked forever!" else ""
+	local bonus = if side then " Large cage unlocked!" else ""
 	if MonetizationGrants.deliverPending(player) > 0 then
 		return true, `You got a Limited {name}!{bonus}`
 	end
@@ -307,7 +307,7 @@ function MonetizationGrants.product(
 		return true, "Clean Now is saved for the next animal this price covers."
 	elseif kind == "SidePasture" then
 		MonetizationState.unlockSidePasture(player)
-		return true, "Right pasture unlocked forever!"
+		return true, "Large cage unlocked!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -497,7 +497,7 @@ function MonetizationGrants.grantPass(player: Player, key: string, simulated: bo
 	local pass = MonetizationConfig.PassesByKey[key]
 	local text = `{pass.DisplayName} unlocked!`
 	if pasture then
-		text ..= " Left pasture unlocked forever!"
+		text ..= " Medium cages unlocked!"
 	end
 	MonetizationState.notify(player, text, true)
 	MonetizationState.push(player)

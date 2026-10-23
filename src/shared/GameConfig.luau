@@ -75,10 +75,23 @@ local GameConfig = {
 	Zoo = {
 		MaxPens = 24,
 		StartPens = 6,
-		-- Two pens the size of a large pasture, left and right of the path at the road,
-		-- in front of the six stalls. Each holds two medium animals or one large animal.
-		-- The left opens with any Robux spend. The right is 99 Robux, or the Axolotl.
-		FlexPasturePens = 2,
+		-- Four separate cages on the road edge, in front of the stalls. From the outside
+		-- of the plot inward: large square, medium square, the path, medium square,
+		-- large square. Any Robux spend opens both medium cages. The Axolotl opens
+		-- the first large cage. The last large cage is cash.
+		RoadCages = {
+			{ Side = "Left", Class = "PastureLarge", Unlock = "Axolotl", Label = "LARGE", Lock = "AXOLOTL" },
+			{ Side = "Left", Class = "PastureMedium", Unlock = "AnyRobux", Label = "MEDIUM", Lock = "SPEND ANY ROBUX" },
+			{ Side = "Right", Class = "PastureMedium", Unlock = "AnyRobux", Label = "MEDIUM", Lock = "SPEND ANY ROBUX" },
+			{
+				Side = "Right",
+				Class = "PastureLarge",
+				Unlock = "Cash",
+				Price = 500000,
+				Label = "LARGE",
+				Lock = "$500K",
+			},
+		},
 		Expansions = {
 			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
 			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large

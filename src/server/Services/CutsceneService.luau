@@ -196,6 +196,20 @@ function CutsceneService.init()
 	end))
 end
 
+-- True only while the opening shot is still inside its timer. A missed clear used to leave
+-- the hose locked after the camera had already come back.
+function CutsceneService.blocksCleaning(player: Player): boolean
+	if player:GetAttribute("InCutscene") ~= true then
+		return false
+	end
+	local at = readyAt[player]
+	if at == nil or os.clock() >= at then
+		player:SetAttribute("InCutscene", false)
+		return false
+	end
+	return true
+end
+
 function CutsceneService.begin(player: Player)
 	local data = PlayerDataService.get(player)
 	if not data or data.CutsceneSeen then
