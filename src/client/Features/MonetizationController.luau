@@ -16,6 +16,7 @@ local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local MonetizationShop = require(script.Parent.MonetizationShop)
+local Modals = require(script.Parent.Parent.UI.Modals)
 
 type ShopState = MonetizationConfig.ShopState
 
@@ -313,6 +314,7 @@ local function buildGui()
 	offerFrame.BackgroundColor3 = Color3.new(1, 1, 1)
 	offerFrame.Visible = false
 	offerFrame.Parent = gui
+	Modals.holdCursor(offerFrame)
 	UIStyle.border(offerFrame, 4)
 	local offerGradient = Instance.new("UIGradient")
 	offerGradient.Rotation = 90

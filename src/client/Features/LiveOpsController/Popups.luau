@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local Modals = require(script.Parent.Parent.Parent.UI.Modals)
 
 local Popups = {}
 
@@ -66,6 +67,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	dim.BackgroundTransparency = 1
 	dim.Active = true -- swallow taps behind the panel
 	dim.Parent = modalGui
+	Modals.holdCursor(dim)
 	TweenService:Create(dim, TweenInfo.new(0.3), { BackgroundTransparency = 0.45 }):Play()
 
 	local panel = Instance.new("Frame")

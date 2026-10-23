@@ -12,6 +12,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local Modals = require(script.Parent.Parent.UI.Modals)
 
 local player = Players.LocalPlayer
 
@@ -118,6 +119,7 @@ local function build()
 	panel.BackgroundColor3 = Color3.fromRGB(28, 32, 48)
 	panel.Visible = false
 	panel.Parent = gui
+	Modals.holdCursor(panel)
 	UIStyle.border(panel, 4)
 
 	title = Instance.new("TextLabel")
