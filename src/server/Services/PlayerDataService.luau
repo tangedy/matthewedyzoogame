@@ -1,11 +1,11 @@
 -- Loads, validates, saves, and exposes player progression.
 --
--- Session safety: each record carries a Session lock { JobId, LockedAt }. A server only
--- loads a record it can lock (or whose lock went stale), and only writes a record it still
--- holds the lock on. A failed or blocked load gives the player a temporary profile that is
--- NEVER saved, so a bad load can't overwrite real data with defaults.
+-- ProfileService owns the session lock, autosave, and release. A failed load (or Studio
+-- with API access off) gives the player a temporary profile that is NEVER saved, so a bad
+-- load can't overwrite real data with defaults.
 --
--- Stored record: { SchemaVersion, Data = SavedData, Session = { JobId, LockedAt }? }
+-- The first time a profile opens, a save in the older DataStore (PlayerData_v1) is copied
+-- across. After that, only the ProfileService store is written.
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -14,17 +14,23 @@ local RunService = game:GetService("RunService")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Hooks = require(script.Parent.Hooks)
+local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 
 -- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
 -- v3: species have fixed rarities and walk-ins roll a mutation instead; adds the cache and
 -- each pen's uncollected cash. v2 rarities map onto mutations when migrating.
 -- v4: the eight-plot barn ladder. Old sizes 4/6/8 become 6 or the small barn (10).
 -- v5: the Spray Hose became tier 2, so every bought tier above Basic moved up one.
-local SCHEMA_VERSION = 5
+-- v6: intro washes, the spawn cutscene, and overflow animals that a full cache no longer drops.
+-- v7: consumable buffs store absolute expiry timestamps in Extra.Monetization
+-- (SpeedEndsAt, LuckEndsAt). Removed passes are dropped when that table is read,
+-- because they are no longer in the pass catalog.
+local SCHEMA_VERSION = 7
 
 export type CachedAnimal = {
 	Id: string,
@@ -47,8 +53,13 @@ export type SavedData = {
 	ToolTier: number,
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
-	-- First-cycle arrow guide. "Done" once they've washed the animal after visiting upgrades.
+	-- First lesson is the wash. "Done" once the intro auto-sells are finished.
 	GuideStep: string,
+	-- Washes left in the opening auto-sell. 0 once pens and the cache are revealed.
+	IntroWashesLeft: number,
+	CutsceneSeen: boolean,
+	-- True after the one-time copy from the pre-ProfileService DataStore.
+	LegacyImported: boolean,
 	-- Walk-ins seen. The older tease fields stay so saves from that system still load.
 	AnimalsSeen: number,
 	TenthLegendaryGiven: boolean,
@@ -61,6 +72,8 @@ export type SavedData = {
 	ZooSize: number,
 	Animals: { OwnedAnimal },
 	Cache: { CachedAnimal },
+	-- Washed animals that didn't fit the cache. They stay until the owner keeps or sells them.
+	Overflow: { CachedAnimal },
 	Index: { [string]: boolean }, -- "Species:Mutation" -> discovered
 	NextAnimalId: number,
 	-- Feature-owned data (src/server/Features). Each feature uses its own key and must
@@ -68,22 +81,22 @@ export type SavedData = {
 	Extra: { [string]: any },
 }
 
-type Profile = {
-	Key: string,
+type Session = {
 	Data: SavedData,
 	Status: Types.DataStatus,
-	Dirty: boolean,
-	Saving: boolean,
+	Service: any?,
 }
 
 local PlayerDataService = {}
 
-local sessionId = if game.JobId ~= "" then game.JobId else "Studio"
-local profiles: { [Player]: Profile } = {}
+local storeName = if RunService:IsStudio() then GameConfig.StudioProfileStoreName else GameConfig.ProfileStoreName
+local profileStore: any = nil
+local sessions: { [Player]: Session } = {}
 local loading: { [Player]: boolean } = {}
 local leftWhileLoading: { [Player]: boolean } = {}
-local store: DataStore? = nil
-local savesInFlight = 0 -- BindToClose waits for these, including leave-saves already running
+local leaving: { [Player]: boolean } = {}
+local sessionJanitor = Janitor.new()
+local studioApi: boolean? = nil
 
 local function defaults(): SavedData
 	return {
@@ -93,6 +106,9 @@ local function defaults(): SavedData
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
 		GuideStep = "Wash",
+		IntroWashesLeft = GameConfig.Intro.AutoSellCount,
+		CutsceneSeen = false,
+		LegacyImported = false,
 		AnimalsSeen = 0,
 		TenthLegendaryGiven = false,
 		CleanUpgradeCount = 0,
@@ -102,6 +118,7 @@ local function defaults(): SavedData
 		ZooSize = GameConfig.Zoo.StartPens,
 		Animals = {},
 		Cache = {},
+		Overflow = {},
 		Index = {},
 		NextAnimalId = 1,
 		Extra = {},
@@ -177,7 +194,11 @@ local function spentRobux(extra: any): boolean
 	local function positive(value: any): boolean
 		return typeof(value) == "number" and value > 0
 	end
-	return positive(mon.SuperSoapLeft) or positive(mon.AutoCollectLeft) or positive(mon.LuckyLeft)
+	return positive(mon.SuperSoapLeft)
+		or positive(mon.AutoCollectLeft)
+		or positive(mon.LuckyLeft)
+		or positive(mon.SpeedEndsAt)
+		or positive(mon.LuckEndsAt)
 end
 
 local FLEX_LEFT = GameConfig.Zoo.MaxPens + 1
@@ -213,7 +234,7 @@ local function sidePastureOpen(raw: any): boolean
 		end
 		return false
 	end
-	if hasAxolotl(raw.Animals) or hasAxolotl(raw.Cache) then
+	if hasAxolotl(raw.Animals) or hasAxolotl(raw.Cache) or hasAxolotl(raw.Overflow) then
 		return true
 	end
 	if typeof(raw.Index) == "table" then
@@ -373,25 +394,42 @@ local function sanitize(raw: any): SavedData
 		end
 	end
 
-	-- Guide, and the older clean-gate fields. Missing fields follow progress already on
-	-- the profile, so a zoo that's underway doesn't replay the arrows. The 10th-animal
-	-- tease is no longer scheduled; WashesSinceUnwashable starts at 0 when it is absent.
-	-- Collect and Repeat were dropped from the guide; old saves resume at the next step.
-	local guideSteps: { [string]: string } = {
-		Wash = "Wash",
-		Pickup = "Pickup",
-		Place = "Place",
-		Collect = "Upgrade",
-		Upgrade = "Upgrade",
-		Repeat = "Done",
-		Done = "Done",
-	}
-	if typeof(raw.GuideStep) == "string" and guideSteps[raw.GuideStep] then
-		data.GuideStep = guideSteps[raw.GuideStep]
-	else
-		local played = data.LifetimeAnimalsWashed > 0 or #data.Animals > 0 or #data.Cache > 0
-		data.GuideStep = if played then "Done" else "Wash"
+	if typeof(raw.Overflow) == "table" then
+		for _, animal in raw.Overflow do
+			if #data.Overflow >= 8 then
+				break
+			end
+			local species, mutation = validAnimal(animal)
+			if species and mutation then
+				table.insert(data.Overflow, {
+					Id = animal.Id,
+					Species = species,
+					Mutation = mutation,
+					Paid = if animal.Paid == true then true else nil,
+				})
+			end
+		end
 	end
+
+	-- The opening lesson is the wash only. Pickup, place, and the hose stand are no longer
+	-- taught, so an old save sitting on those steps is finished. A zoo that's already
+	-- underway does not replay the baby-elephant intro.
+	local played = data.LifetimeAnimalsWashed > 0 or #data.Animals > 0 or #data.Cache > 0 or #data.Overflow > 0
+	data.GuideStep = if played then "Done" else "Wash"
+	if raw.IntroWashesLeft == nil then
+		data.IntroWashesLeft = if played then 0 else GameConfig.Intro.AutoSellCount
+	else
+		data.IntroWashesLeft = math.clamp(cleanCount(raw.IntroWashesLeft), 0, GameConfig.Intro.AutoSellCount)
+	end
+	if played and data.IntroWashesLeft > 0 then
+		data.IntroWashesLeft = 0
+	end
+	if raw.CutsceneSeen == nil then
+		data.CutsceneSeen = played
+	else
+		data.CutsceneSeen = raw.CutsceneSeen == true
+	end
+	data.LegacyImported = raw.LegacyImported == true
 	if raw.AnimalsSeen == nil then
 		data.AnimalsSeen = data.LifetimeAnimalsWashed
 		data.TenthLegendaryGiven = data.AnimalsSeen >= 10
@@ -412,232 +450,208 @@ local function sanitize(raw: any): SavedData
 	return data
 end
 
-local function isLockedByOther(record: any): boolean
-	local session = typeof(record) == "table" and record.Session
-	if typeof(session) ~= "table" or session.JobId == sessionId then
-		return false
+local function profileApi(): any
+	if profileStore == nil then
+		profileStore = (ProfileService :: any).GetProfileStore(storeName, defaults())
 	end
-	local lockedAt = tonumber(session.LockedAt) or 0
-	return os.time() - lockedAt < GameConfig.SessionLockExpiry
+	return profileStore
 end
 
-local function getStore(): DataStore?
-	if store then
-		return store
+-- Studio with API access off cannot save. Skip ProfileService there so the player gets the
+-- temporary-profile banner instead of a mock store that looks saved. Live servers always try.
+local function studioCanSave(): boolean
+	if not RunService:IsStudio() then
+		return true
 	end
+	if studioApi ~= nil then
+		return studioApi
+	end
+	local ok = pcall(function()
+		DataStoreService:GetDataStore(GameConfig.StudioProfileStoreName):GetAsync("__availability")
+	end)
+	studioApi = ok
+	return ok
+end
+
+-- ok is false when the read itself failed, so a later join can try again.
+local function readLegacy(userId: number): (boolean, any?)
 	local name = if RunService:IsStudio() then GameConfig.StudioDataStoreName else GameConfig.DataStoreName
-	local ok, result = pcall(function()
+	local okStore, ds = pcall(function()
 		return DataStoreService:GetDataStore(name)
 	end)
-	if ok then
-		store = result
-		return result
+	if not okStore then
+		return false, nil
 	end
-	warn("[PlayerDataService] DataStore unavailable:", result)
-	return nil
-end
-
--- Tries to load and lock. Returns status plus data (data only when Loaded).
-local function tryLoad(key: string): (Types.DataStatus, SavedData?)
-	local ds = getStore()
-	if not ds then
-		return "Failed", nil
-	end
-	for attempt = 1, GameConfig.LockRetryAttempts do
-		local blocked = false
-		local loaded: SavedData? = nil
-		local ok, err = pcall(function()
-			ds:UpdateAsync(key, function(record)
-				if isLockedByOther(record) then
-					blocked = true
-					return nil -- cancel: another live server owns this profile
-				end
-				blocked = false
-				local data = sanitize(if typeof(record) == "table" then record.Data else nil)
-				loaded = data
-				return {
-					SchemaVersion = SCHEMA_VERSION,
-					Data = data,
-					Session = { JobId = sessionId, LockedAt = os.time() },
-				}
-			end)
-		end)
-		if ok and not blocked and loaded then
-			return "Loaded", loaded
-		end
-		if not ok then
-			warn(`[PlayerDataService] Load attempt {attempt} failed for {key}: {err}`)
-		end
-		if attempt < GameConfig.LockRetryAttempts then
-			task.wait(GameConfig.LockRetryDelay)
-		elseif blocked then
-			return "Locked", nil
-		end
-	end
-	return "Failed", nil
-end
-
--- Writes only while we still hold the lock. `release` clears the lock (leaving / shutdown).
-local function save(profile: Profile, release: boolean): boolean
-	if profile.Status ~= "Loaded" then
-		return false -- temporary profiles are never written
-	end
-	local ds = getStore()
-	if not ds then
-		return false
-	end
-	savesInFlight += 1 -- counted while queued too, so shutdown never sees a gap
-	-- Wait for any save already in flight so writes stay ordered.
-	while profile.Saving do
-		task.wait()
-	end
-	profile.Saving = true
-	-- Deep enough copy that edits during the async write can't change what's being saved.
-	local snapshot = table.clone(profile.Data)
-	snapshot.Animals = {}
-	for i, animal in profile.Data.Animals do
-		snapshot.Animals[i] = table.clone(animal) -- Pending changes every income tick
-	end
-	snapshot.Cache = table.clone(profile.Data.Cache)
-	snapshot.Extra = plainCopy(profile.Data.Extra, 0)
-	snapshot.Index = table.clone(profile.Data.Index)
-	local lostLock = false
-	local ok, err = pcall(function()
-		ds:UpdateAsync(profile.Key, function(record)
-			local session = typeof(record) == "table" and record.Session
-			if typeof(session) == "table" and session.JobId ~= sessionId then
-				lostLock = true
-				return nil -- another server took over; never overwrite its newer data
-			end
-			lostLock = false
-			return {
-				SchemaVersion = SCHEMA_VERSION,
-				Data = snapshot,
-				Session = if release then nil else { JobId = sessionId, LockedAt = os.time() },
-			}
-		end)
+	local ok, record = pcall(function()
+		return ds:GetAsync("Player_" .. userId)
 	end)
-	profile.Saving = false
-	savesInFlight -= 1
 	if not ok then
-		warn(`[PlayerDataService] Save failed for {profile.Key}: {err}`)
-		return false
+		warn(`[PlayerDataService] Legacy read failed for {userId}: {record}`)
+		return false, nil
 	end
-	if lostLock then
-		warn(`[PlayerDataService] Lost session lock for {profile.Key}; stopped saving`)
-		profile.Status = "Locked"
-		return false
+	if typeof(record) == "table" and typeof(record.Data) == "table" then
+		return true, record.Data
 	end
-	profile.Dirty = false
-	return true
+	return true, nil
+end
+
+local function adopt(serviceProfile: any, raw: any): SavedData
+	local clean = sanitize(raw)
+	local data = serviceProfile.Data
+	table.clear(data)
+	for key, value in clean :: any do
+		data[key] = value
+	end
+	return data
+end
+
+local function importLegacy(player: Player, serviceProfile: any)
+	local raw = serviceProfile.Data
+	if typeof(raw) == "table" and raw.LegacyImported == true then
+		adopt(serviceProfile, raw)
+		return
+	end
+	local ok, legacy = readLegacy(player.UserId)
+	local source = if ok and typeof(legacy) == "table" then legacy else raw
+	if typeof(source) == "table" and ok then
+		source.LegacyImported = true
+	end
+	adopt(serviceProfile, source)
+end
+
+local function fireLeaving(player: Player)
+	if leaving[player] or not sessions[player] then
+		return
+	end
+	leaving[player] = true
+	Hooks.fire("PlayerLeaving", player)
 end
 
 -- Yields. Always leaves the player with a profile; check getStatus for whether it persists.
 function PlayerDataService.load(player: Player)
-	if profiles[player] or loading[player] then
+	if sessions[player] or loading[player] then
 		return
 	end
 	loading[player] = true
-	local key = "Player_" .. player.UserId
-	local status, data = tryLoad(key)
+	local serviceProfile = nil
+	if studioCanSave() then
+		local ok, result = pcall(function()
+			return profileApi():LoadProfileAsync("Player_" .. player.UserId, "ForceLoad")
+		end)
+		if ok then
+			serviceProfile = result
+		else
+			warn(`[PlayerDataService] Load failed for {player.Name}: {result}`)
+		end
+	end
 	loading[player] = nil
 
-	local profile: Profile = {
-		Key = key,
-		Data = data or defaults(),
-		Status = status :: Types.DataStatus,
-		Dirty = false,
-		Saving = false,
-	}
-	if leftWhileLoading[player] then
+	if leftWhileLoading[player] or not player.Parent then
 		leftWhileLoading[player] = nil
-		save(profile, true)
+		if serviceProfile then
+			serviceProfile:Release()
+		end
 		return
 	end
-	profiles[player] = profile
-	if status ~= "Loaded" then
-		warn(`[PlayerDataService] {player.Name} is on a temporary profile ({status}); progress will not save`)
+
+	if not serviceProfile then
+		sessions[player] = {
+			Data = defaults(),
+			Status = "Failed",
+			Service = nil,
+		}
+		warn(`[PlayerDataService] {player.Name} is on a temporary profile (Failed); progress will not save`)
+		return
 	end
+
+	serviceProfile:AddUserId(player.UserId)
+	serviceProfile:Reconcile()
+	importLegacy(player, serviceProfile)
+	serviceProfile:ListenToRelease(function()
+		local session = sessions[player]
+		if session and session.Service == serviceProfile then
+			session.Service = nil
+			session.Status = "Locked"
+			warn(`[PlayerDataService] {player.Name}'s save opened somewhere else; progress this session won't save`)
+		end
+	end)
+
+	if not player.Parent then
+		serviceProfile:Release()
+		return
+	end
+
+	sessions[player] = {
+		Data = serviceProfile.Data,
+		Status = "Loaded",
+		Service = serviceProfile,
+	}
 end
 
 function PlayerDataService.get(player: Player): SavedData?
-	local profile = profiles[player]
-	return profile and profile.Data
+	local session = sessions[player]
+	return session and session.Data
 end
 
 function PlayerDataService.getStatus(player: Player): Types.DataStatus?
-	local profile = profiles[player]
-	return profile and profile.Status
+	local session = sessions[player]
+	return session and session.Status
 end
 
 -- Yields until the player's profile exists, or the timeout passes.
 function PlayerDataService.waitFor(player: Player, timeout: number): SavedData?
 	local deadline = os.clock() + timeout
-	while not profiles[player] and player.Parent and os.clock() < deadline do
+	while not sessions[player] and player.Parent and os.clock() < deadline do
 		task.wait(0.1)
 	end
 	return PlayerDataService.get(player)
 end
 
-function PlayerDataService.markDirty(player: Player)
-	local profile = profiles[player]
-	if profile then
-		profile.Dirty = true
-	end
-end
+-- ProfileService writes the live table on its own autosave. Callers still mark the
+-- session after a change; saveNow asks for a save immediately.
+function PlayerDataService.markDirty(_player: Player) end
 
--- Saves soon after an important change (e.g. a purchase) instead of waiting for autosave.
 function PlayerDataService.saveNow(player: Player)
-	local profile = profiles[player]
-	if profile then
-		profile.Dirty = true
-		task.spawn(save, profile, false)
+	local session = sessions[player]
+	local service = session and session.Service
+	if service and service:IsActive() then
+		service:Save()
 	end
 end
 
--- Yields. Final save + lock release when the player leaves.
+-- Final save + session release when the player leaves.
 function PlayerDataService.release(player: Player)
 	if loading[player] then
 		leftWhileLoading[player] = true
 		return
 	end
-	local profile = profiles[player]
-	if profile then
-		-- Listeners run synchronously up to their first yield, so writes they make
-		-- (e.g. a last-seen time) land in this final save.
-		Hooks.fire("PlayerLeaving", player)
-	end
-	profiles[player] = nil
-	if profile then
-		save(profile, true)
+	fireLeaving(player)
+	local session = sessions[player]
+	sessions[player] = nil
+	local service = session and session.Service
+	if service and service:IsActive() then
+		service:Release()
 	end
 end
 
 function PlayerDataService.init()
-	-- Autosave also refreshes LockedAt so live sessions never look stale.
+	sessionJanitor:Add(Players.PlayerRemoving:Connect(function(player)
+		PlayerDataService.release(player)
+		leaving[player] = nil
+	end))
+	-- Register after ProfileService's own close handler so this one runs first and the
+	-- leaving hook's writes are in the table ProfileService then saves.
 	task.spawn(function()
-		while true do
-			task.wait(GameConfig.AutosaveInterval)
-			for _, profile in profiles do
-				task.spawn(save, profile, false)
+		pcall(function()
+			(ProfileService :: any).IsLive()
+		end)
+		task.wait()
+		game:BindToClose(function()
+			for player in sessions do
+				fireLeaving(player)
 			end
-		end
+		end)
 	end)
-
-	game:BindToClose(function()
-		for player, profile in profiles do
-			Hooks.fire("PlayerLeaving", player)
-			profiles[player] = nil
-			task.spawn(save, profile, true)
-		end
-		task.wait() -- let the saves above start
-		local deadline = os.clock() + 25
-		while savesInFlight > 0 and os.clock() < deadline do
-			task.wait(0.1)
-		end
-	end)
-
-	Players.PlayerRemoving:Connect(PlayerDataService.release)
 end
 
 return PlayerDataService

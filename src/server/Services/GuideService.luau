@@ -1,6 +1,5 @@
--- First-cycle guide: wash -> pick up from the cache -> place in a pen -> visit the hose
--- stand -> done. The client draws the rainbow arrows; this only stores the step so leaving
--- and rejoining resumes the same arrow.
+-- First-cycle guide: wash, and only wash. Pickup, pens, and the hose stand are not part of
+-- the opening lesson. The client draws the arrow; this stores the step so a rejoin resumes it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11,9 +10,9 @@ local GuideService = {}
 
 local guideStepChanged = Remotes.event("GuideStepChanged")
 
-local function advance(player: Player, from: string, to: string)
+local function setStep(player: Player, to: string)
 	local data = PlayerDataService.get(player)
-	if not data or data.GuideStep ~= from then
+	if not data or data.GuideStep == to then
 		return
 	end
 	data.GuideStep = to
@@ -22,24 +21,25 @@ local function advance(player: Player, from: string, to: string)
 end
 
 function GuideService.onWashCompleted(player: Player)
-	advance(player, "Wash", "Pickup")
+	local data = PlayerDataService.get(player)
+	if not data or data.GuideStep ~= "Wash" then
+		return
+	end
+	-- Stay on the wash until the opening auto-sells are done.
+	if data.IntroWashesLeft > 0 then
+		return
+	end
+	setStep(player, "Done")
 end
 
-function GuideService.onPickedUp(player: Player)
-	advance(player, "Pickup", "Place")
-end
+function GuideService.onPickedUp(_player: Player) end
 
-function GuideService.onPlaced(player: Player)
-	advance(player, "Place", "Upgrade")
-end
+function GuideService.onPlaced(_player: Player) end
 
--- Died or respawned while carrying: the animal is back in the cache, so point there again.
-function GuideService.onCarryReturned(player: Player)
-	advance(player, "Place", "Pickup")
-end
+function GuideService.onCarryReturned(_player: Player) end
 
 function GuideService.onReachedUpgrade(player: Player)
-	advance(player, "Upgrade", "Done")
+	setStep(player, "Done")
 end
 
 return GuideService

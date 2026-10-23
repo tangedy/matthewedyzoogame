@@ -10,6 +10,8 @@ local EVENTS = {
 	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
 	"LetAnimalGo", -- () the owner sends a blocked animal away instead of paying to clean it
 	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide
+	"CutsceneFinished", -- () client finished the spawn cutscene (ignored if it arrives early)
+	"OverflowChoice", -- ("keep" | "sell")
 	-- server -> client
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
@@ -22,6 +24,9 @@ local EVENTS = {
 	"CarryChanged", -- (CarryInfo?) what the player is carrying, nil when nothing
 	"Announcement", -- (text: string, rarity: string) to everyone
 	"GuideStepChanged", -- (step: string)
+	"OverflowPrompt", -- ({ Label: string, SellValue: number, Waiting: number }?) nil clears it
+	"YardRevealed", -- () pens and the cache are visible
+	"IntroAutoSold", -- (amount: number, remaining: number)
 }
 
 local FUNCTIONS = {

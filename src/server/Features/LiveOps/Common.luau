@@ -11,12 +11,17 @@ local Services = script.Parent.Parent.Parent.Services
 local PlayerDataService = require(Services.PlayerDataService)
 
 -- Saved per player. Funnel keys are "S1".."S7" (onboarding steps already logged).
+-- Milestones map a progression key to the play-seconds when it was first reached.
+-- -1 means the player already had it before timing existed, so no duration was logged.
 export type State = {
 	LastSeen: number?, -- unix seconds
 	DailyDay: number?, -- UTC day number of the last Daily Dirty Animal
 	BestStars: number,
 	Funnel: { [string]: boolean },
 	WashesRolled: number?, -- animals that walked in; gold/rainbow pity uses this, never shown
+	PlaySeconds: number, -- seconds actually in a server, across sessions
+	Milestones: { [string]: number },
+	OfflineDouble: number, -- welcome-back cash that can still be doubled once
 }
 
 local Common = {}
@@ -61,7 +66,22 @@ function Common.state(player: Player): State?
 			end
 		end
 		raw.Funnel = funnel
+		local milestones = {}
+		if typeof(raw.Milestones) == "table" then
+			for key, done in raw.Milestones do
+				if typeof(key) == "string" and #key <= 40 then
+					if done == true then
+						milestones[key] = -1
+					elseif typeof(done) == "number" and done == done and done >= -1 and done < math.huge then
+						milestones[key] = math.floor(done)
+					end
+				end
+			end
+		end
+		raw.Milestones = milestones
 	end
+	raw.PlaySeconds = math.clamp(math.floor(finite(raw.PlaySeconds) or 0), 0, 315360000)
+	raw.OfflineDouble = math.max(0, math.floor(finite(raw.OfflineDouble) or 0))
 	-- Seed from washes already finished so a zoo in progress still hits the next pity mark.
 	-- Counted when an animal walks in. Not replicated.
 	local rolled = finite(raw.WashesRolled)

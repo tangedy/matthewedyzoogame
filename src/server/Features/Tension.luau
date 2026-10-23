@@ -312,6 +312,7 @@ local function explode(state: State)
 	mudExplosion(state, center, profile.ShakeRadius)
 
 	local shakeRange = profile.ShakeRadius * shake.CameraShakeRange
+	local flung: { [Player]: boolean } = {}
 	for _, other in Players:GetPlayers() do
 		local root = rootOf(other)
 		if not root then
@@ -321,9 +322,20 @@ local function explode(state: State)
 		if distance <= profile.ShakeRadius then
 			local falloff = 1 - (1 - shake.MinFalloff) * (distance / profile.ShakeRadius)
 			fling(other, root, center, profile.Knockback * falloff, profile.KnockUp, shake.RagdollSeconds, true)
+			flung[other] = true
 		elseif distance <= shakeRange then
 			local intensity = shake.CameraShakeIntensity * (1 - distance / shakeRange)
 			cameraRemote:FireClient(other, intensity, shake.CameraShakeSeconds)
+		end
+	end
+	-- Anyone spraying this animal ragdolls too, even if the hose reached from outside the burst.
+	for _, helper in CleaningService.assistants(state.JobId) do
+		if flung[helper] then
+			continue
+		end
+		local root = rootOf(helper)
+		if root then
+			fling(helper, root, center, profile.Knockback, profile.KnockUp, shake.RagdollSeconds, true)
 		end
 	end
 	state.Patience = profile.PatienceSeconds * TensionConfig.RefillFraction

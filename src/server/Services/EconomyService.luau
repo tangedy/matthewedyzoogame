@@ -8,6 +8,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local CleanGateService = require(script.Parent.CleanGateService)
 local CleaningService = require(script.Parent.CleaningService)
+local Hooks = require(script.Parent.Hooks)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local EconomyService = {}
@@ -75,6 +76,29 @@ function EconomyService.grant(player: Player, amount: number): boolean
 	return true
 end
 
+-- Writes the next hose onto the profile and tells the client. Cash is the caller's job.
+local function commitTier(player: Player, data: PlayerDataService.SavedData, nextTool: ToolConfig.ToolTier)
+	local previousTier = data.ToolTier
+	data.ToolTier = nextTool.Tier
+	CleanGateService.onTiersGained(player, previousTier, nextTool.Tier)
+	PlayerDataService.saveNow(player)
+	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name)
+	CleaningService.refreshHose(player)
+	Hooks.fire("ToolPurchased", player, nextTool.Tier, nextTool.Name)
+end
+
+-- Grants exactly one hose tier, and only when it is the player's next tier.
+-- Used by the Robux fallback so a receipt cannot skip the ladder.
+function EconomyService.grantToolTier(player: Player, tier: number): boolean
+	local data = PlayerDataService.get(player)
+	local nextTool = ToolConfig[tier]
+	if not data or not nextTool or data.ToolTier + 1 ~= tier then
+		return false
+	end
+	commitTier(player, data, nextTool)
+	return true
+end
+
 -- Buys the next hose tier. The server picks the tier and price; nothing comes from the client.
 -- Doesn't yield, so two requests can't both pass the balance check.
 local function purchaseToolUpgrade(player: Player)
@@ -97,15 +121,9 @@ local function purchaseToolUpgrade(player: Player)
 		return
 	end
 
-	local previousTier = data.ToolTier
 	data.Coins -= nextTool.Price
-	data.ToolTier = nextTool.Tier
-	CleanGateService.onTiersGained(player, previousTier, nextTool.Tier)
-	PlayerDataService.saveNow(player)
-
 	coinsChanged:FireClient(player, data.Coins)
-	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name)
-	CleaningService.refreshHose(player) -- the new hose appears in their hand
+	commitTier(player, data, nextTool)
 	purchaseResult:FireClient(player, true, `Upgraded to {nextTool.Name}!`)
 end
 

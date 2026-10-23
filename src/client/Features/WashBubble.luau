@@ -1,6 +1,5 @@
 -- A freshly washed animal says something happy in a little chat bubble: a heart, a grin, or
--- its own noise ("meow 😺"). Local to the washer; it pops in above the nameplate stack and
--- fades after a couple of seconds.
+-- its own noise ("meow 😺"). Every client draws it, so the whole server sees the wash.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -75,7 +74,7 @@ local function show(model: Model)
 	local board = Instance.new("BillboardGui")
 	board.Name = "WashBubble"
 	board.Size = UDim2.fromOffset(BUBBLE_SIZE.X, BUBBLE_SIZE.Y)
-	board.MaxDistance = 90
+	board.MaxDistance = 2000
 	board.ResetOnSpawn = false
 	board.Adornee = head
 	UIStyle.overhead(board, head, UIStyle.Overhead.Callout)
@@ -139,7 +138,7 @@ local function show(model: Model)
 end
 
 function WashBubble.init(_initial: Types.InitialState)
-	Remotes.event("WashCompleted").OnClientEvent:Connect(function(jobId: string)
+	Remotes.event("WashCelebrated").OnClientEvent:Connect(function(jobId: string)
 		local model = findWashed(jobId)
 		if not model then
 			return

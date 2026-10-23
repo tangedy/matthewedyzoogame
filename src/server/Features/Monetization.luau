@@ -9,8 +9,9 @@
 --   * Game passes: UserOwnsGamePassAsync on join (cached per session) plus
 --     PromptGamePassPurchaseFinished.
 --   * Boosts plug into the core through Hooks: Super Soap (CleaningPower), Lucky Soap
---     (SpawnWeight / MutationWeight, counted down on WashStarted), VIP (IncomeMultiplier),
---     Calm Treat (fires "CalmTreat" for the Tension feature).
+--     (SpawnWeight / MutationWeight, counted down on WashStarted), Incredible Luck
+--     (SpawnWeight for Rare+ while its timestamp lasts), VIP (IncomeMultiplier),
+--     Calm Treat (fires "CalmTreat" for the Tension feature). Speed is a timed WalkSpeed buff.
 --   * Contextual offers, never in a session's first 90 seconds: Calm Treat on "PatienceLow",
 --     Super Soap when a big animal is still mostly dirty 8 seconds into its wash.
 -- Split across MonetizationState (data), MonetizationGrants (effects), MonetizationStock.
@@ -30,6 +31,7 @@ local Services = script.Parent.Parent.Services
 local CleaningService = require(Services.CleaningService)
 local Hooks = require(Services.Hooks)
 local PlayerDataService = require(Services.PlayerDataService)
+local Offline = require(script.Parent.LiveOps.Offline)
 local ZooService = require(Services.ZooService)
 local MonetizationGrants = require(script.Parent.MonetizationGrants)
 local MonetizationState = require(script.Parent.MonetizationState)
@@ -57,12 +59,15 @@ local function clock(seconds: number): string
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
--- Two kiosks just left of pen 1. Each one is its own purchase, with its own sign
--- and its own E prompt, far enough apart that standing at one does not offer the other.
+-- One kiosk just left of pen 1. It sells timed auto-collect only; there is no forever pass.
 local function ensureStand(bay: Model): Model?
 	local zoo = bay:FindFirstChild("Zoo")
 	local existing = zoo and zoo:FindFirstChild("AutoCollectStand")
 	if existing and existing:IsA("Model") and existing:FindFirstChild("TimedCounter") then
+		local forever = existing:FindFirstChild("ForeverCounter")
+		if forever then
+			forever:Destroy()
+		end
 		return existing
 	end
 	if existing then
@@ -74,7 +79,6 @@ local function ensureStand(bay: Model): Model?
 		return nil
 	end
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
-	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
 	local stand = Instance.new("Model")
 	stand.Name = "AutoCollectStand"
 	local base = floor.Position + Vector3.new(-floor.Size.X / 2 - 6, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
@@ -127,15 +131,7 @@ local function ensureStand(bay: Model): Model?
 		"2 HOURS",
 		`{product.Robux} ROBUX`,
 		Color3.fromRGB(70, 190, 90),
-		Vector3.new(0, 0, -4.2)
-	)
-	kiosk(
-		"ForeverCounter",
-		"ForeverPrompt",
-		"FOREVER",
-		`{pass.Robux} ROBUX`,
-		Color3.fromRGB(230, 170, 40),
-		Vector3.new(0, 0, 4.2)
+		Vector3.zero
 	)
 	stand.Parent = zoo
 	return stand
@@ -156,22 +152,13 @@ local function refreshStand(player: Player)
 		return
 	end
 	local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
-	local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
-	local pass = MonetizationConfig.PassesByKey.AutoCollectForever
-	local owns = MonetizationState.ownsPass(player, pass.Key)
-	if forever then
-		forever.Enabled = not owns
-		forever.ObjectText = "FOREVER"
-		forever.ActionText = if owns then "Owned" else `Buy ({pass.Robux} ROBUX)`
-	end
 	if timed then
-		timed.Enabled = not owns
+		timed.Enabled = true
 		timed.ObjectText = "2 HOURS"
 		local left = MonetizationGrants.autoCollectLeft(player)
-		timed.ActionText = if owns
-			then "Owned forever"
-			elseif left > 0 then `Add 2 hours ({product.Robux} ROBUX) {clock(left)} left`
+		timed.ActionText = if left > 0
+			then `Add 2 hours ({product.Robux} ROBUX) {clock(left)} left`
 			else `Buy ({product.Robux} ROBUX)`
 	end
 end
@@ -193,12 +180,8 @@ local function bindStand(player: Player, bay: Model)
 	if stand then
 		standByPlayer[player] = stand
 		local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
-		local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
 		if timed then
 			bindPrompt(timed, player, "AutoCollect2h")
-		end
-		if forever then
-			bindPrompt(forever, player, "AutoCollectForever")
 		end
 		refreshStand(player)
 	end
@@ -255,6 +238,9 @@ local function processPurchase(
 	local session = MonetizationState.peek(player)
 	if session then
 		session.PendingOnce[product.Key] = nil
+		if product.Kind == "OfflineDouble" then
+			session.PendingOffline = false
+		end
 	end
 	table.insert(saved.Receipts, purchaseId)
 	while #saved.Receipts > MonetizationConfig.ReceiptsKept do
@@ -321,9 +307,23 @@ local function buyProduct(player: Player, product: Product)
 			return
 		end
 	end
-	if product.Kind == "AutoCollect" and MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey) then
-		MonetizationState.notify(player, "You already own Auto-Collect Forever!", false)
-		return
+	if product.Kind == "HoseTier" then
+		local data = PlayerDataService.get(player)
+		if not data or data.ToolTier + 1 ~= product.ToolTier then
+			MonetizationState.notify(player, "That hose isn't your next upgrade.", false)
+			return
+		end
+	end
+	if product.Kind == "OfflineDouble" then
+		if session.PendingOffline then
+			MonetizationState.notify(player, "Finish your other purchase first.", false)
+			return
+		end
+		if Offline.peekDouble(player) < 1 then
+			MonetizationState.notify(player, "Nothing to double right now.", false)
+			return
+		end
+		session.PendingOffline = true
 	end
 	if product.Kind == "Truck" then
 		-- Only while the truck is parked at their zoo; remember exactly what they're buying, so a
@@ -369,6 +369,7 @@ local function buyProduct(player: Player, product: Product)
 	if MonetizationState.shouldSimulate(player, product.Id) then
 		local decision = processPurchase(player, product, "SIM-" .. HttpService:GenerateGUID(false), true)
 		if decision ~= Enum.ProductPurchaseDecision.PurchaseGranted then
+			session.PendingOffline = false
 			MonetizationState.notify(player, "[TEST] Purchase could not be granted right now.", false)
 		end
 	elseif product.Id ~= 0 then
@@ -377,6 +378,7 @@ local function buyProduct(player: Player, product: Product)
 		end
 		MarketplaceService:PromptProductPurchase(player, product.Id)
 	else
+		session.PendingOffline = false
 		MonetizationState.notify(player, "This item isn't on sale yet.", false)
 	end
 end
@@ -471,15 +473,18 @@ local function connectHooks()
 	end)
 
 	Hooks.modify("SpawnWeight", function(weight: number, player: Player, species: string)
-		if not luckyActive(player) then
-			return weight
-		end
+		local boosted = weight
 		local def = AnimalConfig.Animals[species]
 		local rarity = def and RarityConfig.ByKey[def.Rarity]
-		if rarity and rarity.Order >= MonetizationConfig.LuckySoap.MinRarityOrder then
-			return weight * MonetizationConfig.LuckySoap.SpawnWeightMultiplier
+		if luckyActive(player) and rarity and rarity.Order >= MonetizationConfig.LuckySoap.MinRarityOrder then
+			boosted *= MonetizationConfig.LuckySoap.SpawnWeightMultiplier
 		end
-		return weight
+		local saved = MonetizationState.saved(player)
+		local luck = MonetizationConfig.IncredibleLuck
+		if saved and saved.LuckEndsAt > os.time() and rarity and rarity.Order >= luck.MinRarityOrder then
+			boosted *= luck.SpawnWeightMultiplier
+		end
+		return boosted
 	end)
 
 	Hooks.modify("MutationWeight", function(weight: number, player: Player, mutation: string)
@@ -587,6 +592,7 @@ local function connectHooks()
 		for key in saved.Passes do
 			MonetizationGrants.applyPass(player, key)
 		end
+		MonetizationGrants.syncBuffs(player)
 		MonetizationState.push(player)
 		-- Live ownership; a failed check just leaves the pass off until they rejoin.
 		for _, pass in MonetizationConfig.Passes do
@@ -638,6 +644,7 @@ local function runLoop()
 		for _, player in MonetizationState.players() do
 			local session = MonetizationState.peek(player)
 			local saved = MonetizationState.saved(player)
+			MonetizationGrants.syncBuffs(player)
 			if session and saved and session.SoapEndsAt > 0 then
 				saved.SuperSoapLeft = math.max(0, session.SoapEndsAt - now)
 				PlayerDataService.markDirty(player)
@@ -647,10 +654,7 @@ local function runLoop()
 					MonetizationState.push(player)
 				end
 			end
-			local timedCollect = session
-				and saved
-				and session.AutoCollectEndsAt > 0
-				and not MonetizationState.ownsPass(player, MonetizationConfig.AutoCollect.PassKey)
+			local timedCollect = session and saved and session.AutoCollectEndsAt > 0
 			if timedCollect then
 				saved.AutoCollectLeft = math.max(0, session.AutoCollectEndsAt - now)
 				PlayerDataService.markDirty(player)
@@ -721,6 +725,9 @@ function Monetization.init()
 			local session = player and MonetizationState.peek(player)
 			if product and session and not purchased then
 				session.PendingOnce[product.Key] = nil
+				if product.Kind == "OfflineDouble" then
+					session.PendingOffline = false
+				end
 			end
 		end
 	)
@@ -737,7 +744,10 @@ function Monetization.init()
 	for _, player in Players:GetPlayers() do
 		MonetizationState.session(player)
 	end
-	Players.PlayerRemoving:Connect(MonetizationState.release)
+	Players.PlayerRemoving:Connect(function(player)
+		MonetizationGrants.release(player)
+		MonetizationState.release(player)
+	end)
 
 	task.spawn(runLoop)
 end

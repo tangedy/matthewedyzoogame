@@ -2,6 +2,9 @@
 -- that keep paid items from skipping the game (concept doc: nothing pay-to-win, no shop
 -- prompt in the first 90 seconds, mostly repeatable consumables plus limiteds and whale items).
 --
+-- Permanent skips are gone: no Forever auto-collect, no Fire-Hose game pass, no forever
+-- speed. Speed and Incredible Luck are consumables with absolute expiry timestamps.
+--
 -- Ids are placeholders (0). Robux prices here are for display only: Roblox charges whatever
 -- the product is set to on the website, so keep the two in sync when the real ids go in.
 -- In Studio, or while an id is 0, buying simulates a successful purchase through the real
@@ -15,7 +18,8 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SidePasture"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SidePasture" | "SpeedBoost" | "IncredibleLuck" | "OfflineDouble" | "HoseTier"
+	ToolTier: number?, -- HoseTier: the single next hose this product grants. Never a skip.
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
 	Seconds: number?, -- AutoCollect: play-time added per purchase
@@ -47,6 +51,8 @@ export type Pass = {
 export type ShopState = {
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow() when Super Soap runs out; 0 when inactive
 	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
+	SpeedEndsAt: number, -- same clock; 0 when the 8x speed buff is off
+	LuckEndsAt: number, -- same clock; 0 when Incredible Luck is off
 	LuckyLeft: number, -- walk-ins left on Lucky Soap
 	Passes: { [string]: boolean }, -- owned game passes
 	Once: { [string]: boolean }, -- once-only products already bought
@@ -56,6 +62,8 @@ export type ShopState = {
 	TestMode: boolean, -- purchases are simulated for this player
 	PendingAnimals: number, -- bought animals waiting for a free cache slot
 }
+
+local ToolConfig = require(script.Parent.Parent.ToolConfig)
 
 local PINK = Color3.fromRGB(255, 90, 200)
 local BLUE = Color3.fromRGB(80, 190, 255)
@@ -124,6 +132,28 @@ local products: { Product } = {
 		Kind = "AutoCollect",
 		Color = GREEN,
 		Seconds = 2 * 3600,
+	},
+	{
+		Key = "SpeedBoost",
+		Id = 0,
+		Robux = 39,
+		DisplayName = "8x Speed",
+		Description = "Walk 8x faster for 10 minutes. Buying again adds time, up to 4 hours.",
+		Tab = "Boosts",
+		Order = 5,
+		Kind = "SpeedBoost",
+		Color = ORANGE,
+	},
+	{
+		Key = "IncredibleLuck",
+		Id = 0,
+		Robux = 49,
+		DisplayName = "Incredible Luck",
+		Description = "For 10 minutes, Rare animals and above are much more likely to walk in. Buying again adds time.",
+		Tab = "Boosts",
+		Order = 6,
+		Kind = "IncredibleLuck",
+		Color = PURPLE,
 	},
 	-- Cash
 	{
@@ -222,44 +252,32 @@ local products: { Product } = {
 		Hidden = true,
 		OncePerPlayer = true,
 	},
+	-- Welcome-back only. Doubles the offline payout that is already on the pads.
+	{
+		Key = "OfflineDouble",
+		Id = 0,
+		Robux = 19,
+		DisplayName = "2x Offline",
+		Description = "Double the cash your zoo earned while you were away.",
+		Tab = "Boosts",
+		Order = 97,
+		Kind = "OfflineDouble",
+		Color = GREEN,
+		Hidden = true,
+	},
 }
 
+-- VIP is the only game pass. Forever auto-collect, the Fire-Hose skip, and forever speed
+-- were removed so a purchase cannot jump the hose ladder.
 local passes: { Pass } = {
 	{
 		Key = "VIPKeeper",
 		Id = 0,
 		Robux = 399,
 		DisplayName = "VIP Keeper",
-		Description = "+25% zoo income forever and a gold VIP tag over your head.",
+		Description = "+25% zoo income forever, a gold VIP tag over your head, and a VIP title in chat.",
 		Order = 1,
 		Color = GOLD,
-	},
-	{
-		Key = "FireHoseRig",
-		Id = 0,
-		Robux = 1499,
-		DisplayName = "Fire-Hose Rig",
-		Description = "Unlock the best hose right now, forever. Blast mud like a pro.",
-		Order = 2,
-		Color = PURPLE,
-	},
-	{
-		Key = "AutoCollectForever",
-		Id = 0,
-		Robux = 399,
-		DisplayName = "Auto-Collect: Forever",
-		Description = "Pens pay themselves forever. You never have to walk the collect pads again.",
-		Order = 3,
-		Color = GREEN,
-	},
-	{
-		Key = "DoubleSpeed",
-		Id = 0,
-		Robux = 99,
-		DisplayName = "2x Speed",
-		Description = "Walk twice as fast, forever.",
-		Order = 4,
-		Color = ORANGE,
 	},
 }
 
@@ -289,9 +307,44 @@ for steps = 1, 4 do
 	})
 end
 
+-- One hidden product per hose the player can buy next, except the Fire-Hose Rig.
+-- Each receipt grants exactly that tier, and only when it is the next one, so Robux
+-- cannot skip the ladder. The Fire-Hose Rig stays a $1,000,000 cash upgrade.
+local HOSE_ROBUX: { [number]: number } = {
+	[2] = 15,
+	[3] = 35,
+	[4] = 75,
+	[5] = 149,
+}
+for tier, robux in HOSE_ROBUX do
+	local tool = ToolConfig[tier]
+	table.insert(products, {
+		Key = `HoseTier{tier}`,
+		Id = 0,
+		Robux = robux,
+		DisplayName = tool.Name,
+		Description = `Buy the {tool.Name} with Robux. Only sold as your next hose, so it can't skip a tier.`,
+		Tab = "Boosts",
+		Order = 90 + tier,
+		Kind = "HoseTier",
+		Color = BLUE,
+		Hidden = true,
+		ToolTier = tier,
+	})
+end
+
 local productsByKey: { [string]: Product } = {}
 for _, product in products do
 	productsByKey[product.Key] = product
+end
+
+local function productForHoseTier(tier: number): Product?
+	for _, product in products do
+		if product.Kind == "HoseTier" and product.ToolTier == tier then
+			return product
+		end
+	end
+	return nil
 end
 
 local function productForCleanSteps(steps: number): Product?
@@ -312,6 +365,7 @@ return {
 	Products = products,
 	ProductsByKey = productsByKey,
 	productForCleanSteps = productForCleanSteps,
+	productForHoseTier = productForHoseTier,
 	Passes = passes,
 	PassesByKey = passesByKey,
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },
@@ -336,12 +390,18 @@ return {
 		TagColor = GOLD,
 	},
 	Speed = {
-		Multiplier = 2, -- WalkSpeed while DoubleSpeed is owned
-		PassKey = "DoubleSpeed",
+		Multiplier = 8, -- WalkSpeed while the consumable is active
+		Seconds = 600, -- per purchase; purchases stack
+		MaxSeconds = 4 * 3600,
+	},
+	IncredibleLuck = {
+		Seconds = 600,
+		MaxSeconds = 4 * 3600,
+		MinRarityOrder = 2, -- Rare and above
+		SpawnWeightMultiplier = 5,
 	},
 	AutoCollect = {
 		MaxSeconds = 8 * 3600, -- stacked 2-hour purchases stop here
-		PassKey = "AutoCollectForever",
 	},
 	-- Sold out between the stock check and the receipt: cash instead (the Robux can't be refunded).
 	-- max(Floor, min(120 min of income, the full next hose)): never less than Floor at any tier.
@@ -355,7 +415,7 @@ return {
 		BigAnimalWashTime = 2, -- Super Soap offer: AnimalConfig WashTimeMultiplier at least this
 		SuperSoapCheckDelay = 8, -- seconds into the wash
 		SuperSoapMaxProgress = 0.5, -- still less clean than this
-		CashAutoOpenEvery = 3, -- failed hose purchases ("Not enough cash") per auto-open
+		CashAutoOpenEvery = 3, -- failed cash purchases (hose or barn) per auto-open
 		CashAutoOpenMax = 3, -- auto-opens per session
 	},
 

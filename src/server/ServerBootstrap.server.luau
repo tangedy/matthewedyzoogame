@@ -17,9 +17,11 @@ local BayService = require(Services.BayService)
 local DevService = require(Services.DevService)
 local ZooService = require(Services.ZooService)
 local Hooks = require(Services.Hooks)
+local CutsceneService = require(Services.CutsceneService)
 
 EnvironmentBuilder.build()
 WorldBuilder.init()
+CutsceneService.init()
 ZooService.init()
 PlayerDataService.init()
 EconomyService.init()
@@ -58,6 +60,8 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		ToolName = if tool then tool.Name else "",
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		GuideStep = if data then data.GuideStep else "Done",
+		PlayCutscene = if data then not data.CutsceneSeen else false,
+		IntroWashesLeft = if data then data.IntroWashesLeft else 0,
 		Bay = BayService.getSnapshot(player),
 		Zoo = ZooService.getZooSummary(player),
 		Index = if data then data.Index else nil,
@@ -92,6 +96,7 @@ local function onPlayerAdded(player: Player)
 	if not player.Parent then
 		return -- left while loading; PlayerDataService already released the lock
 	end
+	CutsceneService.begin(player)
 	Hooks.fire("PlayerLoaded", player, PlayerDataService.get(player))
 	BayService.assign(player)
 	EconomyService.sendTool(player)

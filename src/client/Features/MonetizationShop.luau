@@ -208,16 +208,15 @@ local function refreshCard(card: Card, state: ShopState)
 		elseif product.Kind == "LuckySoap" and state.LuckyLeft > 0 then
 			statusText = `ACTIVE: {state.LuckyLeft} LEFT`
 			statusColor = Color3.fromRGB(255, 220, 90)
-		elseif product.Kind == "AutoCollect" then
-			if state.Passes.AutoCollectForever then
-				buyable = false
-				buyText = "OWNED"
-				statusText = "FOREVER"
-				statusColor = OWNED_COLOR
-			elseif state.AutoCollectEndsAt > Workspace:GetServerTimeNow() then
-				statusText = `ACTIVE {clock(state.AutoCollectEndsAt - Workspace:GetServerTimeNow())}`
-				statusColor = UIStyle.CashColor
-			end
+		elseif product.Kind == "SpeedBoost" and (state.SpeedEndsAt or 0) > Workspace:GetServerTimeNow() then
+			statusText = `ACTIVE {clock(state.SpeedEndsAt - Workspace:GetServerTimeNow())}`
+			statusColor = Color3.fromRGB(255, 170, 80)
+		elseif product.Kind == "IncredibleLuck" and (state.LuckEndsAt or 0) > Workspace:GetServerTimeNow() then
+			statusText = `ACTIVE {clock(state.LuckEndsAt - Workspace:GetServerTimeNow())}`
+			statusColor = Color3.fromRGB(210, 160, 255)
+		elseif product.Kind == "AutoCollect" and state.AutoCollectEndsAt > Workspace:GetServerTimeNow() then
+			statusText = `ACTIVE {clock(state.AutoCollectEndsAt - Workspace:GetServerTimeNow())}`
+			statusColor = UIStyle.CashColor
 		elseif product.Kind == "Cash" then
 			statusText = `+{UIStyle.formatMoney(state.Cash[product.Key] or 0)}`
 			statusColor = UIStyle.CashColor

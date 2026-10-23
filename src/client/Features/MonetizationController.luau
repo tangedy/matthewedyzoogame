@@ -1,7 +1,7 @@
 -- Client side of Monetization: keeps the shop's state from the server, shows active boost
 -- timers next to the cash, the server's contextual offers (small and dismissible), purchase
--- notices, and auto-opens the Cash tab after repeated "Not enough cash" hose buys (at most
--- CashAutoOpenMax times a session). Nothing here decides a price or a grant: BUY only sends
+-- notices, and auto-opens the Cash tab after repeated failed cash purchases (hose or barn,
+-- at most CashAutoOpenMax times a session). Nothing here decides a price or a grant: BUY only sends
 -- a product key, and offers / auto-opens never show in a session's first QuietSeconds.
 
 local Players = game:GetService("Players")
@@ -10,6 +10,7 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -31,6 +32,8 @@ local startedAt = os.clock()
 local state: ShopState = {
 	SoapEndsAt = 0,
 	AutoCollectEndsAt = 0,
+	SpeedEndsAt = 0,
+	LuckEndsAt = 0,
 	LuckyLeft = 0,
 	Passes = {},
 	Once = {},
@@ -42,8 +45,11 @@ local state: ShopState = {
 }
 
 local gui: ScreenGui
-local soapPill: TextLabel
 local luckyPill: TextLabel
+local buffPills: { [string]: TextLabel } = {}
+local buffEnds: { [string]: number } = {}
+local buffJanitors: { [string]: Janitor.Janitor } = {}
+local pendingCashOpen = false
 local notice: TextLabel
 local noticeScale: UIScale
 local noticeToken = 0
@@ -122,9 +128,82 @@ local function setPill(label: TextLabel, text: string?)
 	end
 end
 
+local function buffGroup(key: string): Janitor.Janitor
+	local janitor = buffJanitors[key]
+	if not janitor then
+		janitor = Janitor.new()
+		buffJanitors[key] = janitor
+	end
+	return janitor
+end
+
+-- Shows a countdown pill while `endsAt` is in the future. When it expires, the Janitor
+-- destroys the pill and cancels the timer so nothing keeps ticking.
+local function syncTimed(key: string, order: number, color: Color3, endsAt: number, text: string)
+	local now = Workspace:GetServerTimeNow()
+	local left = endsAt - now
+	local active = endsAt > 0 and left > 0
+	local janitor = buffGroup(key)
+	if not active then
+		if buffEnds[key] ~= nil then
+			buffEnds[key] = nil
+			buffPills[key] = nil
+			janitor:Cleanup()
+		end
+		return
+	end
+	local label = buffPills[key]
+	if buffEnds[key] ~= endsAt or not label or not label.Parent then
+		buffEnds[key] = endsAt
+		janitor:Cleanup()
+		label = pill(order, color)
+		label.Visible = true
+		buffPills[key] = label
+		janitor:Add(label, "Destroy")
+		local token = endsAt
+		janitor:Add(task.delay(left, function()
+			if buffEnds[key] ~= token then
+				return
+			end
+			buffEnds[key] = nil
+			buffPills[key] = nil
+			janitor:Cleanup()
+		end), true)
+		pop(label:FindFirstChildOfClass("UIScale") :: UIScale, 0.5, 0.4)
+	end
+	if label then
+		label.Text = text
+	end
+end
+
 local function refreshTimers()
-	local soapLeft = state.SoapEndsAt - Workspace:GetServerTimeNow()
-	setPill(soapPill, if state.SoapEndsAt > 0 and soapLeft > 0 then `SOAP 2X {clock(soapLeft)}` else nil)
+	local now = Workspace:GetServerTimeNow()
+	local soapLeft = state.SoapEndsAt - now
+	syncTimed(
+		"Soap",
+		1,
+		Color3.fromRGB(60, 160, 255),
+		state.SoapEndsAt,
+		if soapLeft > 0 then `SOAP 2X {clock(soapLeft)}` else ""
+	)
+	local speedEnds = state.SpeedEndsAt or 0
+	local speedLeft = speedEnds - now
+	syncTimed(
+		"Speed",
+		2,
+		Color3.fromRGB(255, 140, 40),
+		speedEnds,
+		if speedLeft > 0 then `SPEED 8X {clock(speedLeft)}` else ""
+	)
+	local luckEnds = state.LuckEndsAt or 0
+	local luckLeft = luckEnds - now
+	syncTimed(
+		"Luck",
+		3,
+		Color3.fromRGB(170, 90, 255),
+		luckEnds,
+		if luckLeft > 0 then `LUCK {clock(luckLeft)}` else ""
+	)
 	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY: {state.LuckyLeft} LEFT` else nil)
 end
 
@@ -221,18 +300,29 @@ end
 
 -- Cash-pack auto-open ----------------------------------------------------------------------
 
-local function onHoseBuyFailed()
+local function tryCashOpen()
+	if not pendingCashOpen or autoOpens >= MonetizationConfig.Offers.CashAutoOpenMax then
+		return
+	end
+	if quiet() or MonetizationShop.isOpen() then
+		return
+	end
+	pendingCashOpen = false
+	autoOpens += 1
+	MonetizationShop.open("Cash")
+end
+
+local function onCurrencyFailed()
 	failedHoseBuys += 1
 	local cfg = MonetizationConfig.Offers
-	if
-		failedHoseBuys % cfg.CashAutoOpenEvery == 0
-		and autoOpens < cfg.CashAutoOpenMax
-		and not quiet()
-		and not MonetizationShop.isOpen()
-	then
-		autoOpens += 1
-		MonetizationShop.open("Cash")
+	if failedHoseBuys % cfg.CashAutoOpenEvery == 0 and autoOpens < cfg.CashAutoOpenMax then
+		pendingCashOpen = true
+		tryCashOpen()
 	end
+end
+
+local function isCurrencyFailure(message: string): boolean
+	return string.find(message, "^Not enough cash") ~= nil or string.find(message, "^Expanding needs") ~= nil
 end
 
 -- Waits for a child without a timeout and without the "infinite yield" warning (the core
@@ -257,7 +347,7 @@ local function watchHoseShop()
 			child.Activated:Connect(function()
 				local nextTool = ToolConfig[toolTier + 1]
 				if string.sub(child.Text, 1, 7) == "Buy for" and nextTool and coins < nextTool.Price then
-					onHoseBuyFailed()
+					onCurrencyFailed()
 				end
 			end)
 		end
@@ -282,15 +372,15 @@ local function buildGui()
 	timers.Name = "BoostTimers"
 	timers.AnchorPoint = Vector2.new(0, 0.5)
 	timers.Position = UDim2.new(0, 196, 0.5, 14)
-	timers.Size = UDim2.fromOffset(160, 76)
+	timers.AutomaticSize = Enum.AutomaticSize.Y
+	timers.Size = UDim2.fromOffset(160, 0)
 	timers.BackgroundTransparency = 1
 	timers.Parent = gui
 	local timerList = Instance.new("UIListLayout")
 	timerList.Padding = UDim.new(0, 8)
 	timerList.SortOrder = Enum.SortOrder.LayoutOrder
 	timerList.Parent = timers
-	soapPill = pill(1, Color3.fromRGB(60, 160, 255))
-	luckyPill = pill(2, Color3.fromRGB(230, 170, 20))
+	luckyPill = pill(4, Color3.fromRGB(230, 170, 20))
 
 	-- Purchase notices, under the index toast
 	notice = Instance.new("TextLabel")
@@ -413,8 +503,8 @@ function MonetizationController.init(initial: Types.InitialState)
 	-- hose shop usually refuses locally without asking it, so taps on its Buy button while short
 	-- of cash count too (same affordability check as ShopController).
 	Remotes.event("PurchaseResult").OnClientEvent:Connect(function(success: boolean, message: string)
-		if not success and typeof(message) == "string" and string.find(message, "^Not enough cash") then
-			onHoseBuyFailed()
+		if not success and typeof(message) == "string" and isCurrencyFailure(message) then
+			onCurrencyFailed()
 		end
 	end)
 	Remotes.event("CoinsChanged").OnClientEvent:Connect(function(value: number)
@@ -433,6 +523,7 @@ function MonetizationController.init(initial: Types.InitialState)
 		while gui.Parent do
 			task.wait(1)
 			refreshTimers()
+			tryCashOpen()
 			MonetizationShop.tick()
 		end
 	end)

@@ -85,6 +85,19 @@ local function getNozzle(root: BasePart): Attachment
 	return fallbackNozzle :: Attachment
 end
 
+-- The animal currently being washed, when the hit is part of one. Used so a spray
+-- aimed at a neighbor's bay cleans that job instead of only the local one.
+local function washingAnimalFrom(inst: Instance?): Model?
+	local current = inst
+	while current and current ~= Workspace do
+		if current:IsA("Model") and current.Name == "Animal" and typeof(current:GetAttribute("JobId")) == "string" then
+			return current
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
 local function currentAnimal(): Model?
 	if not bayName then
 		return nil
@@ -431,7 +444,7 @@ end
 local function onHeartbeat()
 	local camera = Workspace.CurrentCamera
 	local root = getRoot()
-	if not camera or not root then
+	if not camera or not root or player:GetAttribute("InCutscene") == true then
 		stopEffects()
 		return
 	end
@@ -451,21 +464,47 @@ local function onHeartbeat()
 	params.FilterDescendantsInstances = characterExclusions()
 
 	local origin = root.Position + GameConfig.NozzleOffset
-	local animal = currentAnimal()
 
 	local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
 	local camHit = Workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
 	local target = if camHit then camHit.Position else ray.Origin + ray.Direction * 1000
+	local aimed = if camHit then washingAnimalFrom(camHit.Instance) else nil
+	local animal = aimed or currentAnimal()
+	local aimJob = if aimed then aimed:GetAttribute("JobId") :: string else nil
+	local helping = typeof(aimJob) == "string" and aimJob ~= jobId
 
-	-- Aim assist (touch/gamepad only): if the reticle isn't on the animal, snap to the nearest
-	-- dirty patch on screen that the hose can actually reach.
+	-- Aim assist (touch/gamepad only): if the reticle isn't on an animal, snap to the nearest
+	-- dirty patch on screen that the hose can actually reach, including a neighbor's wash.
 	local assistUsed = false
-	if assisted and animal and not (camHit and camHit.Instance:IsDescendantOf(animal)) then
-		local assist = findAssistTarget(camera, animal, origin, screenPoint, params)
-		if assist then
+	if assisted and not aimed then
+		local bays = Workspace:FindFirstChild("WashBays")
+		local bestPart: BasePart? = nil
+		local bestModel: Model? = nil
+		local bestDist = math.huge
+		if bays then
+			for _, bay in bays:GetChildren() do
+				local model = bay:FindFirstChild("Animal")
+				if model and model:IsA("Model") and typeof(model:GetAttribute("JobId")) == "string" then
+					local assist = findAssistTarget(camera, model, origin, screenPoint, params)
+					if assist then
+						local projected = camera:WorldToViewportPoint(assist.Position)
+						local distance = (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude
+						if distance < bestDist then
+							bestPart = assist
+							bestModel = model
+							bestDist = distance
+						end
+					end
+				end
+			end
+		end
+		if bestPart and bestModel then
 			assistUsed = true
-			target = assist.Position
-			local projected = camera:WorldToViewportPoint(assist.Position)
+			animal = bestModel
+			aimJob = bestModel:GetAttribute("JobId") :: string
+			helping = aimJob ~= jobId
+			target = bestPart.Position
+			local projected = camera:WorldToViewportPoint(bestPart.Position)
 			screenPoint = Vector2.new(projected.X, projected.Y)
 		end
 	end
@@ -506,7 +545,8 @@ local function onHeartbeat()
 		return
 	end
 	-- The hose isn't strong enough for this rarity. The prompt offers Let Go / Clean Now.
-	if player:GetAttribute("CleanBlocked") == true then
+	-- Helping on someone else's animal is not blocked by the local bay's gate.
+	if player:GetAttribute("CleanBlocked") == true and not helping then
 		stopEffects()
 		return
 	end
@@ -526,9 +566,11 @@ local function onHeartbeat()
 	end
 
 	local now = os.clock()
-	if washing and jobId and now - lastSendAt >= 1 / GameConfig.RequestRateHz then
+	local sendId = if helping then aimJob else jobId
+	local maySend = if helping then true else washing
+	if maySend and typeof(sendId) == "string" and now - lastSendAt >= 1 / GameConfig.RequestRateHz then
 		lastSendAt = now
-		cleaningIntent:FireServer(jobId, aimDirection, aimOrigin)
+		cleaningIntent:FireServer(sendId, aimDirection, aimOrigin)
 	end
 end
 

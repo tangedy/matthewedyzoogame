@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
@@ -23,6 +24,7 @@ local ShopController = {}
 local FONT = UIStyle.Font
 local PANEL_COLOR = Color3.fromRGB(25, 30, 45)
 local BUY_COLOR = Color3.fromRGB(80, 200, 110)
+local ROBUX_COLOR = Color3.fromRGB(255, 170, 40)
 local DISABLED_COLOR = Color3.fromRGB(110, 110, 120)
 local ERROR_COLOR = Color3.fromRGB(255, 120, 110)
 local OK_COLOR = Color3.fromRGB(130, 240, 140)
@@ -39,6 +41,7 @@ local currentLabel: TextLabel
 local nextLabel: TextLabel
 local gainLabel: TextLabel
 local buyButton: TextButton
+local robuxButton: TextButton
 local messageLabel: TextLabel
 
 local function round(instance: GuiObject, radius: number)
@@ -100,10 +103,18 @@ local function refresh()
 		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
 		local affordable = coins >= nextTool.Price
 		buyButton.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
+		-- Robux buys exactly the next hose. The Fire-Hose Rig has no product, so it stays cash-only.
+		local robux = MonetizationConfig.productForHoseTier(nextTool.Tier)
+		local showRobux = robux ~= nil and not affordable
+		robuxButton.Visible = showRobux
+		if robux and showRobux then
+			robuxButton.Text = `Buy with Robux ({robux.Robux})`
+		end
 	else
 		nextLabel.Text = "Your hose is fully upgraded!"
 		gainLabel.Text = ""
 		buyButton.Visible = false
+		robuxButton.Visible = false
 	end
 end
 
@@ -147,7 +158,7 @@ local function buildGui()
 	panel.Name = "ShopPanel"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(360, 250)
+	panel.Size = UDim2.fromOffset(360, 320)
 	panel.BackgroundColor3 = PANEL_COLOR
 	panel.BackgroundTransparency = 0
 	panel.Visible = false
@@ -155,9 +166,9 @@ local function buildGui()
 	panel.Parent = gui
 	round(panel, 14)
 	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(360, 250)
+	constraint.MaxSize = Vector2.new(360, 320)
 	constraint.Parent = panel
-	panel.Size = UDim2.new(0.9, 0, 0, 250)
+	panel.Size = UDim2.new(0.9, 0, 0, 320)
 
 	label({
 		Position = UDim2.fromOffset(18, 12),
@@ -189,8 +200,8 @@ local function buildGui()
 	})
 
 	buyButton = Instance.new("TextButton")
-	buyButton.Position = UDim2.fromOffset(18, 150)
-	buyButton.Size = UDim2.new(1, -36, 0, 50)
+	buyButton.Position = UDim2.fromOffset(18, 148)
+	buyButton.Size = UDim2.new(1, -36, 0, 44)
 	buyButton.BackgroundColor3 = BUY_COLOR
 	buyButton.Font = FONT
 	buyButton.TextScaled = true
@@ -202,11 +213,29 @@ local function buildGui()
 	pad.PaddingBottom = UDim.new(0, 8)
 	pad.Parent = buyButton
 
+	robuxButton = Instance.new("TextButton")
+	robuxButton.Name = "RobuxBuy"
+	robuxButton.Position = UDim2.fromOffset(18, 198)
+	robuxButton.Size = UDim2.new(1, -36, 0, 44)
+	robuxButton.BackgroundColor3 = ROBUX_COLOR
+	robuxButton.Font = FONT
+	robuxButton.TextScaled = true
+	robuxButton.TextColor3 = Color3.new(1, 1, 1)
+	robuxButton.Visible = false
+	robuxButton.Text = "Buy with Robux"
+	robuxButton.Parent = panel
+	round(robuxButton, 10)
+	local robuxPad = Instance.new("UIPadding")
+	robuxPad.PaddingTop = UDim.new(0, 6)
+	robuxPad.PaddingBottom = UDim.new(0, 6)
+	robuxPad.Parent = robuxButton
+
 	messageLabel = label({
-		Position = UDim2.fromOffset(18, 208),
-		Size = UDim2.new(1, -36, 0, 26),
+		Position = UDim2.fromOffset(18, 252),
+		Size = UDim2.new(1, -36, 0, 48),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = "",
+		TextWrapped = true,
 		Parent = panel,
 	})
 
@@ -223,6 +252,14 @@ local function buildGui()
 		awaitingResult = true
 		refresh()
 		purchaseRemote:FireServer()
+	end)
+	robuxButton.Activated:Connect(function()
+		local nextTool = ToolConfig[tier + 1]
+		local product = nextTool and MonetizationConfig.productForHoseTier(nextTool.Tier)
+		if not product or not nextTool or coins >= nextTool.Price then
+			return
+		end
+		Remotes.event("MonetizationBuy"):FireServer(product.Key)
 	end)
 end
 

@@ -3,6 +3,10 @@
 -- The client only sends (jobId, aimDirection). The server picks the origin (the player's
 -- nozzle), raycasts with line of sight and tool range, decides which patch is hit, and
 -- credits dirt removal from its own capped clock, so extra requests never clean faster.
+--
+-- Any player with a hose can spray an active job. Extra sprayers raise the clean rate,
+-- more so on large bodies. Only the owner's spray can take the last dirt and finish the
+-- job, so a helper cannot push the owner's cached animal out.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,6 +33,8 @@ type Job = {
 	PatchList: { Patch },
 	TotalWeighted: number,
 	Active: boolean,
+	BodyClass: string,
+	Sprayers: { [Player]: number }, -- os.clock() of each player's latest hit
 	OnComplete: () -> (),
 }
 
@@ -39,6 +45,7 @@ export type JobParams = {
 	Patches: { AnimalBuilder.PatchInfo },
 	WashTimeMultiplier: number,
 	Rarity: string,
+	BodyClass: string,
 	OnComplete: () -> (),
 }
 
@@ -56,6 +63,8 @@ local progressChanged = Remotes.event("CleaningProgressChanged")
 local getTool: (Player) -> ToolConfig.ToolTier? = function(_player)
 	return nil
 end
+
+local effectivePower: (Player) -> number
 
 local function isFiniteNumber(n: number): boolean
 	return n == n and n ~= math.huge and n ~= -math.huge
@@ -118,6 +127,9 @@ end
 -- the animal is under the cursor, so the side facing the camera is washed no matter where the
 -- player stands. Without it the ray comes from the hose nozzle.
 local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, aimOrigin: any)
+	if player:GetAttribute("InCutscene") == true then
+		return
+	end
 	-- Rate cap first: cheap, and the accepted step below is measured from this clock.
 	local now = os.clock()
 	local last = lastRequestAt[player]
@@ -132,7 +144,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	end
 	-- Job must exist, belong to this player, and be in the washing state.
 	local job = jobs[jobId]
-	if not job or job.Owner ~= player or not job.Active or jobByOwner[player] ~= job then
+	if not job or not job.Active then
 		return
 	end
 
@@ -186,14 +198,47 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
 	-- A rarity above this hose (even with Super Soap) doesn't take dirt. Clean Now or a
 	-- better hose is the way through; letting it go is handled by BayService.
+	-- The owner's hose is the gate for the whole job: a stronger helper cannot wash an
+	-- animal the owner is not allowed to finish, or the last speck would be stuck.
+	if not CleanPower.canClean(effectivePower(job.Owner), job.Rarity) then
+		return
+	end
 	if not CleanPower.canClean(power, job.Rarity) then
 		return
 	end
+
+	local nowHit = os.clock()
+	job.Sprayers[player] = nowHit
+	local helping = 0
+	for sprayer, at in job.Sprayers do
+		if sprayer.Parent and nowHit - at <= GameConfig.Coop.ActiveWindow then
+			helping += 1
+		end
+	end
+	local bonus = GameConfig.Coop.HelperBonus[job.BodyClass]
+	if typeof(bonus) ~= "number" then
+		bonus = GameConfig.Coop.HelperBonus.Standard
+	end
+	local coop = 1 + math.max(0, helping - 1) * bonus
+	local amount = power * step * coop
+	local ownerSpray = player == job.Owner
 	for _, patch in hitPatches do
-		patch.RemainingDirt = math.max(0, patch.RemainingDirt - power * step)
+		local nextRemaining = math.max(0, patch.RemainingDirt - amount)
+		local fraction = nextRemaining / patch.InitialDirt
+		if ownerSpray and fraction <= GameConfig.PatchCleanThreshold then
+			nextRemaining = 0
+		end
+		patch.RemainingDirt = nextRemaining
+	end
+	-- A helper who would clear the animal leaves one speck. The owner has to take it,
+	-- so the cache handoff stays theirs.
+	if not ownerSpray and isComplete(job) then
+		local speck = hitPatches[#hitPatches]
+		speck.RemainingDirt = speck.InitialDirt * GameConfig.Coop.FinishReserve
+	end
+	for _, patch in hitPatches do
 		local fraction = patch.RemainingDirt / patch.InitialDirt
-		if fraction <= GameConfig.PatchCleanThreshold then
-			patch.RemainingDirt = 0
+		if patch.RemainingDirt <= 0 then
 			DirtRenderer.clear(patch.Part, progressOf(job)) -- the pop gets higher-pitched as the wash nears 100%
 		else
 			DirtRenderer.setAmount(patch.Part, fraction)
@@ -202,13 +247,21 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 
 	local progress = progressOf(job)
 	DirtRenderer.setGrime(job.Model, progress)
-	if isComplete(job) then
+	local function tell(who: Player, done: boolean)
+		if who.Parent then
+			progressChanged:FireClient(who, job.Id, if done then 1 else progress, (not done) and progress >= GameConfig.HintProgress)
+		end
+	end
+	if ownerSpray and isComplete(job) then
 		job.Active = false -- lock before anything else so no further cleaning is accepted
-		progressChanged:FireClient(player, job.Id, 1, false)
+		tell(job.Owner, true)
 		task.spawn(job.OnComplete)
 	else
-		progressChanged:FireClient(player, job.Id, progress, progress >= GameConfig.HintProgress)
-		Hooks.fire("WashProgress", player, job.Id, progress)
+		tell(player, false)
+		if player ~= job.Owner then
+			tell(job.Owner, false)
+		end
+		Hooks.fire("WashProgress", job.Owner, job.Id, progress)
 	end
 end
 
@@ -218,10 +271,13 @@ function CleaningService.init(deps: { getTool: (Player) -> ToolConfig.ToolTier? 
 	Players.PlayerRemoving:Connect(function(player)
 		lastRequestAt[player] = nil
 		cleanNowCredit[player] = nil
+		for _, job in jobs do
+			job.Sprayers[player] = nil
+		end
 	end)
 end
 
-local function effectivePower(player: Player): number
+function effectivePower(player: Player): number
 	local tool = getTool(player)
 	local base = if tool then tool.CleaningPower else 0
 	return Hooks.apply("CleaningPower", base, player)
@@ -271,6 +327,8 @@ function CleaningService.beginJob(params: JobParams)
 		PatchList = {},
 		TotalWeighted = 0,
 		Active = true,
+		BodyClass = params.BodyClass,
+		Sprayers = {},
 		OnComplete = params.OnComplete,
 	}
 	for _, info in params.Patches do
@@ -386,6 +444,22 @@ function CleaningService.redirty(jobId: string, fraction: number): number
 		progressChanged:FireClient(job.Owner, job.Id, progress, progress >= GameConfig.HintProgress)
 	end
 	return count
+end
+
+-- Players who have sprayed this job recently, including the owner when they are spraying.
+function CleaningService.assistants(jobId: string): { Player }
+	local job = jobs[jobId]
+	local list: { Player } = {}
+	if not job then
+		return list
+	end
+	local now = os.clock()
+	for sprayer, at in job.Sprayers do
+		if sprayer.Parent and now - at <= GameConfig.Coop.ActiveWindow then
+			table.insert(list, sprayer)
+		end
+	end
+	return list
 end
 
 function CleaningService.getProgress(jobId: string): number?

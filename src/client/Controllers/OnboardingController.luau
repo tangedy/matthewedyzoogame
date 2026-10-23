@@ -1,15 +1,7 @@
--- Contextual onboarding, fired by triggers instead of up-front menus:
---   * First cycle: a candy-colored trail on the ground — wash, pick up from the cache,
---     place in a pen, visit the hose stand. Each mark points at that destination. The
---     server remembers the step.
---   * Whenever the trail is showing, a big all-caps instruction sits at the top of the screen.
---   * After that the trail only comes back for the delivery truck while it's parked, or
---     for the hose stand once the next hose is affordable.
---   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
---   * "Pick me up!" over the cache until the player's first pickup, then "Place here!" over
---     the first pen while carrying, until the first animal is in a pen.
---   * Once the next hose is affordable, the stand shows UPGRADE! and the trail leads there
---     until the player opens the shop (once per tier per session).
+-- Contextual onboarding. The opening lesson is the wash and nothing else: a trail to the
+-- baby elephant and a "Wash me!" marker. Pens, the cache, and the hose stand stay quiet
+-- until those opening washes are done. After that the trail only returns for a parked
+-- delivery truck or a hose the player can already afford.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -57,6 +49,7 @@ local MAX_STEP_UP = 0.6
 
 local tutorialCompleted = false
 local guideStep = "Done"
+local introLeft = 0
 local coins = 0
 local tier = 1
 local bayName: string? = nil
@@ -67,21 +60,15 @@ local shopVisitedForTier: { [number]: boolean } = {}
 
 local animalMarker: BillboardGui
 local stationMarker: BillboardGui
-local cacheMarker: BillboardGui
-local penMarker: BillboardGui
-local zooCount = 0
-local cacheCount = 0
-local carrying = false
-local pickedUp = false -- the player has picked an animal up before
 local trail: Folder
 local instruction: TextLabel
+local note: TextLabel
+local noteUntil = 0
 local instructionScale: UIScale
 type TrailSegment = { left: Part, right: Part }
 
 local segments: { TrailSegment } = {}
 local march = 0
-local nextAdvanceAt = 0
-local guideAdvance = Remotes.event("GuideAdvance")
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -174,19 +161,13 @@ local function guideTarget(): (BasePart?, string?)
 	end
 	if guideStep == "Wash" then
 		local animal = bay:FindFirstChild("Animal")
+		local text = if introLeft > 0 then "WASH THE BABY ELEPHANT!" else "WASH THE ANIMAL!"
 		if animal and animal:IsA("Model") and animal.PrimaryPart then
-			return animal.PrimaryPart, "WASH THE ANIMAL!"
+			return animal.PrimaryPart, text
 		end
-		return partNamed(bay, "WashPosition"), "WASH THE ANIMAL!"
-	elseif guideStep == "Pickup" then
-		return partNamed(bay:FindFirstChild("Cache"), "Slot1"), "PICK UP YOUR CLEAN ANIMAL!"
-	elseif guideStep == "Place" then
-		local zoo = bay:FindFirstChild("Zoo")
-		return partNamed(zoo and zoo:FindFirstChild("Pen1"), "GatePost"), "PUT IT IN A PEN!"
-	elseif guideStep == "Upgrade" then
-		return upgradeCounter(), "VISIT THE HOSE SHOP!"
+		return partNamed(bay, "WashPosition"), text
 	end
-	-- Guide finished: only the truck (it leaves soon) or an affordable hose.
+	-- The wash lesson is the only guided step. Afterwards, point at a truck or an affordable hose.
 	local truck = truckTarget()
 	if truck then
 		return truck, "A DELIVERY TRUCK IS HERE! CHECK IT OUT!"
@@ -225,12 +206,6 @@ local function updateTrail(dt: number)
 	if not target or not root or not character then
 		hideTrail()
 		return
-	end
-	if guideStep == "Upgrade" and os.clock() >= nextAdvanceAt then
-		if (root.Position - target.Position).Magnitude <= 8 then
-			nextAdvanceAt = os.clock() + 2
-			guideAdvance:FireServer()
-		end
 	end
 
 	local flat = Vector3.new(target.Position.X - root.Position.X, 0, target.Position.Z - root.Position.Z)
@@ -296,13 +271,7 @@ local function updateTrail(dt: number)
 end
 
 local function applyGuide(step: string)
-	guideStep = step
-	if step ~= "Upgrade" then
-		nextAdvanceAt = 0
-	end
-	if step ~= "Wash" and step ~= "Pickup" then
-		pickedUp = true
-	end
+	guideStep = if step == "Wash" then "Wash" else "Done"
 end
 
 local function refreshAnimalMarker()
@@ -326,28 +295,14 @@ local function bobMarker(marker: BillboardGui, offset: Vector3)
 end
 
 local function refreshStationMarker()
+	if guideStep == "Wash" or introLeft > 0 then
+		stationMarker.Adornee = nil
+		stationMarker.Enabled = false
+		return
+	end
 	local counter = if upgradeAffordable() then upgradeCounter() else nil
 	stationMarker.Adornee = counter :: any
 	stationMarker.Enabled = counter ~= nil
-end
-
--- Point at the cache until the first pickup, then at pen 1 while carrying until the first
--- animal is in a pen.
-local function refreshZooMarkers()
-	local bay = bayModel()
-	local learning = zooCount == 0
-	local cache = bay and bay:FindFirstChild("Cache")
-	local slot = cache and cache:FindFirstChild("Slot1")
-	local showCache = not pickedUp and not carrying and cacheCount > 0 and slot ~= nil
-	cacheMarker.Adornee = if showCache then slot :: BasePart else nil :: any
-	cacheMarker.Enabled = showCache
-
-	local zoo = bay and bay:FindFirstChild("Zoo")
-	local pen = zoo and zoo:FindFirstChild("Pen1")
-	local post = pen and pen:FindFirstChild("GatePost")
-	local showPen = learning and carrying and post ~= nil
-	penMarker.Adornee = if showPen then post :: BasePart else nil :: any
-	penMarker.Enabled = showPen
 end
 
 local function applyBay(bay: Types.BaySnapshot?)
@@ -385,6 +340,15 @@ local function buildGui()
 	instructionScale = Instance.new("UIScale")
 	instructionScale.Parent = instruction
 
+	note = Instance.new("TextLabel")
+	note.Name = "Note"
+	note.AnchorPoint = Vector2.new(0.5, 0)
+	note.Position = UDim2.new(0.5, 0, 0, 124)
+	note.Size = UDim2.new(0.8, 0, 0, 32)
+	note.Visible = false
+	note.Parent = gui
+	UIStyle.text(note, Color3.fromRGB(255, 220, 120))
+
 	trail = Instance.new("Folder")
 	trail.Name = "GuideTrail"
 	trail.Parent = Workspace
@@ -397,8 +361,12 @@ local function buildGui()
 
 	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
 	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
-	cacheMarker = makeMarker("Pick me up!", Color3.fromRGB(110, 200, 255))
-	penMarker = makeMarker("Place here!", Color3.fromRGB(90, 255, 90))
+end
+
+local function showNote(text: string)
+	note.Text = text
+	note.Visible = true
+	noteUntil = os.clock() + 4
 end
 
 function OnboardingController.init(initial: Types.InitialState)
@@ -408,28 +376,17 @@ function OnboardingController.init(initial: Types.InitialState)
 	buildGui()
 	applyGuide(initial.GuideStep or "Done")
 	applyBay(initial.Bay)
+	introLeft = initial.IntroWashesLeft or 0
 
-	if initial.Zoo then
-		zooCount = initial.Zoo.Count
-		cacheCount = initial.Zoo.CacheCount
-		-- Anyone with an animal in a pen has picked one up before.
-		pickedUp = pickedUp or zooCount > 0
-	end
-	refreshZooMarkers()
-	Remotes.event("ZooChanged").OnClientEvent:Connect(function(summary: Types.ZooSummary)
-		zooCount = summary.Count
-		cacheCount = summary.CacheCount
-		refreshZooMarkers()
-	end)
-	Remotes.event("CarryChanged").OnClientEvent:Connect(function(info: Types.CarryInfo?)
-		carrying = info ~= nil
-		pickedUp = pickedUp or carrying
-		refreshZooMarkers()
-	end)
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(applyBay)
-	Remotes.event("GuideStepChanged").OnClientEvent:Connect(function(step: string)
-		applyGuide(step)
-		refreshZooMarkers()
+	Remotes.event("GuideStepChanged").OnClientEvent:Connect(applyGuide)
+	Remotes.event("IntroAutoSold").OnClientEvent:Connect(function(amount: number, remaining: number)
+		introLeft = remaining
+		showNote(`Auto-sold for {UIStyle.formatMoney(amount)}. Keep washing!`)
+	end)
+	Remotes.event("YardRevealed").OnClientEvent:Connect(function()
+		introLeft = 0
+		showNote("Your pens are open. Keep the next animal, or auto-sell it.")
 	end)
 	Remotes.event("CleaningProgressChanged").OnClientEvent:Connect(function(id: string, value: number)
 		if id == jobId then
@@ -456,11 +413,12 @@ function OnboardingController.init(initial: Types.InitialState)
 
 	-- Bob the markers so they catch the eye.
 	RunService.Heartbeat:Connect(function(dt)
+		if note.Visible and os.clock() >= noteUntil then
+			note.Visible = false
+		end
 		bobMarker(animalMarker, Vector3.new(0, 4, 0))
 		refreshStationMarker()
 		bobMarker(stationMarker, Vector3.new(0, 6, 0))
-		bobMarker(cacheMarker, Vector3.new(0, 7, 0))
-		bobMarker(penMarker, Vector3.new(0, 4, 0))
 		updateTrail(dt)
 	end)
 end

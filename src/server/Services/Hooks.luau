@@ -12,6 +12,8 @@
 --   "AnimalPlaced"   (player, animal: OwnedAnimal)     carried animal put in a pen
 --   "AnimalSold"     (player, species, mutation, value)
 --   "IncomeTick"     (player, amount)                  cash added to pads this tick
+--   "ToolPurchased"  (player, tier, name)              the next hose was bought (cash or Robux)
+--   "ZooExpanded"    (player, pens, price, barn)       a barn expansion was bought
 --
 -- Modifiers (Hooks.modify / Hooks.apply): each registered function receives the current value
 -- plus context and returns the new value. Applied in registration order.

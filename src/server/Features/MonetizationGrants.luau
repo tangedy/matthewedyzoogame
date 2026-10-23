@@ -1,5 +1,6 @@
 -- What each paid item does once it's paid for: boosts, cash, the limited animal (into the cache,
--- or queued until a slot frees) and game pass effects (VIP tag, Fire-Hose Rig unlock, 2x speed).
+-- or queued until a slot frees) and the VIP game pass. Speed and Incredible Luck are timed
+-- consumables. A Janitor owns the speed boost's respawn listener and expiry timer.
 -- Called from Monetization for real receipts and Studio-simulated purchases alike.
 -- Part of the Monetization feature (no init of its own).
 
@@ -8,14 +9,15 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Services = script.Parent.Parent.Services
 local AnimalService = require(Services.AnimalService)
 local BayService = require(Services.BayService)
-local CleanGateService = require(Services.CleanGateService)
 local CleaningService = require(Services.CleaningService)
 local EconomyService = require(Services.EconomyService)
 local Hooks = require(Services.Hooks)
@@ -23,12 +25,20 @@ local PlayerDataService = require(Services.PlayerDataService)
 local ZooService = require(Services.ZooService)
 local MonetizationState = require(script.Parent.MonetizationState)
 local MonetizationStock = require(script.Parent.MonetizationStock)
+local Offline = require(script.Parent.LiveOps.Offline)
 
 type Product = MonetizationConfig.Product
 
 local MonetizationGrants = {}
 
 local warnedBuild: { [string]: boolean } = {}
+
+-- Stacks `add` seconds onto an absolute expiry, never past `max` seconds from now.
+local function extendUnix(current: number, add: number, max: number): number
+	local now = os.time()
+	local base = if current > now then current else now
+	return math.min(base + add, now + max)
+end
 
 local function clock(seconds: number): string
 	local s = math.max(0, math.floor(seconds))
@@ -244,6 +254,40 @@ function MonetizationGrants.product(
 			return false, nil
 		end
 		return true, `+{UIStyle.formatMoney(amount)}!`
+	elseif kind == "SpeedBoost" then
+		local cfg = MonetizationConfig.Speed
+		saved.SpeedEndsAt = extendUnix(saved.SpeedEndsAt, cfg.Seconds, cfg.MaxSeconds)
+		MonetizationGrants.watchSpeed(player)
+		return true, `8x Speed for {clock(saved.SpeedEndsAt - os.time())}!`
+	elseif kind == "IncredibleLuck" then
+		local cfg = MonetizationConfig.IncredibleLuck
+		saved.LuckEndsAt = extendUnix(saved.LuckEndsAt, cfg.Seconds, cfg.MaxSeconds)
+		return true, `Incredible Luck for {clock(saved.LuckEndsAt - os.time())}! Rare animals show up more.`
+	elseif kind == "OfflineDouble" then
+		local data = PlayerDataService.get(player)
+		if not data or #data.Animals == 0 then
+			return false, nil -- retry once a pen is earning, so the Robux purchase is not lost
+		end
+		local amount = Offline.peekDouble(player)
+		if amount < 1 then
+			return compensate(player, "That offline bonus was already used.")
+		end
+		ZooService.addToPads(player, amount)
+		Offline.takeDouble(player)
+		if player.Parent then
+			Remotes.event("LiveOpsOfflineDoubled"):FireClient(player, amount * 2)
+		end
+		if Offline.onEarned then
+			Offline.onEarned(player, amount)
+		end
+		return true, `Offline earnings doubled! +{UIStyle.formatMoney(amount)}`
+	elseif kind == "HoseTier" then
+		local tier = product.ToolTier
+		if not tier or not EconomyService.grantToolTier(player, tier) then
+			return compensate(player, "That hose isn't your next upgrade.")
+		end
+		local tool = ToolConfig[tier]
+		return true, `Upgraded to {if tool then tool.Name else "the next hose"}!`
 	elseif kind == "AutoCollect" then
 		local add = product.Seconds or (2 * 3600)
 		local left =
@@ -293,38 +337,134 @@ local function addVipTag(character: Model)
 	billboard.Parent = head
 end
 
--- Doubles walk speed once per character. A spawn that isn't ready yet is retried shortly.
-local function applyDoubleSpeed(character: Model)
+-- 8x speed. One Janitor per player holds the respawn listener and the expiry timer.
+-- Cleanup restores nothing by itself; clearSpeed puts WalkSpeed back, then Cleanup
+-- drops the listener so a later spawn is not boosted.
+local speedJanitors: { [Player]: Janitor.Janitor } = {}
+local speedGeneration: { [Player]: number } = {}
+local speedWatching: { [Player]: number } = {}
+
+local function speedActive(player: Player): boolean
+	local saved = MonetizationState.saved(player)
+	return saved ~= nil and saved.SpeedEndsAt > os.time()
+end
+
+local function clearSpeed(player: Player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	local base = humanoid:GetAttribute("SpeedBoostBase")
+	if typeof(base) == "number" and base > 0 then
+		humanoid.WalkSpeed = base
+	end
+	humanoid:SetAttribute("SpeedBoost", nil)
+	humanoid:SetAttribute("SpeedBoostBase", nil)
+end
+
+local function applySpeed(player: Player, character: Model)
+	if not speedActive(player) then
+		return
+	end
 	local humanoid = character:WaitForChild("Humanoid", 10)
-	if not humanoid or not humanoid:IsA("Humanoid") then
+	if not humanoid or not humanoid:IsA("Humanoid") or not speedActive(player) or not player.Parent then
 		return
 	end
 	local function boost()
-		if not humanoid.Parent or humanoid:GetAttribute("DoubleSpeed") then
+		if not humanoid.Parent or not speedActive(player) then
 			return
 		end
-		local speed = humanoid.WalkSpeed
-		if speed <= 0 then
-			return
+		local base = humanoid:GetAttribute("SpeedBoostBase")
+		if typeof(base) ~= "number" or base <= 0 then
+			local speed = humanoid.WalkSpeed
+			if speed <= 0 then
+				return
+			end
+			humanoid:SetAttribute("SpeedBoostBase", speed)
+			base = speed
 		end
-		humanoid:SetAttribute("DoubleSpeed", true)
-		humanoid.WalkSpeed = speed * MonetizationConfig.Speed.Multiplier
+		humanoid:SetAttribute("SpeedBoost", true)
+		humanoid.WalkSpeed = (base :: number) * MonetizationConfig.Speed.Multiplier
 	end
 	boost()
 	task.delay(0.5, boost)
 end
 
-local function unlockTopHose(player: Player)
-	local data = PlayerDataService.get(player)
-	local top = #ToolConfig
-	if data and data.ToolTier < top then
-		local previous = data.ToolTier
-		data.ToolTier = top
-		CleanGateService.onTiersGained(player, previous, top)
-		PlayerDataService.saveNow(player)
-		EconomyService.sendTool(player)
-		CleaningService.refreshHose(player)
+local function dropSpeed(player: Player)
+	speedGeneration[player] = (speedGeneration[player] or 0) + 1
+	speedWatching[player] = nil
+	local janitor = speedJanitors[player]
+	if janitor then
+		janitor:Cleanup()
 	end
+	clearSpeed(player)
+end
+
+-- Starts (or restarts) the timer when the saved expiry changes. Safe to call often.
+function MonetizationGrants.watchSpeed(player: Player)
+	local saved = MonetizationState.saved(player)
+	if not saved or saved.SpeedEndsAt <= os.time() or not player.Parent then
+		return
+	end
+	if speedWatching[player] == saved.SpeedEndsAt then
+		return
+	end
+	speedWatching[player] = saved.SpeedEndsAt
+	speedGeneration[player] = (speedGeneration[player] or 0) + 1
+	local generation = speedGeneration[player]
+	local janitor = speedJanitors[player]
+	if not janitor then
+		janitor = Janitor.new()
+		speedJanitors[player] = janitor
+	end
+	janitor:Cleanup()
+	janitor:Add(player.CharacterAdded:Connect(function(character)
+		applySpeed(player, character)
+	end))
+	if player.Character then
+		task.spawn(applySpeed, player, player.Character)
+	end
+	local ends = saved.SpeedEndsAt
+	janitor:Add(task.delay(math.max(0, ends - os.time()), function()
+		if speedGeneration[player] ~= generation then
+			return
+		end
+		MonetizationGrants.syncBuffs(player)
+	end), true)
+end
+
+-- Zeros expired timestamps, tears the speed boost down, and tells the player once.
+function MonetizationGrants.syncBuffs(player: Player)
+	local saved = MonetizationState.saved(player)
+	if not saved or not player.Parent then
+		return
+	end
+	local now = os.time()
+	local changed = false
+	if saved.SpeedEndsAt > 0 and saved.SpeedEndsAt <= now then
+		saved.SpeedEndsAt = 0
+		changed = true
+		dropSpeed(player)
+		MonetizationState.notify(player, "Speed boost ran out!", false)
+	end
+	if saved.LuckEndsAt > 0 and saved.LuckEndsAt <= now then
+		saved.LuckEndsAt = 0
+		changed = true
+		MonetizationState.notify(player, "Incredible Luck ran out!", false)
+	end
+	if changed then
+		PlayerDataService.markDirty(player)
+		MonetizationState.push(player)
+	elseif saved.SpeedEndsAt > now then
+		MonetizationGrants.watchSpeed(player)
+	end
+end
+
+function MonetizationGrants.release(player: Player)
+	dropSpeed(player)
+	speedJanitors[player] = nil
+	speedGeneration[player] = nil
 end
 
 -- Turns on a pass's effects for this session. Safe to call more than once.
@@ -339,15 +479,6 @@ function MonetizationGrants.applyPass(player: Player, key: string)
 		table.insert(session.Connections, player.CharacterAdded:Connect(addVipTag))
 		if player.Character then
 			task.spawn(addVipTag, player.Character)
-		end
-	elseif key == "FireHoseRig" then
-		unlockTopHose(player)
-	elseif key == "AutoCollectForever" and first then
-		ZooService.collectAll(player)
-	elseif key == MonetizationConfig.Speed.PassKey and first then
-		table.insert(session.Connections, player.CharacterAdded:Connect(applyDoubleSpeed))
-		if player.Character then
-			task.spawn(applyDoubleSpeed, player.Character)
 		end
 	end
 end

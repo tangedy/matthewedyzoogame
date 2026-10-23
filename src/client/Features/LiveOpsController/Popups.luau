@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
+local Janitor = require(ReplicatedStorage.Shared.Janitor)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -21,6 +23,8 @@ local SHRINK = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In
 local hudGui: ScreenGui
 local modalGui: ScreenGui
 local welcomeOpen = false
+local welcomeCash: TextLabel? = nil
+local welcomeDouble: TextButton? = nil
 local dailyToken = 0
 
 local function playSound(id: string, volume: number)
@@ -73,7 +77,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.new(0.92, 0, 0, 240)
+	panel.Size = UDim2.new(0.92, 0, 0, 280)
 	panel.BackgroundColor3 = Color3.new(1, 1, 1)
 	panel.Parent = dim
 	UIStyle.border(panel, 5)
@@ -82,7 +86,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	gradient.Color = ColorSequence.new(Color3.fromRGB(120, 190, 255), Color3.fromRGB(60, 90, 200))
 	gradient.Parent = panel
 	local fit = Instance.new("UISizeConstraint") -- shrinks on narrow phones
-	fit.MaxSize = Vector2.new(380, 240)
+	fit.MaxSize = Vector2.new(420, 280)
 	fit.Parent = panel
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.3
@@ -103,20 +107,23 @@ function Popups.welcomeBack(amount: any, seconds: any)
 		Text = `Your zoo earned while you were away ({formatAway(away)}):`,
 	})
 	local cash = textLabel(panel, {
-		Position = UDim2.fromOffset(16, 92),
-		Size = UDim2.new(1, -32, 0, 54),
+		Position = UDim2.fromOffset(16, 88),
+		Size = UDim2.new(1, -32, 0, 48),
 		Text = UIStyle.formatMoney(amount),
 	}, UIStyle.CashColor, 4)
+	welcomeCash = cash
 	textLabel(panel, {
-		Position = UDim2.fromOffset(16, 146),
-		Size = UDim2.new(1, -32, 0, 18),
-		Text = "It's waiting on your pen pads!",
+		Position = UDim2.fromOffset(16, 140),
+		Size = UDim2.new(1, -32, 0, 36),
+		Text = "It's waiting on your pen pads.",
+		TextWrapped = true,
 	}, Color3.fromRGB(220, 235, 255), 2)
 
+	local product = MonetizationConfig.ProductsByKey.OfflineDouble
 	local button = Instance.new("TextButton")
-	button.AnchorPoint = Vector2.new(0.5, 1)
-	button.Position = UDim2.new(0.5, 0, 1, -14)
-	button.Size = UDim2.fromOffset(210, 54)
+	button.AnchorPoint = Vector2.new(0, 1)
+	button.Position = UDim2.new(0, 16, 1, -14)
+	button.Size = UDim2.new(0.46, -8, 0, 50)
 	button.BackgroundColor3 = Color3.fromRGB(80, 220, 90)
 	button.Text = "COLLECT"
 	button.Parent = panel
@@ -125,10 +132,23 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	local buttonScale = Instance.new("UIScale")
 	buttonScale.Parent = button
 
+	local doubleButton = Instance.new("TextButton")
+	doubleButton.AnchorPoint = Vector2.new(1, 1)
+	doubleButton.Position = UDim2.new(1, -16, 1, -14)
+	doubleButton.Size = UDim2.new(0.46, -8, 0, 50)
+	doubleButton.BackgroundColor3 = Color3.fromRGB(255, 170, 40)
+	doubleButton.Text = if product then `2X FOR {product.Robux} R$` else "2X"
+	doubleButton.Parent = panel
+	UIStyle.text(doubleButton, Color3.new(1, 1, 1), nil, 3)
+	UIStyle.border(doubleButton, 4)
+	welcomeDouble = doubleButton
+
+	local janitor = Janitor.new()
+
 	TweenService:Create(scale, BOUNCE, { Scale = 1 }):Play()
 	playSound("rbxasset://sounds/electronicpingshort.wav", 0.7)
 	-- The cash counts up for a bit of juice.
-	task.spawn(function()
+	janitor:Add(task.spawn(function()
 		local steps = 20
 		for i = 1, steps do
 			if not cash.Parent then
@@ -137,18 +157,26 @@ function Popups.welcomeBack(amount: any, seconds: any)
 			cash.Text = UIStyle.formatMoney(amount * i / steps)
 			task.wait(0.03)
 		end
-	end)
-	task.spawn(function()
+	end), true)
+	janitor:Add(task.spawn(function()
 		while button.Parent do
 			TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1.06 }):Play()
 			task.wait(0.5)
 			TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1 }):Play()
 			task.wait(0.5)
 		end
+	end), true)
+
+	doubleButton.Activated:Connect(function()
+		if not product or not doubleButton.Active then
+			return
+		end
+		playSound("rbxasset://sounds/electronicpingshort.wav", 0.5)
+		Remotes.event("MonetizationBuy"):FireServer(product.Key)
 	end)
 
 	local closing = false
-	button.Activated:Connect(function()
+	local function close()
 		if closing then
 			return
 		end
@@ -157,11 +185,28 @@ function Popups.welcomeBack(amount: any, seconds: any)
 		TweenService:Create(dim, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		local tween = TweenService:Create(scale, SHRINK, { Scale = 0 })
 		tween.Completed:Once(function()
+			janitor:Cleanup()
 			dim:Destroy()
+			welcomeCash = nil
+			welcomeDouble = nil
 			welcomeOpen = false
 		end)
 		tween:Play()
-	end)
+	end
+	button.Activated:Connect(close)
+end
+
+function Popups.offlineDoubled(total: any)
+	if typeof(total) ~= "number" or total ~= total or not welcomeCash or not welcomeCash.Parent then
+		return
+	end
+	welcomeCash.Text = UIStyle.formatMoney(total)
+	if welcomeDouble then
+		welcomeDouble.Text = "DOUBLED"
+		welcomeDouble.Active = false
+		welcomeDouble.AutoButtonColor = false
+		welcomeDouble.BackgroundColor3 = Color3.fromRGB(120, 120, 130)
+	end
 end
 
 local function showDaily(name: any, rarity: any, mutation: any, rewardMultiplier: any)
@@ -240,6 +285,7 @@ function Popups.start(hud: ScreenGui, modal: ScreenGui)
 	hudGui = hud
 	modalGui = modal
 	Remotes.event("LiveOpsWelcomeBack").OnClientEvent:Connect(Popups.welcomeBack)
+	Remotes.event("LiveOpsOfflineDoubled").OnClientEvent:Connect(Popups.offlineDoubled)
 	Remotes.event("LiveOpsDaily").OnClientEvent:Connect(showDaily)
 end
 

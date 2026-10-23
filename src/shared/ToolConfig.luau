@@ -18,6 +18,7 @@ local ToolConfig: { ToolTier } = {
 	{ Tier = 3, Name = "Strong Hose", CleaningPower = 0.9, Range = 22, SprayRadius = 2.9, Price = 1000 },
 	{ Tier = 4, Name = "Power Washer", CleaningPower = 1.4, Range = 24, SprayRadius = 3.3, Price = 10000 },
 	{ Tier = 5, Name = "Foam Cannon", CleaningPower = 2.2, Range = 28, SprayRadius = 3.8, Price = 100000 },
+	-- Cash only. There is no game pass that skips to this hose.
 	{ Tier = 6, Name = "Fire-Hose Rig", CleaningPower = 3.5, Range = 32, SprayRadius = 4.5, Price = 1000000 },
 }
 

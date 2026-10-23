@@ -39,6 +39,7 @@ type Job = {
 	WaitingThread: thread?,
 	Abandoned: boolean?, -- set by abandonWash: the animal walks off unpaid
 	NeedsPurchase: boolean?, -- rarity this hose cannot wash; Clean Now or let it go
+	Scripted: boolean?, -- opening baby elephant: the starter hose can wash it
 }
 
 -- An animal standing on the U. Token bumps whenever a new walk starts, so an older walk stops.
@@ -49,6 +50,7 @@ type Arrival = {
 	Model: Model,
 	Patches: { AnimalBuilder.PatchInfo },
 	Token: number,
+	Scripted: boolean,
 }
 
 type Bay = {
@@ -82,17 +84,19 @@ local spawnBound: { [Player]: RBXScriptConnection } = {}
 
 local bayStateChanged = Remotes.event("BayStateChanged")
 local washCompleted = Remotes.event("WashCompleted")
+local washCelebrated = Remotes.event("WashCelebrated")
 local announcement = Remotes.event("Announcement")
 
 local function snapshot(bay: Bay): Types.BaySnapshot
 	local job = bay.Job
 	local def = job and AnimalConfig.Animals[job.AnimalKey]
+	local scripted = job ~= nil and job.Scripted == true
 	return {
 		BayName = bay.Name,
 		State = bay.State,
 		JobId = job and job.Id,
-		AnimalName = def and def.DisplayName,
-		Rarity = def and def.Rarity,
+		AnimalName = if scripted then GameConfig.Intro.DisplayName else def and def.DisplayName,
+		Rarity = if scripted then "Common" else def and def.Rarity,
 		Mutation = job and job.Mutation,
 		Reward = job and job.Reward,
 		Progress = job and CleaningService.getProgress(job.Id),
@@ -140,25 +144,54 @@ local function waitAll(moves: { () -> () }, bay: Bay, owner: Player)
 	end
 end
 
+local function lineCap(owner: Player): number
+	if ZooService.introRemaining(owner) > 0 then
+		return 1
+	end
+	return GameConfig.WashQueue
+end
+
 local function rollArrival(bay: Bay, owner: Player): Arrival
+	local intro = ZooService.introRemaining(owner) > 0
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
-	local isFirst = not bay.FirstAnimalGiven
-	bay.FirstAnimalGiven = true
-	local animalKey = AnimalService.pickNext(isFirst, tier, owner)
-	local mutationKey = AnimalService.pickMutation(isFirst, owner)
-	local override = if isFirst then nil else Hooks.apply("NextAnimal", nil, owner, isFirst)
-	if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
-		animalKey = override.Species
-		if typeof(override.Mutation) == "string" and MutationConfig.ByKey[override.Mutation] then
-			mutationKey = override.Mutation
+	-- The deterministic first animal is reserved for after the baby-elephant intro,
+	-- so the opening minute is an elephant and the next real walk-in is still FirstAnimal.
+	local isFirst = not intro and not bay.FirstAnimalGiven
+	if not intro then
+		bay.FirstAnimalGiven = true
+	end
+	local animalKey: string
+	local mutationKey: string
+	local look: AnimalService.SpawnLook? = nil
+	if intro then
+		animalKey = GameConfig.Intro.Species
+		mutationKey = MutationConfig.Default
+		look = {
+			Scale = GameConfig.Intro.BabyScale,
+			Name = GameConfig.Intro.DisplayName,
+			Income = GameConfig.Intro.PayoutIncome,
+			Rarity = "Common",
+		}
+	else
+		animalKey = AnimalService.pickNext(isFirst, tier, owner)
+		mutationKey = AnimalService.pickMutation(isFirst, owner)
+		local override = Hooks.apply("NextAnimal", nil, owner, isFirst)
+		if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
+			animalKey = override.Species
+			if typeof(override.Mutation) == "string" and MutationConfig.ByKey[override.Mutation] then
+				mutationKey = override.Mutation
+			end
 		end
 	end
 	local id = HttpService:GenerateGUID(false)
 	local slot = #bay.Line + 1
 	local at = bay.Approach.CFrame + bay.Right * (-(slot - 1) * 14)
-	local model, patches = AnimalService.spawn(animalKey, mutationKey, id, at, bay.Model)
+	local model, patches = AnimalService.spawn(animalKey, mutationKey, id, at, bay.Model, look)
 	model.Name = "QueuedAnimal"
+	if intro then
+		model:SetAttribute("ScriptedIntro", true)
+	end
 	return {
 		Id = id,
 		AnimalKey = animalKey,
@@ -166,17 +199,18 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 		Model = model,
 		Patches = patches,
 		Token = 0,
+		Scripted = intro,
 	}
 end
 
 -- First join fills the U and waits until all three are standing. Later, only gaps are filled.
 local function ensureLine(bay: Bay, owner: Player)
-	if #bay.Line >= GameConfig.WashQueue or bay.Owner ~= owner then
+	if #bay.Line >= lineCap(owner) or bay.Owner ~= owner then
 		return
 	end
 	setState(bay, "Arriving")
 	local moves = {}
-	while #bay.Line < GameConfig.WashQueue and bay.Owner == owner do
+	while #bay.Line < lineCap(owner) and bay.Owner == owner do
 		local arrival = rollArrival(bay, owner)
 		local slot = #bay.Line + 1
 		table.insert(bay.Line, arrival)
@@ -211,7 +245,7 @@ local function stepLine(bay: Bay, owner: Player)
 		end)
 	end
 	waitAll(moves, bay, owner)
-	if bay.Owner ~= owner or #bay.Line >= GameConfig.WashQueue then
+	if bay.Owner ~= owner or #bay.Line >= lineCap(owner) then
 		return
 	end
 	local arrival = rollArrival(bay, owner)
@@ -249,26 +283,15 @@ local function announce(owner: Player, animalKey: string, mutationKey: string)
 	announcement:FireAllClients(`{owner.DisplayName} found a {rarity.DisplayName} {name}!`, def.Rarity)
 end
 
--- Celebrate, then walk into the cache. The animal still waiting there (if any) leaves to make
--- room, unless it was bought with Robux, in which case this one walks off instead.
+-- Celebrate, then hand the animal to the zoo: intro animals auto-sell, a free cache slot
+-- takes the next one, and a full cache keeps the animal as an overflow instead of deleting it.
 local function departToCache(bay: Bay, owner: Player, model: Model, animalKey: string, mutationKey: string)
 	AnimalService.celebrate(model)
 	if bay.Owner ~= owner or not model.Parent then
 		AnimalService.destroy(model)
 		return
 	end
-	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey, { Evict = true })
-	if record and slot then
-		-- Turn onto the wash road and walk forward. The cache faces the same way.
-		AnimalService.walkCorners(model, { slot }, GameConfig.DepartDuration)
-		if bay.Owner == owner and model.Parent then
-			ZooService.adoptIntoCache(owner, record, model)
-			return
-		end
-	else
-		AnimalService.walkCorners(model, { bay.RoadReturn.CFrame }, GameConfig.DepartDuration)
-	end
-	AnimalService.destroy(model)
+	ZooService.receiveWashed(owner, model, animalKey, mutationKey)
 end
 
 local function runOneJob(bay: Bay, owner: Player)
@@ -281,25 +304,26 @@ local function runOneJob(bay: Bay, owner: Player)
 	front.Model.Name = "Animal"
 	local animalKey = front.AnimalKey
 	local mutationKey = front.Mutation
-	local needsPurchase = CleanGateService.observe(owner, animalKey)
+	local needsPurchase = if front.Scripted then false else CleanGateService.observe(owner, animalKey)
 	local def = AnimalConfig.Animals[animalKey]
 	local model = front.Model
+	local baseReward = if front.Scripted
+		then ZooService.introWashReward()
+		else ZooService.washReward(animalKey, mutationKey)
 	local job: Job = {
 		Id = front.Id,
 		AnimalKey = animalKey,
 		Mutation = mutationKey,
-		Reward = math.max(
-			0,
-			math.floor(
-				Hooks.apply("WashReward", ZooService.washReward(animalKey, mutationKey), owner, animalKey, mutationKey)
-			)
-		),
+		Reward = math.max(0, math.floor(Hooks.apply("WashReward", baseReward, owner, animalKey, mutationKey))),
 		Model = model,
 		Paid = false,
 		NeedsPurchase = needsPurchase,
+		Scripted = front.Scripted,
 	}
 	bay.Job = job
-	announce(owner, animalKey, mutationKey)
+	if not front.Scripted then
+		announce(owner, animalKey, mutationKey)
+	end
 
 	-- Register the waiting thread before cleaning can begin, so completion can't be missed.
 	job.WaitingThread = coroutine.running()
@@ -310,9 +334,16 @@ local function runOneJob(bay: Bay, owner: Player)
 		Patches = front.Patches,
 		WashTimeMultiplier = math.max(
 			0.05,
-			Hooks.apply("WashTimeMultiplier", def.WashTimeMultiplier, owner, animalKey, mutationKey)
+			Hooks.apply(
+				"WashTimeMultiplier",
+				if front.Scripted then GameConfig.Intro.WashTimeMultiplier else def.WashTimeMultiplier,
+				owner,
+				animalKey,
+				mutationKey
+			)
 		),
-		Rarity = def.Rarity,
+		Rarity = if front.Scripted then "Common" else def.Rarity,
+		BodyClass = def.BodyClass,
 		OnComplete = function()
 			onJobComplete(bay, job)
 		end,
@@ -351,7 +382,7 @@ local function runOneJob(bay: Bay, owner: Player)
 		job.Paid = true
 		-- First wash of this species + mutation is an index discovery with a bonus on top.
 		local bonus = 0
-		if ZooService.discover(owner, animalKey, mutationKey) then
+		if not front.Scripted and ZooService.discover(owner, animalKey, mutationKey) then
 			bonus = math.floor(job.Reward * GameConfig.DiscoveryBonusMultiplier)
 		end
 		if EconomyService.awardWash(owner, job.Reward + bonus) then
@@ -359,8 +390,13 @@ local function runOneJob(bay: Bay, owner: Player)
 			washCompleted:FireClient(owner, front.Id, job.Reward + bonus, if updated then updated.Coins else 0, bonus)
 		end
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
+		-- Everyone sees the chat bubble. The coin payout above stays on the owner's client.
+		washCelebrated:FireAllClients(front.Id)
+		if front.Scripted then
+			ZooService.noteIntroWash(owner)
+		end
 		GuideService.onWashCompleted(owner)
-		if not job.NeedsPurchase then
+		if not job.NeedsPurchase and not front.Scripted then
 			CleanGateService.onWashed(owner)
 		end
 	end

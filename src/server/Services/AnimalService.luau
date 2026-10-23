@@ -22,6 +22,13 @@ local MutationPayout = require(script.Parent.MutationPayout)
 
 local AnimalService = {}
 
+export type SpawnLook = {
+	Scale: number?,
+	Name: string?,
+	Income: number?,
+	Rarity: string?,
+}
+
 local rng = Random.new()
 
 -- Entries with weight 0 (e.g. Limited animals) are never picked.
@@ -110,17 +117,23 @@ local function income(animalKey: string, mutationKey: string): number
 	return AnimalConfig.Animals[animalKey].Income * MutationPayout.multiplier(mutationKey)
 end
 
-local function addNameplate(model: Model, animalKey: string, mutationKey: string, maxDistance: number)
+local function addNameplate(
+	model: Model,
+	animalKey: string,
+	mutationKey: string,
+	maxDistance: number,
+	look: SpawnLook?
+)
 	local head = model:FindFirstChild("Head")
 	if not head or not head:IsA("BasePart") then
 		return
 	end
 	local def = AnimalConfig.Animals[animalKey]
 	UIStyle.nameplate(head, {
-		Name = def.DisplayName,
-		Rarity = def.Rarity,
+		Name = if look and look.Name then look.Name else def.DisplayName,
+		Rarity = if look and look.Rarity then look.Rarity else def.Rarity,
 		Mutation = mutationKey,
-		IncomePerSecond = income(animalKey, mutationKey),
+		IncomePerSecond = if look and look.Income then look.Income else income(animalKey, mutationKey),
 	}, maxDistance)
 end
 
@@ -220,12 +233,23 @@ function AnimalService.collectEffect(pad: BasePart)
 	Debris:AddItem(attachment, 1.5)
 end
 
-function AnimalService.spawn(animalKey: string, mutationKey: string, jobId: string, at: CFrame, parent: Instance)
+function AnimalService.spawn(
+	animalKey: string,
+	mutationKey: string,
+	jobId: string,
+	at: CFrame,
+	parent: Instance,
+	look: SpawnLook?
+)
 	local def = AnimalConfig.Animals[animalKey]
 	local model, patches = AnimalBuilder.build(def.TemplateName, { Mutation = mutationKey, Rarity = def.Rarity })
 	model:SetAttribute("JobId", jobId)
 	model:SetAttribute("AnimalKey", animalKey)
 	DirtRenderer.setGrime(model, 0) -- arrives filthy
+	if look and look.Scale and look.Scale > 0 then
+		model:SetAttribute("RestScale", look.Scale)
+		model:ScaleTo(look.Scale)
+	end
 	model:PivotTo(at)
 
 	local sparkle = Instance.new("ParticleEmitter")
@@ -246,7 +270,7 @@ function AnimalService.spawn(animalKey: string, mutationKey: string, jobId: stri
 	sound.Volume = 0.6
 	sound.Parent = model:FindFirstChild("Body")
 
-	addNameplate(model, animalKey, mutationKey, 80)
+	addNameplate(model, animalKey, mutationKey, 80, look)
 
 	model.Parent = parent
 
@@ -490,6 +514,8 @@ function AnimalService.celebrate(model: Model)
 	local _, extents = model:GetBoundingBox()
 	local ground = base.Position - Vector3.new(0, extents.Y / 2, 0)
 	local duration = GameConfig.CelebrationDuration
+	local restAttr = model:GetAttribute("RestScale")
+	local rest = if typeof(restAttr) == "number" and restAttr > 0 then restAttr else 1
 	-- Phase ends, as fractions of the duration.
 	local squashEnd, hopEnd, landEnd, bounceEnd = 0.08, 0.45, 0.55, 0.78
 	local confettiDone, landDone = false, false
@@ -555,11 +581,11 @@ function AnimalService.celebrate(model: Model)
 			local u = (t - bounceEnd) / (1 - bounceEnd)
 			spin = math.pi * 2 + math.sin(u * math.pi * 4) * math.rad(12) * (1 - u)
 		end
-		model:ScaleTo(scale)
+		model:ScaleTo(scale * rest)
 		model:PivotTo(base * CFrame.new(0, height, 0) * CFrame.Angles(0, spin, 0))
 	end
 	if model.Parent then
-		model:ScaleTo(1)
+		model:ScaleTo(rest)
 		model:PivotTo(base)
 	end
 end

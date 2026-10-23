@@ -12,7 +12,7 @@
 --   Zoo.ExpandCounter              barn upgrade, beside the path entrance
 --   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan / BarnMega   a roof on red posts over each lane
 --   Zoo.Pen23 / Pen24   the mega barn: two gargantuan pens behind the last barn
---   Zoo.Pen29 / Pen30   two pens on the path, just after the six stalls and in front of the barns
+--   Zoo.Pen25 / Pen26   the Robux pastures, at the road in front of the six stalls
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,12 +43,15 @@ local STALL_PITCH = 14
 local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
--- Two pens the size of a large pasture, left and right of the path, immediately
--- behind the six stalls. The barns all start behind these.
+-- Two pens the size of a large pasture. They used to sit behind the six stalls.
+-- The barn ladder still starts from that old spot. The cages themselves move to the
+-- road (FLEX_CENTER) so a walk down the street sees them first.
 local FLEX_DEPTH = 24
 local FLEX_LAT_SIZE = 42
 local FLEX_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + FLEX_LAT_SIZE / 2
-local FLEX_CENTER = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
+local BARN_ANCHOR = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
+-- Depth 16 is in front of the wash lane (that lane starts at depth 32) and behind the sign.
+local FLEX_CENTER = 16
 
 -- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
 local LARGE_DEPTH = STALL_DEPTH * 1.5
@@ -62,7 +65,7 @@ local ROOF_OVER = 1 -- roof and posts sit just outside the pen
 local LANE_GAP = 4
 local ROW_GAP = 3
 
-local BARN_FRONT = FLEX_CENTER + FLEX_DEPTH / 2 + 8
+local BARN_FRONT = BARN_ANCHOR + FLEX_DEPTH / 2 + 8
 local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
 	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
@@ -202,6 +205,20 @@ function WorldBuilder.setShown(root: Instance, shown: boolean)
 	end
 end
 
+-- Hides or shows the pens and the cache together. New players stay hidden until the
+-- opening washes are done; buildBay starts hidden so the yard never flashes in.
+function WorldBuilder.setYardShown(bay: Model, shown: boolean)
+	local zoo = bay:FindFirstChild("Zoo")
+	local cache = bay:FindFirstChild("Cache")
+	if zoo then
+		WorldBuilder.setShown(zoo, shown)
+	end
+	if cache then
+		WorldBuilder.setShown(cache, shown)
+	end
+	bay:SetAttribute("YardRevealed", shown)
+end
+
 local function ensureGround()
 	local ground = Workspace:FindFirstChild("Baseplate") or Workspace:FindFirstChild("Ground")
 	if ground and ground:IsA("BasePart") then
@@ -222,7 +239,8 @@ end
 local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local station = Instance.new("Model")
 	station.Name = "UpgradeStation"
-	local base = PlotLayout.point(plot, 24, -30, 0)
+	-- Beside the path, behind the road cages and in front of the stalls, so it isn't inside a pen.
+	local base = PlotLayout.point(plot, 46, -48, 0)
 	local counter = makePart({
 		Name = "Counter",
 		Size = Vector3.new(3, 3, 6),
@@ -290,6 +308,10 @@ local function addPenPrompts(
 		Parent = pen,
 	})
 	makePrompt("PenPrompt", "Sell", 1, post).Enabled = false
+	local pet = makePrompt("PetPrompt", "Set pet", 0.4, post, Enum.KeyCode.R)
+	pet.UIOffset = Vector2.new(0, 72)
+	pet.GamepadKeyCode = Enum.KeyCode.ButtonX
+	pet.Enabled = false
 	-- Collect pad sits on the path in front of the cage, not inside it.
 	local facingRoad = math.abs(look:Dot(plot.Look)) > 0.5
 	local padPos
@@ -465,14 +487,15 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		end
 	end
 
-	-- Six cages, three on each side of the path. Front of the row is nearest the road.
-	local stallDepth0 = WALK_START + 8 + STALL_DEPTH / 2
+	-- Six cages, three on each side of the path, pulled up behind the wash lane.
+	-- Gates face the road. The Robux pastures in front of them are what the street sees first.
+	local stallDepth0 = 60
 	for row = 0, 2 do
 		local depth = stallDepth0 + row * STALL_PITCH
 		local left = row * 2 + 1
 		local right = left + 1
-		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
-		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", plot.Look)
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", plot.Look)
 	end
 
 	-- Small barn: two standard pens each side of the path. Medium adds an outer lane
@@ -509,8 +532,8 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 
 	local flexColor = Color3.fromRGB(130, 220, 255)
 	local function flexPen(index: number, lateral: number, side: string, lockText: string)
-		-- Gate faces the path, same as the six stalls in front of them.
-		addPen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex")
+		-- At the road, in front of the stalls. The gate faces the street.
+		addPen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex", plot.Look)
 		local built = zoo:FindFirstChild("Pen" .. index)
 		local builtFloor = built and built:FindFirstChild("Floor")
 		if builtFloor and builtFloor:IsA("BasePart") then
@@ -525,18 +548,17 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		pen:SetAttribute("FlexSide", side)
 		local function sideSlot(name: string, latOffset: number)
 			local pos = PlotLayout.point(plot, FLEX_CENTER, lateral + latOffset, FLOOR_Y)
-			local look = inwardLook(plot, lateral)
-			makeMarker(name, CFrame.lookAt(pos, pos + look), pen)
+			makeMarker(name, CFrame.lookAt(pos, pos + plot.Look), pen)
 		end
 		sideSlot("SlotMedium1", -FLEX_LAT_SIZE * 0.22)
 		sideSlot("SlotMedium2", FLEX_LAT_SIZE * 0.22)
 		local lock = Instance.new("Model")
 		lock.Name = "FlexLock"
-		local towardPath = if lateral >= 0 then 1 else -1
+		-- Across the road face, so the lock reads from the street.
 		local bar = makePart({
 			Name = "Bar",
-			Size = Vector3.new(FLEX_DEPTH - 6, 8, 0.8),
-			Position = PlotLayout.point(plot, FLEX_CENTER, lateral - towardPath * (FLEX_LAT_SIZE / 2 - 1.2), 4),
+			Size = Vector3.new(0.8, 8, FLEX_LAT_SIZE - 6),
+			Position = PlotLayout.point(plot, FLEX_CENTER - FLEX_DEPTH / 2 + 1.2, lateral, 4),
 			Color = Color3.fromRGB(176, 48, 40),
 			Material = Enum.Material.Wood,
 			Parent = lock,
@@ -554,6 +576,11 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 			sell2.GamepadKeyCode = Enum.KeyCode.ButtonY
 			sell2.Enabled = false
 			sell2:SetAttribute("RestEnabled", true)
+			local pet2 = makePrompt("PetPrompt2", "Set pet", 0.4, post, Enum.KeyCode.G)
+			pet2.UIOffset = Vector2.new(0, 150)
+			pet2.GamepadKeyCode = Enum.KeyCode.ButtonL1
+			pet2.Enabled = false
+			pet2:SetAttribute("RestEnabled", true)
 			if side == "Right" then
 				local unlock = makePrompt("UnlockPrompt", "Unlock (99 ROBUX)", 0.4, post)
 				unlock.ObjectText = "Right pasture"
@@ -891,7 +918,8 @@ function WorldBuilder.buildBay(index: number): Model
 	local post = makePart({
 		Name = "SignPost",
 		Size = Vector3.new(1, 8, 1),
-		Position = PlotLayout.point(plot, 6, 22, 4),
+		-- In the gap between the two road cages, in front of both, so the post isn't inside one.
+		Position = PlotLayout.point(plot, 2, 8, 4),
 		Color = Color3.fromRGB(120, 85, 60),
 		Material = Enum.Material.Wood,
 		Parent = bay,
@@ -902,6 +930,7 @@ function WorldBuilder.buildBay(index: number): Model
 	signGui.Name = "Sign"
 	signGui.MaxDistance = 80
 
+	WorldBuilder.setYardShown(bay, false)
 	bay:SetAttribute("BayIndex", index)
 	bay.Parent = folder
 	return bay

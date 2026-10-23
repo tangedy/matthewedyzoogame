@@ -5,15 +5,20 @@ local GameConfig = {
 	-- Eight plots: four on each side of a center road. Bays are built only while a player
 	-- owns one. BayCount caps how many; set the place's Max Players to match.
 	BayCount = 8,
-	BaySpacing = 150, -- along Z. Four centres per side: -225, -75, 75, 225
+	-- Along Z. Width is 126 and the gap between plots stays 20, the same gap the old
+	-- 150-by-130 grid used, so fences, the road, and the truck still clear every plot.
+	BaySpacing = 146,
 	-- The dirt road runs along Z through the middle. Plots grow away from it (east +X, west -X)
 	-- so a barn can expand backward without crossing the street or a neighbor.
 	RoadX = 0,
 	RoadWidth = 45, -- five times the old 9-stud road
 	SidewalkWidth = 27, -- three times the old 9-stud road; cages sit off this path
-	PlotWidth = 130, -- along Z, inside the pitch, leaving a tree gap
-	PlotDepth = 490, -- from the road edge back through the pasture behind the barns
-	GroundSize = Vector3.new(1100, 2, 760), -- the eight plots, pasture depth, and a thin tree edge
+	-- Mega pens reach 60 studs from the plot centre. Half of 126 leaves a 3-stud margin.
+	PlotWidth = 126,
+	-- From the road edge through the mega barn, plus a short pasture. The old 490 included
+	-- empty ground behind that barn.
+	PlotDepth = 440,
+	GroundSize = Vector3.new(1000, 2, 760), -- plots, the road, and the board at the south end
 	WashQueue = 3, -- animals standing in the square lane; only the front one is washed
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
@@ -48,9 +53,13 @@ local GameConfig = {
 	StartingCoins = 90, -- a new player's cash, $10 short of the Spray Hose
 	NextAnimalDelay = 0.5,
 
-	-- Persistence. Studio uses a separate store so test data never touches live players.
+	-- Persistence. ProfileService owns the live store. The older DataStore names stay so a
+	-- profile's first load can copy a save from before that switch. Studio uses its own
+	-- names so test data never touches live players.
 	DataStoreName = "PlayerData_v1",
 	StudioDataStoreName = "PlayerData_Studio_v1",
+	ProfileStoreName = "WashZoo_Profile_v1",
+	StudioProfileStoreName = "WashZoo_Profile_Studio_v1",
 	AutosaveInterval = 60, -- also refreshes the session lock
 	SessionLockExpiry = 300, -- a lock not refreshed for this long is considered abandoned
 	LockRetryAttempts = 6,
@@ -66,8 +75,8 @@ local GameConfig = {
 	Zoo = {
 		MaxPens = 24,
 		StartPens = 6,
-		-- Two pens the size of a large pasture, left and right of the path immediately
-		-- after the six stalls. Each holds two medium animals or one large animal.
+		-- Two pens the size of a large pasture, left and right of the path at the road,
+		-- in front of the six stalls. Each holds two medium animals or one large animal.
 		-- The left opens with any Robux spend. The right is 99 Robux, or the Axolotl.
 		FlexPasturePens = 2,
 		Expansions = {
@@ -79,12 +88,49 @@ local GameConfig = {
 		},
 	},
 
+	-- Co-op wash. Extra sprayers speed the job up, and large bodies gain more per helper.
+	-- Helpers cannot take the last dirt: only the owner finishing pays out and fills the cache.
+	Coop = {
+		ActiveWindow = 1.25, -- a player still counts as helping this long after a hit
+		FinishReserve = 0.03, -- fraction of one patch a helper has to leave behind
+		HelperBonus = {
+			Standard = 0.45,
+			Large = 0.85,
+			ExtraLarge = 1.25,
+			Giant = 1.7,
+			Gargantuan = 2.2,
+		},
+	},
+
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
-	-- If it's still waiting when the next wash finishes, it leaves (paid animals never do).
+	-- A later wash does not remove it. The new animal is an overflow the owner keeps
+	-- (carries to a pen) or auto-sells.
 	Cache = {
-		Slots = 1, -- the waiting animal leaves when the next wash finishes
+		Slots = 1,
 		SlotSpacing = 7,
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
+	},
+
+	-- The title stays Wash the Zoo. A new player's first animals are baby elephants the
+	-- starter hose can actually wash, paid out at tutorial income so a baby doesn't
+	-- print an adult elephant's cash. Pens and the cache stay hidden until these are done.
+	Intro = {
+		AutoSellCount = 3,
+		Species = "Elephant",
+		DisplayName = "Baby Elephant",
+		BabyScale = 0.38,
+		WashTimeMultiplier = 0.75,
+		PayoutIncome = 3,
+	},
+
+	-- Unskippable spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator;
+	-- the avatar is loaded at runtime and a stand-in is used if that load fails.
+	Cutscene = {
+		Duration = 12,
+		AvatarUserId = 140258990,
+		Species = "TRex",
+		Scale = 1.35,
+		HoseTier = 6,
 	},
 
 	-- Shop

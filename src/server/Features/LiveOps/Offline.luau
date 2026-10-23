@@ -102,6 +102,11 @@ local function payOut(player: Player)
 		return
 	end
 	ZooService.addToPads(player, amount)
+	local state = Common.state(player)
+	if state then
+		state.OfflineDouble = amount
+		PlayerDataService.markDirty(player)
+	end
 	if Offline.onEarned then
 		Offline.onEarned(player, amount)
 	end
@@ -124,8 +129,27 @@ function Offline.claimPopup(player: Player): Popup?
 	return popup
 end
 
+-- Cash from the latest welcome-back payout that has not been doubled yet.
+function Offline.peekDouble(player: Player): number
+	local state = Common.state(player)
+	return if state then state.OfflineDouble else 0
+end
+
+-- Clears the offer and returns the amount. Zero when there is nothing to double.
+function Offline.takeDouble(player: Player): number
+	local state = Common.state(player)
+	if not state or state.OfflineDouble < 1 then
+		return 0
+	end
+	local amount = state.OfflineDouble
+	state.OfflineDouble = 0
+	PlayerDataService.markDirty(player)
+	return amount
+end
+
 function Offline.init()
 	Remotes.event("LiveOpsWelcomeBack") -- (amount, seconds)
+	Remotes.event("LiveOpsOfflineDoubled") -- (total: number) the pads after a 2x purchase
 
 	Hooks.on("PlayerLoaded", function(player: Player)
 		measure(player) -- before anything refreshes LastSeen

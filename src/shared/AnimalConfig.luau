@@ -47,7 +47,7 @@ local function limited(def: AnimalDefinition): AnimalDefinition
 end
 
 local AnimalConfig = {
-	FirstAnimal = "Pig", -- the first animal of a session is deterministic (and Normal)
+	FirstAnimal = "Pig", -- first walk-in after the baby-elephant intro (GameConfig.Intro)
 
 	Animals = {
 		-- Common

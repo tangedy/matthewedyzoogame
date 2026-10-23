@@ -50,7 +50,9 @@ export type InitialState = {
 	ToolTier: number,
 	ToolName: string,
 	TutorialCompleted: boolean,
-	GuideStep: string?, -- Wash, Pickup, Place, Collect, Upgrade, Repeat, Done
+	GuideStep: string?, -- Wash while the opening lesson is running, otherwise Done
+	PlayCutscene: boolean?,
+	IntroWashesLeft: number?,
 	Bay: BaySnapshot?,
 	Zoo: ZooSummary?,
 	Index: { [string]: boolean }?,
