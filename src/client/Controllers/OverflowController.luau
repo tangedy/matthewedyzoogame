@@ -24,46 +24,48 @@ function OverflowController.init()
 
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 1)
-	panel.Position = UDim2.new(0.5, 0, 1, -150)
-	panel.Size = UDim2.fromOffset(420, 118)
+	panel.Position = UDim2.new(0.5, 0, 1, -120)
+	panel.Size = UDim2.fromOffset(320, 64)
 	panel.BackgroundColor3 = UIStyle.PanelColor
+	panel.BackgroundTransparency = 0.15
 	panel.Parent = gui
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
+	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = panel
-
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(12, 8)
-	title.Size = UDim2.new(1, -24, 0, 28)
-	title.Text = "Cache is full"
-	title.Parent = panel
-	UIStyle.text(title, Color3.new(1, 1, 1))
 
 	local detail = Instance.new("TextLabel")
 	detail.BackgroundTransparency = 1
-	detail.Position = UDim2.fromOffset(12, 36)
-	detail.Size = UDim2.new(1, -24, 0, 24)
+	detail.Position = UDim2.fromOffset(10, 4)
+	detail.Size = UDim2.new(1, -20, 0, 18)
+	detail.TextXAlignment = Enum.TextXAlignment.Left
+	detail.TextScaled = false
+	detail.TextSize = 14
 	detail.Parent = panel
-	UIStyle.text(detail, Color3.fromRGB(180, 220, 255))
+	UIStyle.text(detail, Color3.fromRGB(220, 220, 220), Color3.fromRGB(20, 20, 20), 1.5)
+	detail.TextScaled = false
+	detail.TextSize = 14
 
-	local function button(text: string, x: number, color: Color3): TextButton
+	local function button(text: string, x: number): TextButton
 		local control = Instance.new("TextButton")
-		control.Position = UDim2.new(x, 0, 1, -46)
-		control.Size = UDim2.new(0.46, 0, 0, 36)
-		control.BackgroundColor3 = color
+		control.Position = UDim2.new(x, 0, 1, -30)
+		control.Size = UDim2.new(0.46, 0, 0, 24)
+		control.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
 		control.Text = text
+		control.TextScaled = false
+		control.TextSize = 14
 		control.AutoButtonColor = true
 		control.Parent = panel
 		local round = Instance.new("UICorner")
-		round.CornerRadius = UDim.new(0, 8)
+		round.CornerRadius = UDim.new(0, 6)
 		round.Parent = control
-		UIStyle.text(control, Color3.new(1, 1, 1))
+		UIStyle.text(control, Color3.new(1, 1, 1), Color3.new(0, 0, 0), 1.5)
+		control.TextScaled = false
+		control.TextSize = 14
 		return control
 	end
 
-	local keep = button("KEEP", 0.03, Color3.fromRGB(70, 150, 90))
-	local sell = button("AUTO-SELL", 0.51, Color3.fromRGB(190, 90, 70))
+	local keep = button("Keep", 0.03)
+	local sell = button("Sell", 0.51)
 	janitor:Add(keep.MouseButton1Click:Connect(function()
 		Remotes.event("OverflowChoice"):FireServer("keep")
 	end))
@@ -78,8 +80,8 @@ function OverflowController.init()
 		end
 		local value = if typeof(payload.SellValue) == "number" then payload.SellValue else 0
 		local waiting = if typeof(payload.Waiting) == "number" then payload.Waiting else 1
-		local extra = if waiting > 1 then ` ({waiting} waiting)` else ""
-		detail.Text = `{payload.Label}{extra}  ·  sell {UIStyle.formatMoney(value)}`
+		local extra = if waiting > 1 then ` ({waiting})` else ""
+		detail.Text = `{payload.Label}{extra} · {UIStyle.formatMoney(value)}`
 		gui.Enabled = true
 	end))
 end

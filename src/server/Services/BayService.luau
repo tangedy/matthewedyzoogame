@@ -39,7 +39,7 @@ type Job = {
 	WaitingThread: thread?,
 	Abandoned: boolean?, -- set by abandonWash: the animal walks off unpaid
 	NeedsPurchase: boolean?, -- rarity this hose cannot wash; Clean Now or let it go
-	Scripted: boolean?, -- opening baby elephant: the starter hose can wash it
+	Scripted: boolean?, -- one of the three opening pigs: it auto-sells instead of entering the cache
 }
 
 -- An animal standing on the U. Token bumps whenever a new walk starts, so an older walk stops.
@@ -155,8 +155,7 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	local intro = ZooService.introRemaining(owner) > 0
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
-	-- The deterministic first animal is reserved for after the baby-elephant intro,
-	-- so the opening minute is an elephant and the next real walk-in is still FirstAnimal.
+	-- The opening washes are ordinary pigs. FirstAnimal is the first walk-in after those.
 	local isFirst = not intro and not bay.FirstAnimalGiven
 	if not intro then
 		bay.FirstAnimalGiven = true
@@ -168,10 +167,7 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 		animalKey = GameConfig.Intro.Species
 		mutationKey = MutationConfig.Default
 		look = {
-			Scale = GameConfig.Intro.BabyScale,
-			Name = GameConfig.Intro.DisplayName,
 			Income = GameConfig.Intro.PayoutIncome,
-			Rarity = "Common",
 		}
 	else
 		animalKey = AnimalService.pickNext(isFirst, tier, owner)

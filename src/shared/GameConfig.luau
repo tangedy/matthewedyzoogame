@@ -111,15 +111,13 @@ local GameConfig = {
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
 	},
 
-	-- The title stays Wash the Zoo. A new player's first animals are baby elephants the
-	-- starter hose can actually wash, paid out at tutorial income so a baby doesn't
-	-- print an adult elephant's cash. Pens and the cache stay hidden until these are done.
+	-- A new player's first animals are ordinary pigs. They auto-sell, and the pens stay
+	-- hidden until these three washes are done. Payout matches a pig's income.
 	Intro = {
 		AutoSellCount = 3,
-		Species = "Elephant",
-		DisplayName = "Baby Elephant",
-		BabyScale = 0.38,
-		WashTimeMultiplier = 0.75,
+		Species = "Pig",
+		DisplayName = "Pig",
+		WashTimeMultiplier = 1,
 		PayoutIncome = 3,
 	},
 

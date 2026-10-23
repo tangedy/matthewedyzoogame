@@ -161,11 +161,10 @@ local function guideTarget(): (BasePart?, string?)
 	end
 	if guideStep == "Wash" then
 		local animal = bay:FindFirstChild("Animal")
-		local text = if introLeft > 0 then "WASH THE BABY ELEPHANT!" else "WASH THE ANIMAL!"
 		if animal and animal:IsA("Model") and animal.PrimaryPart then
-			return animal.PrimaryPart, text
+			return animal.PrimaryPart, nil
 		end
-		return partNamed(bay, "WashPosition"), text
+		return partNamed(bay, "WashPosition"), nil
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or an affordable hose.
 	local truck = truckTarget()
@@ -344,10 +343,14 @@ local function buildGui()
 	note.Name = "Note"
 	note.AnchorPoint = Vector2.new(0.5, 0)
 	note.Position = UDim2.new(0.5, 0, 0, 124)
-	note.Size = UDim2.new(0.8, 0, 0, 32)
+	note.Size = UDim2.new(0.7, 0, 0, 22)
 	note.Visible = false
+	note.TextScaled = false
+	note.TextSize = 16
 	note.Parent = gui
-	UIStyle.text(note, Color3.fromRGB(255, 220, 120))
+	UIStyle.text(note, Color3.fromRGB(230, 230, 230), Color3.fromRGB(20, 20, 20), 1.5)
+	note.TextScaled = false
+	note.TextSize = 16
 
 	trail = Instance.new("Folder")
 	trail.Name = "GuideTrail"
@@ -382,11 +385,11 @@ function OnboardingController.init(initial: Types.InitialState)
 	Remotes.event("GuideStepChanged").OnClientEvent:Connect(applyGuide)
 	Remotes.event("IntroAutoSold").OnClientEvent:Connect(function(amount: number, remaining: number)
 		introLeft = remaining
-		showNote(`Auto-sold for {UIStyle.formatMoney(amount)}. Keep washing!`)
+		showNote(`Sold for {UIStyle.formatMoney(amount)}`)
 	end)
 	Remotes.event("YardRevealed").OnClientEvent:Connect(function()
 		introLeft = 0
-		showNote("Your pens are open. Keep the next animal, or auto-sell it.")
+		showNote("Pens unlocked")
 	end)
 	Remotes.event("CleaningProgressChanged").OnClientEvent:Connect(function(id: string, value: number)
 		if id == jobId then

@@ -47,7 +47,7 @@ local function limited(def: AnimalDefinition): AnimalDefinition
 end
 
 local AnimalConfig = {
-	FirstAnimal = "Pig", -- first walk-in after the baby-elephant intro (GameConfig.Intro)
+	FirstAnimal = "Pig", -- first walk-in after the three intro pigs (GameConfig.Intro)
 
 	Animals = {
 		-- Common

@@ -49,10 +49,10 @@ end
 
 local function label(adornee: BasePart, text: string, offset: Vector3, color: Color3)
 	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.fromOffset(280, 70)
+	billboard.Size = UDim2.fromOffset(140, 28)
 	billboard.StudsOffset = offset
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 400
+	billboard.AlwaysOnTop = false
+	billboard.MaxDistance = 80
 	billboard.Parent = adornee
 	local gui = Instance.new("TextLabel")
 	gui.Size = UDim2.fromScale(1, 1)
@@ -157,7 +157,7 @@ function CutsceneService.init()
 		CFrame = ORIGIN * CFrame.new(0, -1, 8),
 		Parent = folder,
 	})
-	local pad = part({
+	part({
 		Name = "MaxedStation",
 		Size = Vector3.new(16, 1, 22),
 		Color = Color3.fromRGB(255, 196, 60),
@@ -165,8 +165,6 @@ function CutsceneService.init()
 		CFrame = ORIGIN * CFrame.new(0, 0, 10),
 		Parent = folder,
 	})
-	label(pad, "FULLY UPGRADED", Vector3.new(0, 8, 0), Color3.fromRGB(255, 220, 90))
-
 	local built = AnimalBuilder.build(cfg.Species, { Mutation = "Normal", Rarity = "Secret" })
 	built.Name = "ShowcaseAnimal"
 	if cfg.Scale > 0 then

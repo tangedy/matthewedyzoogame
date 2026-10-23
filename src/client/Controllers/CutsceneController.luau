@@ -1,6 +1,6 @@
 -- Unskippable spawn cutscene. The camera visits the showcase bay for Cutscene.Duration
--- seconds. There is no skip control. Janitor restores the camera, the character, and the
--- letterbox when the shot ends.
+-- seconds. There is no skip control. A single caption sits at the bottom. Janitor restores
+-- the camera and the character when the shot ends.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -54,37 +54,22 @@ function CutsceneController.init(initial: Types.InitialState)
 	gui.Name = "SpawnCutscene"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
-	gui.DisplayOrder = 80
+	gui.DisplayOrder = 6
 	gui.Parent = player:WaitForChild("PlayerGui")
 	janitor:Add(gui)
 
-	local function bar(y: number)
-		local frame = Instance.new("Frame")
-		frame.BackgroundColor3 = Color3.new(0, 0, 0)
-		frame.BorderSizePixel = 0
-		frame.Size = UDim2.new(1, 0, 0, 72)
-		frame.Position = UDim2.new(0, 0, y, if y == 0 then 0 else -72)
-		frame.Parent = gui
-	end
-	bar(0)
-	bar(1)
-
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1
-	title.AnchorPoint = Vector2.new(0.5, 0)
-	title.Position = UDim2.new(0.5, 0, 0, 86)
-	title.Size = UDim2.new(0.8, 0, 0, 54)
-	title.Text = "WASH THE ZOO"
-	title.Parent = gui
-	UIStyle.text(title, Color3.new(1, 1, 1), Color3.fromRGB(20, 40, 90), 4)
-	local sub = Instance.new("TextLabel")
-	sub.BackgroundTransparency = 1
-	sub.AnchorPoint = Vector2.new(0.5, 0)
-	sub.Position = UDim2.new(0.5, 0, 0, 142)
-	sub.Size = UDim2.new(0.8, 0, 0, 32)
-	sub.Text = "This is the zoo you're building."
-	sub.Parent = gui
-	UIStyle.text(sub, Color3.fromRGB(255, 220, 120))
+	local caption = Instance.new("TextLabel")
+	caption.BackgroundTransparency = 1
+	caption.AnchorPoint = Vector2.new(0.5, 1)
+	caption.Position = UDim2.new(0.5, 0, 1, -28)
+	caption.Size = UDim2.new(0.6, 0, 0, 22)
+	caption.Text = "This is the zoo you're building"
+	caption.TextScaled = false
+	caption.TextSize = 16
+	caption.Parent = gui
+	UIStyle.text(caption, Color3.fromRGB(240, 240, 240), Color3.fromRGB(20, 20, 20), 1.5)
+	caption.TextScaled = false
+	caption.TextSize = 16
 
 	local function thaw(humanoid: Humanoid?)
 		if not humanoid then
