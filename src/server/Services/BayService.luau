@@ -208,7 +208,6 @@ local function runOneJob(bay: Bay, owner: Player)
 	local info: Hooks.WashInfo =
 		{ JobId = jobId, Species = animalKey, Mutation = mutationKey, Model = model, Bay = bay.Model }
 	Hooks.fire("WashStarted", owner, info)
-	GuideService.onRepeatWashStarted(owner)
 	-- Clean Now bought ahead of this animal: it's already paid for, so skip the wait.
 	-- The bay thread hasn't yielded, so the finish must not try to resume it.
 	if CleaningService.pullQueuedClean(owner) then

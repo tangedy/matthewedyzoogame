@@ -164,7 +164,8 @@ local function grantLimited(
 end
 
 -- The delivery truck's animal: the offer recorded when the purchase was prompted
--- (data.Extra.Truck.Bought, written by Monetization), delivered like a limited.
+-- (data.Extra.Truck.Bought, written by Monetization). It goes straight into the player's
+-- hands; only if they can't hold it right now is it queued like a limited.
 local function grantTruck(player: Player): (boolean, string?)
 	local data = PlayerDataService.get(player)
 	local truck = data and data.Extra.Truck
@@ -179,11 +180,17 @@ local function grantTruck(player: Player): (boolean, string?)
 	local mutation = if typeof(bought.Mutation) == "string" and MutationConfig.ByKey[bought.Mutation]
 		then bought.Mutation
 		else MutationConfig.Default
-	table.insert(saved.PendingAnimals, { Species = bought.Species, Mutation = mutation })
 	truck.Bought = nil
+	local name = AnimalConfig.Animals[bought.Species].DisplayName
+	if ZooService.giveToCarry(player, bought.Species, mutation) then
+		ZooService.discover(player, bought.Species, mutation)
+		PlayerDataService.saveNow(player)
+		Hooks.fire("TruckPurchased", player)
+		return true, `You got the {name}! Take it to a pen.`
+	end
+	table.insert(saved.PendingAnimals, { Species = bought.Species, Mutation = mutation })
 	PlayerDataService.markDirty(player)
 	Hooks.fire("TruckPurchased", player)
-	local name = AnimalConfig.Animals[bought.Species].DisplayName
 	if MonetizationGrants.deliverPending(player) > 0 then
 		return true, nil -- deliverPending already told them it's in the cache
 	end

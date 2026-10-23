@@ -22,7 +22,7 @@ local Hooks = require(script.Parent.Hooks)
 -- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
 -- v3: species have fixed rarities and walk-ins roll a mutation instead; adds the cache and
 -- each pen's uncollected cash. v2 rarities map onto mutations when migrating.
-local SCHEMA_VERSION = 3
+local SCHEMA_VERSION = 4
 
 export type CachedAnimal = {
 	Id: string,
@@ -86,7 +86,7 @@ local savesInFlight = 0 -- BindToClose waits for these, including leave-saves al
 local function defaults(): SavedData
 	return {
 		SchemaVersion = SCHEMA_VERSION,
-		Coins = 0,
+		Coins = GameConfig.StartingCoins,
 		ToolTier = 1,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
@@ -180,6 +180,10 @@ local function sanitize(raw: any): SavedData
 	data.TutorialCompleted = raw.TutorialCompleted == true
 	data.Extra = if typeof(raw.Extra) == "table" then plainCopy(raw.Extra, 0) else {}
 	local tier = cleanCount(raw.ToolTier)
+	-- v4 added the Spray Hose as tier 2, so every bought tier moved up one.
+	if cleanCount(raw.SchemaVersion) < 4 and tier >= 2 then
+		tier += 1
+	end
 	data.ToolTier = if ToolConfig[tier] then tier else 1
 
 	-- v2 fields. A v1 record simply has none of them and keeps the defaults.
@@ -259,10 +263,18 @@ local function sanitize(raw: any): SavedData
 	-- Guide, and the older clean-gate fields. Missing fields follow progress already on
 	-- the profile, so a zoo that's underway doesn't replay the arrows. The 10th-animal
 	-- tease is no longer scheduled; WashesSinceUnwashable starts at 0 when it is absent.
-	local guideSteps =
-		{ Wash = true, Pickup = true, Place = true, Collect = true, Upgrade = true, Repeat = true, Done = true }
-	if guideSteps[raw.GuideStep] then
-		data.GuideStep = raw.GuideStep
+	-- Collect and Repeat were dropped from the guide; old saves resume at the next step.
+	local guideSteps: { [string]: string } = {
+		Wash = "Wash",
+		Pickup = "Pickup",
+		Place = "Place",
+		Collect = "Upgrade",
+		Upgrade = "Upgrade",
+		Repeat = "Done",
+		Done = "Done",
+	}
+	if typeof(raw.GuideStep) == "string" and guideSteps[raw.GuideStep] then
+		data.GuideStep = guideSteps[raw.GuideStep]
 	else
 		local played = data.LifetimeAnimalsWashed > 0 or #data.Animals > 0 or #data.Cache > 0
 		data.GuideStep = if played then "Done" else "Wash"

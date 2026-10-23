@@ -120,11 +120,15 @@ end
 
 -- Everything drawn over an animal hangs from the nameplate's anchor and is stacked in
 -- pixels, so the rows never overlap at any distance. Values are each row's bottom edge,
--- in pixels above the nameplate's centre (a 4-line nameplate reaches 48).
+-- in pixels above the nameplate's resting centre (a 4-line nameplate reaches 48).
+-- While washing, top to bottom: name / mutation / rarity / $/s, then the clean % bar and
+-- the patience row. The nameplate lifts to make room for the meter under it.
 UIStyle.Overhead = {
-	Meter = 56, -- clean bar + patience row
+	Meter = -36, -- clean bar + patience row, where the nameplate's bottom rests
+	Name = 24, -- the lifted nameplate, just above the meter
+	Banner = 56, -- Squeaky clean! (meter gone, nameplate resting)
 	Tag = 136, -- DAILY DIRTY ANIMAL
-	Callout = 176, -- Wash me! / TOO DIRTY! / Squeaky clean! / !
+	Callout = 176, -- Wash me! / TOO DIRTY! / !
 }
 
 local function overheadLift(head: BasePart): number
@@ -137,6 +141,19 @@ function UIStyle.overhead(billboard: BillboardGui, head: BasePart, bottom: numbe
 	local height = math.max(1, billboard.Size.Y.Offset)
 	billboard.StudsOffset = Vector3.new(0, overheadLift(head), 0)
 	billboard.SizeOffset = Vector2.new(0, (bottom + (bob or 0) + height / 2) / height)
+end
+
+-- Lifts the animal's nameplate above the clean meter, or drops it back to rest.
+function UIStyle.liftNameplate(head: BasePart, lifted: boolean)
+	local plate = head:FindFirstChild("Nameplate")
+	if not plate or not plate:IsA("BillboardGui") then
+		return
+	end
+	if lifted then
+		UIStyle.overhead(plate, head, UIStyle.Overhead.Name)
+	else
+		plate.SizeOffset = Vector2.zero
+	end
 end
 
 -- One label, so the stacked strokes don't artifact. A mutation line is included when set.
@@ -170,11 +187,10 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 		return `<font color="{hex(color)}">{safe}</font>`
 	end
 
-	local rows = {}
+	local rows = { escapeRich(info.Name) }
 	if mutated then
 		table.insert(rows, span(mutation.Color, mutation.DisplayName))
 	end
-	table.insert(rows, escapeRich(info.Name))
 	table.insert(rows, span(rarity.Color, rarity.DisplayName))
 	table.insert(rows, span(UIStyle.CashColor, UIStyle.formatMoney(info.IncomePerSecond) .. "/s"))
 	label.Text = table.concat(rows, "\n")

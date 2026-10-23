@@ -1,5 +1,5 @@
 -- Builds the hose model in the player's right hand, one look per tool tier, so upgrades are
--- felt: a garden hose, a brass-ringed strong hose, a yellow pressure-washer gun, a foam
+-- felt: a garden hose, an orange spray hose, a brass-ringed strong hose, a yellow pressure-washer gun, a foam
 -- cannon with a bubble bottle, and a fire-hose rig with a tank on the back.
 --
 -- The main part is always named "Hose" (the server's "has a tool" check) and carries the
@@ -86,7 +86,16 @@ local DESIGNS: { [number]: Design } = {
 			tube("Tip", 0.35, 0.45, -0.9, Color3.fromRGB(255, 210, 60), body)
 		end,
 	},
-	-- 2: Strong Hose, blue with brass rings and a steel nozzle
+	-- 2: Spray Hose, an orange garden hose with a chunky green spray head
+	{
+		BodySize = Vector3.new(0.38, 0.38, 1.7),
+		BodyColor = Color3.fromRGB(240, 130, 40),
+		NozzleZ = -1.2,
+		Decorate = function(body)
+			tube("Tip", 0.45, 0.55, -1.0, Color3.fromRGB(80, 200, 90), body)
+		end,
+	},
+	-- 3: Strong Hose, blue with brass rings and a steel nozzle
 	{
 		BodySize = Vector3.new(0.42, 0.42, 1.9),
 		BodyColor = Color3.fromRGB(60, 120, 230),
@@ -97,7 +106,7 @@ local DESIGNS: { [number]: Design } = {
 			tube("Tip", 0.55, 0.4, -1.15, STEEL, body)
 		end,
 	},
-	-- 3: Power Washer, yellow gun with a red trigger and a long steel lance
+	-- 4: Power Washer, yellow gun with a red trigger and a long steel lance
 	{
 		BodySize = Vector3.new(0.5, 0.9, 1.1),
 		BodyColor = Color3.fromRGB(255, 205, 40),
@@ -121,7 +130,7 @@ local DESIGNS: { [number]: Design } = {
 			tube("LanceTip", 0.3, 0.3, -2.55, Color3.fromRGB(230, 50, 40), body, 0.15)
 		end,
 	},
-	-- 4: Foam Cannon, chunky purple body, pink bubble bottle on top, wide flared tip
+	-- 5: Foam Cannon, chunky purple body, pink bubble bottle on top, wide flared tip
 	{
 		BodySize = Vector3.new(0.7, 0.7, 1.6),
 		BodyColor = Color3.fromRGB(150, 90, 230),
@@ -141,7 +150,7 @@ local DESIGNS: { [number]: Design } = {
 			glint(bottle, Color3.fromRGB(255, 220, 250))
 		end,
 	},
-	-- 5: Fire-Hose Rig, big red nozzle with a brass tip and a tank on the back
+	-- 6: Fire-Hose Rig, big red nozzle with a brass tip and a tank on the back
 	{
 		BodySize = Vector3.new(0.7, 0.7, 2.0),
 		BodyColor = Color3.fromRGB(220, 40, 40),
@@ -201,7 +210,7 @@ function HoseBuilder.equip(character: Model, tier: number)
 
 	local nozzle = Instance.new("Attachment")
 	nozzle.Name = "Nozzle"
-	nozzle.Position = Vector3.new(0, if tier == 3 then 0.15 else 0, design.NozzleZ)
+	nozzle.Position = Vector3.new(0, if tier == 4 then 0.15 else 0, design.NozzleZ)
 	nozzle.Parent = body
 
 	local weld = Instance.new("WeldConstraint")

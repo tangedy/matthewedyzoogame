@@ -22,6 +22,11 @@ local player = Players.LocalPlayer
 local CleaningController = {}
 
 local SPRAY_COLOR = Color3.fromRGB(170, 225, 255)
+-- Screen droplets: flat GUI drops that burst from the aim point while spraying.
+local DROP_POOL_SIZE = 90
+local DROP_RATE_ON_TARGET = 55 -- per second
+local DROP_RATE_IDLE = 22
+local DROP_GRAVITY = 1100 -- px/s²
 local RETICLE_IDLE = Color3.fromRGB(255, 255, 255)
 local RETICLE_ON_TARGET = Color3.fromRGB(120, 255, 140)
 
@@ -42,10 +47,21 @@ local impactPart: Part
 local impactAttachment: Attachment
 local splash: ParticleEmitter
 local foam: ParticleEmitter
+local mist: ParticleEmitter
 local beam: Beam
 local spraySound: Sound
 local fallbackNozzle: Attachment? = nil
 local reticle: Frame
+
+type Drop = { frame: Frame, pos: Vector2, vel: Vector2, age: number, life: number, size: number }
+local dropLayer: Frame
+local dropPool: { Frame } = {}
+local drops: { Drop } = {}
+local dropCarry = 0
+local sprayActive = false
+local sprayOnTarget = false
+local sprayScreenPoint = Vector2.zero
+local random = Random.new()
 
 local function getRoot(): BasePart?
 	local character = player.Character
@@ -228,6 +244,31 @@ local function buildEffects()
 	foam.LightEmission = 0.2
 	foam.Parent = impactAttachment
 
+	-- Soft clouds of mist billowing off the animal where the water hits.
+	mist = Instance.new("ParticleEmitter")
+	mist.Enabled = false
+	mist.Rate = 60
+	mist.Lifetime = NumberRange.new(0.6, 1.2)
+	mist.Speed = NumberRange.new(1.5, 4.5)
+	mist.SpreadAngle = Vector2.new(180, 180)
+	mist.Acceleration = Vector3.new(0, 1.5, 0)
+	mist.Drag = 3
+	mist.Rotation = NumberRange.new(0, 360)
+	mist.RotSpeed = NumberRange.new(-40, 40)
+	mist.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.8),
+		NumberSequenceKeypoint.new(1, 3.4),
+	})
+	mist.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.15, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	mist.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), SPRAY_COLOR)
+	mist.LightEmission = 0.35
+	mist.LightInfluence = 0.6
+	mist.Parent = impactAttachment
+
 	beam = Instance.new("Beam")
 	beam.Enabled = false
 	beam.Attachment1 = impactAttachment
@@ -275,6 +316,30 @@ local function buildReticle()
 	gui:SetAttribute("UIPlatformExclude", true)
 	gui.Parent = player:WaitForChild("PlayerGui")
 
+	-- Under the reticle so the drops never hide the aim point.
+	dropLayer = Instance.new("Frame")
+	dropLayer.Name = "Droplets"
+	dropLayer.Size = UDim2.fromScale(1, 1)
+	dropLayer.BackgroundTransparency = 1
+	dropLayer.Parent = gui
+	for _ = 1, DROP_POOL_SIZE do
+		local drop = Instance.new("Frame")
+		drop.AnchorPoint = Vector2.new(0.5, 0.5)
+		drop.BackgroundColor3 = SPRAY_COLOR
+		drop.BorderSizePixel = 0
+		drop.Visible = false
+		drop.Parent = dropLayer
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = drop
+		-- A bright top edge so each drop reads as glassy water, not a dot.
+		local shine = Instance.new("UIGradient")
+		shine.Rotation = 90
+		shine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(120, 200, 255))
+		shine.Parent = drop
+		table.insert(dropPool, drop)
+	end
+
 	reticle = Instance.new("Frame")
 	reticle.Name = "Reticle"
 	reticle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -290,6 +355,59 @@ local function buildReticle()
 	round.Parent = reticle
 end
 
+local function spawnDrop()
+	local frame = table.remove(dropPool)
+	if not frame then
+		return
+	end
+	-- Burst outward from the aim point with an upward kick, then fall.
+	local angle = random:NextNumber(0, math.pi * 2)
+	local speed = random:NextNumber(110, if sprayOnTarget then 340 else 230)
+	local vel = Vector2.new(math.cos(angle), math.sin(angle)) * speed - Vector2.new(0, random:NextNumber(60, 200))
+	local start = sprayScreenPoint + Vector2.new(math.cos(angle), math.sin(angle)) * random:NextNumber(4, 14)
+	table.insert(drops, {
+		frame = frame,
+		pos = start,
+		vel = vel,
+		age = 0,
+		life = random:NextNumber(0.35, 0.65),
+		size = random:NextNumber(6, if sprayOnTarget then 15 else 10),
+	})
+	frame.Visible = true
+end
+
+local function updateDrops(dt: number)
+	if sprayActive then
+		dropCarry += dt * (if sprayOnTarget then DROP_RATE_ON_TARGET else DROP_RATE_IDLE)
+		while dropCarry >= 1 do
+			dropCarry -= 1
+			spawnDrop()
+		end
+	else
+		dropCarry = 0
+	end
+	for i = #drops, 1, -1 do
+		local drop = drops[i]
+		drop.age += dt
+		local t = drop.age / drop.life
+		if t >= 1 then
+			drop.frame.Visible = false
+			table.insert(dropPool, drop.frame)
+			table.remove(drops, i)
+			continue
+		end
+		drop.vel += Vector2.new(0, DROP_GRAVITY * dt)
+		drop.pos += drop.vel * dt
+		-- Stretch along the direction of travel, like a falling drop.
+		local stretch = 1 + math.min(drop.vel.Magnitude / 500, 1)
+		local size = drop.size * (1 - 0.35 * t)
+		drop.frame.Position = UDim2.fromOffset(drop.pos.X, drop.pos.Y)
+		drop.frame.Size = UDim2.fromOffset(size, size * stretch)
+		drop.frame.Rotation = math.deg(math.atan2(drop.vel.Y, drop.vel.X)) - 90
+		drop.frame.BackgroundTransparency = 0.15 + 0.85 * t * t
+	end
+end
+
 local function bindInput()
 	-- Native touch button on phones; mouse and R2 everywhere else. No second Spray button.
 	UIPlatform.ActionMap.bindTemplate("Spray", onSpray)
@@ -303,6 +421,8 @@ local function stopEffects()
 	beam.Enabled = false
 	splash.Enabled = false
 	foam.Enabled = false
+	mist.Enabled = false
+	sprayActive = false
 	if spraySound.IsPlaying then
 		spraySound:Stop()
 	end
@@ -384,6 +504,11 @@ local function onHeartbeat()
 	beam.Enabled = true
 	splash.Enabled = sprayHit ~= nil
 	foam.Enabled = onTarget
+	mist.Enabled = onTarget
+	splash.Rate = if onTarget then 110 else 60
+	sprayActive = true
+	sprayOnTarget = onTarget
+	sprayScreenPoint = screenPoint
 	if not spraySound.IsPlaying then
 		spraySound:Play()
 	end
@@ -436,6 +561,7 @@ function CleaningController.init(initial: Types.InitialState)
 			end
 		end)
 	RunService.Heartbeat:Connect(onHeartbeat)
+	RunService.RenderStepped:Connect(updateDrops)
 end
 
 return CleaningController

@@ -548,7 +548,6 @@ local function collect(player: Player, penIndex: number)
 	local amount = math.floor(animal.Pending)
 	animal.Pending -= amount
 	EconomyService.addCoins(player, amount)
-	GuideService.onCollected(player)
 	local pen = penOf(zoo, penIndex)
 	local pad = pen and pen:FindFirstChild("CollectPad") :: BasePart?
 	if pad then
@@ -649,6 +648,39 @@ function ZooService.addToCache(
 	local slot = cacheSlot(zoo, #waitingRecords(zoo, data))
 	sendZoo(player)
 	return record, slot and slot.CFrame
+end
+
+-- Puts a bought animal straight into the player's hands. Anything already carried goes back
+-- to the cache first. Returns false when it can't be carried right now (no zoo, or no
+-- character to hold it), so the caller can queue it instead.
+function ZooService.giveToCarry(player: Player, species: string, mutation: string): boolean
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hand = character
+		and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")) :: BasePart?
+	if not zoo or not data or not hand or not humanoid or humanoid.Health <= 0 then
+		return false
+	end
+	if zoo.CarriedId then
+		returnCarryToCache(player)
+	end
+	-- Carried animals are cache records too (the carried one just isn't "waiting").
+	local record: CachedAnimal = {
+		Id = tostring(data.NextAnimalId),
+		Species = species,
+		Mutation = mutation,
+		Paid = true,
+	}
+	data.NextAnimalId += 1
+	table.insert(data.Cache, record)
+	zoo.CarriedId = record.Id
+	zoo.CarryModel = AnimalService.buildCarryModel(species, mutation, hand)
+	PlayerDataService.markDirty(player)
+	refreshAll(player)
+	GuideService.onPickedUp(player)
+	return true
 end
 
 -- The washed model has walked to its cache slot: it becomes the waiting cache animal.

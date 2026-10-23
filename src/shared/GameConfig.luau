@@ -35,6 +35,7 @@ local GameConfig = {
 	ArriveDuration = 3.5, -- from the road (x -54) to the wash spot
 	DepartDuration = 2,
 	CelebrationDuration = 1.5,
+	StartingCoins = 90, -- a new player's cash, $10 short of the Spray Hose
 	NextAnimalDelay = 0.5,
 
 	-- Persistence. Studio uses a separate store so test data never touches live players.

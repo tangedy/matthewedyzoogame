@@ -1,7 +1,9 @@
 -- Contextual onboarding, fired by triggers instead of up-front menus:
---   * First cycle: a candy-colored trail on the ground — wash, pick up, stable, collect,
---     hose stand, then back to the next animal. Each mark points at that destination.
---     The server remembers the step.
+--   * First cycle: a candy-colored trail on the ground — wash, pick up from the cache,
+--     place in a pen, visit the hose stand. Each mark points at that destination. The
+--     server remembers the step.
+--   * After that the trail only comes back for the delivery truck while it's parked, or
+--     for the hose stand once the next hose is affordable.
 --   * First wash: a bobbing "Wash me!" marker over the animal until the player starts cleaning.
 --   * "Pick me up!" over the cache until the player's first pickup, then "Place here!" over
 --     the first pen while carrying, until the first animal is in a pen.
@@ -43,8 +45,13 @@ local ARM_YAW = math.rad(34)
 -- Tip meets on -Z, which is the LookVector, so each mark points at the destination.
 local LEFT_ARM = CFrame.new(0.87, 0, 0.94) * CFrame.Angles(0, ARM_YAW, 0)
 local RIGHT_ARM = CFrame.new(-0.87, 0, 0.94) * CFrame.Angles(0, -ARM_YAW, 0)
--- Clearance above the ground hit so the marks sit on the path instead of in the floor.
-local APRON_SURFACE = 0.7
+-- Clearance above the floor so the marks sit on the path instead of in it.
+local APRON_SURFACE = 0.25
+-- Each mark looks down from this high above the player's floor. Anything it lands on more
+-- than MAX_STEP_UP above the floor is a fence, an animal or a prop, so that mark is skipped
+-- rather than drawn on top of it (a gap reads better than an arrow on a fence).
+local PROBE_HEIGHT = 4
+local MAX_STEP_UP = 0.6
 
 local tutorialCompleted = false
 local guideStep = "Done"
@@ -143,19 +150,24 @@ local function upgradeAffordable(): boolean
 	return nextTool ~= nil and coins >= nextTool.Price
 end
 
-local function guideTarget(): BasePart?
-	if guideStep == "Done" then
-		-- After the guide: lead to the hose stand whenever the next hose is affordable.
-		if upgradeAffordable() and not shopVisitedForTier[tier] then
-			return upgradeCounter()
-		end
-		return nil
+-- The parked delivery truck's bed while it still has an animal for sale.
+local function truckTarget(): BasePart?
+	local bay = bayModel()
+	local truck = bay and bay:FindFirstChild("DeliveryTruck")
+	local prompt = truck and truck:FindFirstChild("TruckPrompt", true)
+	if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
+		local bed = prompt.Parent
+		return if bed and bed:IsA("BasePart") then bed else nil
 	end
+	return nil
+end
+
+local function guideTarget(): BasePart?
 	local bay = bayModel()
 	if not bay then
 		return nil
 	end
-	if guideStep == "Wash" or guideStep == "Repeat" then
+	if guideStep == "Wash" then
 		local animal = bay:FindFirstChild("Animal")
 		if animal and animal:IsA("Model") and animal.PrimaryPart then
 			return animal.PrimaryPart
@@ -166,21 +178,15 @@ local function guideTarget(): BasePart?
 	elseif guideStep == "Place" then
 		local zoo = bay:FindFirstChild("Zoo")
 		return partNamed(zoo and zoo:FindFirstChild("Pen1"), "GatePost")
-	elseif guideStep == "Collect" then
-		local zoo = bay:FindFirstChild("Zoo")
-		if not zoo then
-			return nil
-		end
-		for _, pen in zoo:GetChildren() do
-			if pen:FindFirstChild("ZooAnimal") then
-				local pad = partNamed(pen, "CollectPad")
-				if pad then
-					return pad
-				end
-			end
-		end
-		return partNamed(zoo:FindFirstChild("Pen1"), "CollectPad")
 	elseif guideStep == "Upgrade" then
+		return upgradeCounter()
+	end
+	-- Guide finished: only the truck (it leaves soon) or an affordable hose.
+	local truck = truckTarget()
+	if truck then
+		return truck
+	end
+	if upgradeAffordable() and not shopVisitedForTier[tier] then
 		return upgradeCounter()
 	end
 	return nil
@@ -216,22 +222,32 @@ local function updateTrail(dt: number)
 	local base = march % spacing
 	local generation = math.floor(march / spacing)
 
-	local ignore: { Instance } = { trail, character }
-	local bay = bayModel()
-	local animal = bay and bay:FindFirstChild("Animal")
-	if animal then
-		table.insert(ignore, animal)
-	end
-	rayParams.FilterDescendantsInstances = ignore
-
-	local padTop = target.Position.Y + target.Size.Y * 0.5
+	rayParams.FilterDescendantsInstances = { trail, character }
+	-- The floor under the player is the path's height; pads and ramps may lift a mark a
+	-- little, but nothing taller (fences, animals) can.
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local feet = root.Position.Y - root.Size.Y * 0.5 - (if humanoid then humanoid.HipHeight else 2)
+	local under = Workspace:Raycast(root.Position, Vector3.new(0, -40, 0), rayParams)
+	local floorY = if under and under.Position.Y <= feet + 0.5 then under.Position.Y else feet
 	local direction = if span > 0.05 then flat.Unit else Vector3.new(0, 0, -1)
 	for index, segment in segments do
 		local along = SEGMENT_START + base + (index - 1) * spacing
+		local blocked = false
+		local groundY = floorY
 		if span > 0.8 and along <= travel then
 			local point = root.Position + direction * along
-			local hit = Workspace:Raycast(point + Vector3.new(0, 12, 0), Vector3.new(0, -40, 0), rayParams)
-			local groundY = if hit then hit.Position.Y else padTop
+			local hit = Workspace:Raycast(
+				Vector3.new(point.X, floorY + PROBE_HEIGHT, point.Z),
+				Vector3.new(0, -(PROBE_HEIGHT + 3), 0),
+				rayParams
+			)
+			if hit and hit.Position.Y >= floorY - 2 then
+				groundY = hit.Position.Y
+			end
+			blocked = groundY > floorY + MAX_STEP_UP or (hit ~= nil and hit.Normal.Y < 0.8)
+		end
+		if span > 0.8 and along <= travel and not blocked then
+			local point = root.Position + direction * along
 			local pos = Vector3.new(point.X, groundY + APRON_SURFACE, point.Z)
 			local aim = Vector3.new(target.Position.X, pos.Y, target.Position.Z)
 			if (aim - pos).Magnitude < 0.05 then

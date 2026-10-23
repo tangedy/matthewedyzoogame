@@ -21,7 +21,7 @@ local HUDController = {}
 local BAR_COLOR = Color3.fromRGB(90, 200, 255)
 local BAR_DONE_COLOR = Color3.fromRGB(90, 255, 90)
 
-local PROGRESS_HEIGHT = 74 -- clean bar, reward line, then the Tension patience row (y 50)
+local PROGRESS_HEIGHT = 56 -- clean bar, then the Tension patience row (y 32)
 
 local gui: ScreenGui
 local cashLabel: TextLabel
@@ -31,7 +31,6 @@ local progressBoard: BillboardGui
 local progressRoot: Frame
 local barFill: Frame
 local percentLabel: TextLabel
-local rewardLabel: TextLabel
 local percentScale: UIScale
 local barGradient: UIGradient
 local shineGradient: UIGradient
@@ -143,11 +142,6 @@ local function buildGui()
 	percentLabel = textLabel(bar, { Size = UDim2.fromScale(1, 1), ZIndex = 2 })
 	percentScale = Instance.new("UIScale")
 	percentScale.Parent = percentLabel
-	rewardLabel = textLabel(
-		progressRoot,
-		{ Position = UDim2.fromOffset(0, 28), Size = UDim2.new(1, 0, 0, 16) },
-		UIStyle.CashColor
-	)
 
 	-- Announcements under the patience row
 	announcementLabel = textLabel(gui, {
@@ -209,7 +203,7 @@ end
 local function setProgress(progress: number, finalized: boolean)
 	currentProgress = progress
 	local shown = if finalized then 100 else math.min(math.floor(progress * 100), 99)
-	percentLabel.Text = if finalized then "SQUEAKY CLEAN!" else `{shown}% CLEAN`
+	percentLabel.Text = if finalized then "100%" else `{shown}%`
 	local width = if finalized then 1 else math.clamp(progress, 0, 0.99)
 	TweenService:Create(barFill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Size = UDim2.fromScale(width, 1),
@@ -235,13 +229,16 @@ local function findAnimal(): Model?
 end
 
 local function unmountProgress()
+	if mountedHead and mountedHead.Parent then
+		UIStyle.liftNameplate(mountedHead, false)
+	end
 	progressBoard.Enabled = false
 	progressBoard.Adornee = nil
 	mountedHead = nil
 end
 
--- Point the meter at this animal's head, above the nameplate. The nameplate already
--- shows the animal, so a screen card would only repeat it.
+-- Point the meter at this animal's head, under its nameplate (which lifts to make room).
+-- The nameplate already shows the animal, so a screen card would only repeat it.
 local function mountProgress(animal: Model): boolean
 	local head = animal:FindFirstChild("Head")
 	if not head or not head:IsA("BasePart") then
@@ -251,6 +248,7 @@ local function mountProgress(animal: Model): boolean
 		return true
 	end
 	UIStyle.overhead(progressBoard, head, UIStyle.Overhead.Meter)
+	UIStyle.liftNameplate(head, true)
 	progressBoard.Adornee = head
 	progressBoard.Enabled = true
 	mountedHead = head
@@ -290,7 +288,6 @@ local function applyBay(bay: Types.BaySnapshot?)
 
 	wantProgress = bay.AnimalName ~= nil and (bay.State == "Washing" or bay.State == "Completing") -- not while it walks in
 	if wantProgress then
-		rewardLabel.Text = `Wash {UIStyle.formatMoney(bay.Reward or 0)}`
 		local animal = findAnimal()
 		if animal then
 			mountProgress(animal)

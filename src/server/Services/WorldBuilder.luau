@@ -337,7 +337,9 @@ function WorldBuilder.buildBay(index: number): Model
 	local post = makePart({
 		Name = "SignPost",
 		Size = Vector3.new(1, 8, 1),
-		Position = Vector3.new(center.X, padTop + 4, center.Z - padSize.Z / 2 + 1),
+		-- Back corner, off to the side: straight behind the wash spot it lined up with the
+		-- animal's nameplate from where the player stands.
+		Position = Vector3.new(center.X + padSize.X / 2 - 1, padTop + 4, center.Z - padSize.Z / 2 + 1),
 		Color = Color3.fromRGB(120, 85, 60),
 		Material = Enum.Material.Wood,
 		Parent = bay,

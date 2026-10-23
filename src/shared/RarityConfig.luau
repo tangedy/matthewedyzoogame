@@ -45,7 +45,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
-		RequiredCleaningPower = 0.85, -- Strong Hose (0.9). Basic Hose cannot.
+		RequiredCleaningPower = 0.85, -- Strong Hose (0.9). Basic and Spray Hoses cannot.
 	},
 	{
 		Key = "Legendary",

@@ -4,6 +4,7 @@
 
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
@@ -281,54 +282,205 @@ function AnimalService.moveTo(model: Model, target: CFrame, duration: number)
 	end
 end
 
--- Happy hop + sparkle + sound. Yields for GameConfig.CelebrationDuration.
+local CONFETTI = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 120)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 210, 60)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(90, 230, 120)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(70, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(190, 110, 255)),
+})
+
+local function burst(parent: Instance, props: { [string]: any }, count: number)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Enabled = false
+	emitter.Rate = 0
+	emitter.LightEmission = 0.6
+	for key, value in props do
+		(emitter :: any)[key] = value
+	end
+	emitter.Parent = parent
+	emitter:Emit(count)
+	Debris:AddItem(emitter, 3)
+end
+
+-- A flat neon ring that races out across the ground and fades.
+local function shockwave(at: Vector3, color: Color3)
+	local ring = Instance.new("Part")
+	ring.Name = "CleanShockwave"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = color
+	ring.Transparency = 0.15
+	ring.Size = Vector3.new(0.2, 3, 3)
+	ring.CFrame = CFrame.new(at) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Parent = Workspace
+	TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.2, 20, 20),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(ring, 0.6)
+end
+
+-- Three rising notes from the completion sound.
+local function chime(parent: Instance)
+	for i, speed in { 1, 1.26, 1.5 } do
+		task.delay((i - 1) * 0.09, function()
+			if not parent.Parent then
+				return
+			end
+			local note = Instance.new("Sound")
+			note.SoundId = GameConfig.Sounds.Complete
+			note.PlaybackSpeed = speed
+			note.Volume = 0.45 + i * 0.1
+			note.Parent = parent
+			note:Play()
+			Debris:AddItem(note, 2)
+		end)
+	end
+end
+
+local function easeOutBack(t: number): number
+	local c = 1.70158
+	return 1 + (c + 1) * (t - 1) ^ 3 + c * (t - 1) ^ 2
+end
+
+-- Squash, spinning hop with a size pop, confetti at the top, shockwave and bubbles on the
+-- landing, a smaller bounce, then a settle. Yields for GameConfig.CelebrationDuration.
 function AnimalService.celebrate(model: Model)
 	local body = model:FindFirstChild("Body")
+	local sparkleColor = ColorSequence.new(Color3.fromRGB(150, 230, 255))
 	if body then
 		local sparkle = body:FindFirstChild("Sparkle") :: ParticleEmitter?
-		local sound = body:FindFirstChild("CompleteSound") :: Sound?
 		if sparkle then
-			sparkle:Emit(40)
+			sparkleColor = sparkle.Color
+			sparkle:Emit(70)
 		end
-		if sound then
-			sound:Play()
-		end
+		chime(body)
 	end
 
-	-- "Squeaky clean!" pops above the animal for the length of the celebration.
+	-- White glint that fades as the animal shows off its clean coat.
+	local flash = Instance.new("Highlight")
+	flash.FillColor = Color3.new(1, 1, 1)
+	flash.OutlineColor = Color3.fromRGB(150, 230, 255)
+	flash.FillTransparency = 0.15
+	flash.OutlineTransparency = 0
+	flash.DepthMode = Enum.HighlightDepthMode.Occluded
+	flash.Parent = model
+	TweenService:Create(flash, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		FillTransparency = 1,
+		OutlineTransparency = 1,
+	}):Play()
+	Debris:AddItem(flash, 0.8)
+
+	-- "Squeaky clean!" springs in above the animal for the length of the celebration.
 	local head = model:FindFirstChild("Head")
 	if head and head:IsA("BasePart") then
 		local billboard = Instance.new("BillboardGui")
 		billboard.Name = "CleanBanner"
-		billboard.Size = UDim2.fromOffset(220, 50)
+		billboard.Size = UDim2.fromOffset(240, 56)
 		billboard.MaxDistance = 80
 		-- The clean meter is gone by now, so this takes its row above the nameplate.
-		UIStyle.overhead(billboard, head, UIStyle.Overhead.Meter)
+		UIStyle.overhead(billboard, head, UIStyle.Overhead.Banner)
 		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromScale(0.5, 0.5)
+		label.Size = UDim2.fromScale(0.2, 0.2)
 		label.BackgroundTransparency = 1
 		label.Text = "Squeaky clean!"
 		label.TextScaled = true
-		label.Font = Enum.Font.FredokaOne
+		label.Font = UIStyle.Font
 		label.TextColor3 = Color3.fromRGB(150, 230, 255)
 		label.TextStrokeTransparency = 0
 		label.TextStrokeColor3 = Color3.fromRGB(20, 60, 110)
+		label.Rotation = -8
 		label.Parent = billboard
 		billboard.Parent = head
-		task.delay(GameConfig.CelebrationDuration, function()
-			billboard:Destroy()
-		end)
+		TweenService:Create(label, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.fromScale(1, 1),
+			Rotation = 0,
+		}):Play()
+		Debris:AddItem(billboard, GameConfig.CelebrationDuration)
 	end
 
 	local base = model:GetPivot()
+	local _, extents = model:GetBoundingBox()
+	local ground = base.Position - Vector3.new(0, extents.Y / 2, 0)
 	local duration = GameConfig.CelebrationDuration
+	-- Phase ends, as fractions of the duration.
+	local squashEnd, hopEnd, landEnd, bounceEnd = 0.08, 0.45, 0.55, 0.78
+	local confettiDone, landDone = false, false
 	local elapsed = 0
 	while elapsed < duration and model.Parent do
 		elapsed += task.wait()
-		local hop = math.abs(math.sin(elapsed / duration * math.pi * 2)) * 1.5
-		model:PivotTo(base + Vector3.new(0, hop, 0))
+		local t = math.min(elapsed / duration, 1)
+		local height, spin, scale = 0, 0, 1
+		if t < squashEnd then
+			scale = 1 - 0.12 * (t / squashEnd) -- wind up
+		elseif t < hopEnd then
+			local u = (t - squashEnd) / (hopEnd - squashEnd)
+			height = math.sin(u * math.pi) * 3.2
+			spin = easeOutBack(u) * math.pi * 2
+			scale = 0.88 + 0.32 * math.sin(u * math.pi)
+			if u > 0.5 and not confettiDone and body then
+				confettiDone = true
+				burst(body, {
+					Color = CONFETTI,
+					Size = NumberSequence.new(0.35, 0.2),
+					Lifetime = NumberRange.new(1.2, 1.8),
+					Speed = NumberRange.new(16, 26),
+					SpreadAngle = Vector2.new(55, 55),
+					EmissionDirection = Enum.NormalId.Top,
+					Acceleration = Vector3.new(0, -32, 0),
+					Drag = 1.5,
+					Rotation = NumberRange.new(0, 360),
+					RotSpeed = NumberRange.new(-300, 300),
+					LightEmission = 0.2,
+				}, 60)
+			end
+		elseif t < landEnd then
+			local u = (t - hopEnd) / (landEnd - hopEnd)
+			spin = math.pi * 2
+			scale = 1 - 0.14 * math.sin(u * math.pi) -- landing squash
+			if not landDone then
+				landDone = true
+				shockwave(ground + Vector3.new(0, 0.15, 0), Color3.fromRGB(150, 230, 255))
+				if body then
+					burst(body, {
+						Color = sparkleColor,
+						Size = NumberSequence.new({
+							NumberSequenceKeypoint.new(0, 0.2),
+							NumberSequenceKeypoint.new(0.3, 0.9),
+							NumberSequenceKeypoint.new(1, 0),
+						}),
+						Transparency = NumberSequence.new(0.25, 1),
+						Lifetime = NumberRange.new(0.8, 1.4),
+						Speed = NumberRange.new(5, 11),
+						SpreadAngle = Vector2.new(180, 180),
+						Acceleration = Vector3.new(0, 6, 0),
+						Drag = 2,
+					}, 40)
+				end
+			end
+		elseif t < bounceEnd then
+			local u = (t - landEnd) / (bounceEnd - landEnd)
+			spin = math.pi * 2
+			height = math.sin(u * math.pi) * 1.1
+			scale = 1 + 0.08 * math.sin(u * math.pi)
+		else
+			-- Happy wiggle while it settles.
+			local u = (t - bounceEnd) / (1 - bounceEnd)
+			spin = math.pi * 2 + math.sin(u * math.pi * 4) * math.rad(12) * (1 - u)
+		end
+		model:ScaleTo(scale)
+		model:PivotTo(base * CFrame.new(0, height, 0) * CFrame.Angles(0, spin, 0))
 	end
 	if model.Parent then
+		model:ScaleTo(1)
 		model:PivotTo(base)
 	end
 end

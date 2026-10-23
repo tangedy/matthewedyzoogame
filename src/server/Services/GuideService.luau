@@ -1,6 +1,6 @@
--- First-cycle guide: Wash -> pick up -> place in the stable -> collect -> visit the hose
--- stand -> wash the next animal. The client draws the rainbow arrows; this only stores the
--- step so leaving and rejoining resumes the same arrow.
+-- First-cycle guide: wash -> pick up from the cache -> place in a pen -> visit the hose
+-- stand -> done. The client draws the rainbow arrows; this only stores the step so leaving
+-- and rejoining resumes the same arrow.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -30,7 +30,7 @@ function GuideService.onPickedUp(player: Player)
 end
 
 function GuideService.onPlaced(player: Player)
-	advance(player, "Place", "Collect")
+	advance(player, "Place", "Upgrade")
 end
 
 -- Died or respawned while carrying: the animal is back in the cache, so point there again.
@@ -38,16 +38,8 @@ function GuideService.onCarryReturned(player: Player)
 	advance(player, "Place", "Pickup")
 end
 
-function GuideService.onCollected(player: Player)
-	advance(player, "Collect", "Upgrade")
-end
-
 function GuideService.onReachedUpgrade(player: Player)
-	advance(player, "Upgrade", "Repeat")
-end
-
-function GuideService.onRepeatWashStarted(player: Player)
-	advance(player, "Repeat", "Done")
+	advance(player, "Upgrade", "Done")
 end
 
 return GuideService

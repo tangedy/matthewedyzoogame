@@ -28,23 +28,16 @@ local player = Players.LocalPlayer
 local TensionController = {}
 
 -- The row lives inside the HUD's clean meter billboard above the animal, under the % clean
--- bar and the reward line (HUDController's PROGRESS_HEIGHT leaves room for it).
-local ROW_Y = 50
+-- bar (HUDController's PROGRESS_HEIGHT leaves room for it). The patience bar spans the row.
+local ROW_Y = 32
 local ROW_WIDTH = 208
 local ROW_HEIGHT = 22
-local MOOD_WIDTH = 70
 local TIMER_WIDTH = 56
 local GAP = 6
 local MAX_FLING_SPEED = 250
 local MAX_RAGDOLL_SECONDS = 3
 local WANDER_WARN_SECONDS = 15
 
-local MOOD_TEXT: { [string]: string } = { Calm = "CALM", Ticklish = "TICKLISH", Grumpy = "GRUMPY" }
-local MOOD_COLOR: { [string]: Color3 } = {
-	Calm = Color3.fromRGB(120, 255, 120),
-	Ticklish = Color3.fromRGB(255, 140, 220),
-	Grumpy = Color3.fromRGB(255, 80, 60),
-}
 local FULL_COLOR = Color3.fromRGB(255, 175, 40)
 local EMPTY_COLOR = Color3.fromRGB(235, 40, 30)
 local CALM_COLOR = Color3.fromRGB(110, 210, 255)
@@ -63,7 +56,6 @@ type Snapshot = {
 local gui: ScreenGui
 local row: Frame
 local rowScale: UIScale
-local moodLabel: TextLabel
 local bar: Frame
 local barStroke: UIStroke?
 local barFill: Frame
@@ -142,12 +134,8 @@ local function buildGui()
 	rowScale = Instance.new("UIScale")
 	rowScale.Parent = row
 
-	local moodPill = pill(row, { Size = UDim2.new(0, MOOD_WIDTH, 1, 0) })
-	moodLabel = textLabel(moodPill, { Position = UDim2.fromOffset(6, 2), Size = UDim2.new(1, -12, 1, -4) })
-
 	bar = Instance.new("Frame")
-	bar.Position = UDim2.fromOffset(MOOD_WIDTH + GAP, 0)
-	bar.Size = UDim2.new(1, -(MOOD_WIDTH + GAP), 1, 0)
+	bar.Size = UDim2.fromScale(1, 1)
 	bar.BackgroundColor3 = Color3.fromRGB(70, 50, 35)
 	bar.ClipsDescendants = true
 	bar.Parent = row
@@ -251,12 +239,10 @@ local function applySnapshot(snapshot: Snapshot)
 		row.Visible = true
 		bounce(rowScale, 0.6, 0.45)
 		barFill.Size = UDim2.fromScale(snapshot.Patience, 1)
-		moodLabel.Text = MOOD_TEXT[snapshot.Mood] or string.upper(snapshot.Mood)
-		moodLabel.TextColor3 = MOOD_COLOR[snapshot.Mood] or Color3.new(1, 1, 1)
 	end
 	local timed = snapshot.Wander ~= nil
 	timerPill.Visible = timed
-	bar.Size = UDim2.new(1, -(MOOD_WIDTH + GAP + (if timed then TIMER_WIDTH + GAP else 0)), 1, 0)
+	bar.Size = UDim2.new(1, -(if timed then TIMER_WIDTH + GAP else 0), 1, 0)
 
 	-- Glide between server updates so the meter drains smoothly.
 	TweenService:Create(barFill, TweenInfo.new(TensionConfig.StateSendInterval, Enum.EasingStyle.Linear), {
