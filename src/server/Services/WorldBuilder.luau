@@ -10,7 +10,9 @@
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandCounter              barn upgrade, beside the path entrance
---   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan   a roof on red posts over each lane
+--   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan / BarnMega   a roof on red posts over each lane
+--   Zoo.Pen23 / Pen24   the mega barn: two gargantuan pens behind the last barn
+--   Zoo.Pen29 / Pen30   two pens on the path, just after the six stalls and in front of the barns
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -41,6 +43,13 @@ local STALL_PITCH = 14
 local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
+-- Two pens the size of a large pasture, left and right of the path, immediately
+-- behind the six stalls. The barns all start behind these.
+local FLEX_DEPTH = 24
+local FLEX_LAT_SIZE = 42
+local FLEX_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + FLEX_LAT_SIZE / 2
+local FLEX_CENTER = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
+
 -- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
 local LARGE_DEPTH = STALL_DEPTH * 1.5
 local LARGE_LAT = STALL_LAT * 1.5
@@ -53,7 +62,7 @@ local ROOF_OVER = 1 -- roof and posts sit just outside the pen
 local LANE_GAP = 4
 local ROW_GAP = 3
 
-local BARN_FRONT = WALK_END + 4
+local BARN_FRONT = FLEX_CENTER + FLEX_DEPTH / 2 + 8
 local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
 	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
@@ -64,23 +73,33 @@ ROW_DEPTH[2] = ROW_DEPTH[1] + ROW_PITCH
 local BARN_AISLE_END = ROW_DEPTH[2] + LARGE_DEPTH / 2 + ROOF_OVER
 local OUTER_LATERAL = STALL_LATERAL + STALL_LAT / 2 + LANE_GAP + LARGE_LAT / 2
 
+-- Large tier: two small barns side by side, then the giant's barn behind them.
 local LARGE_FRONT = BARN_AISLE_END + 8
-local LARGE_CENTER = LARGE_FRONT + ROOF_OVER + GIANT_DEPTH / 2
+local PAIR_GAP = 4
+local PAIR_LAT = LARGE_LAT / 2 + PAIR_GAP / 2
+local PAIR_CENTER = LARGE_FRONT + ROOF_OVER + LARGE_DEPTH / 2
+local PAIR_BACK = PAIR_CENTER + LARGE_DEPTH / 2 + ROOF_OVER
+local LARGE_CENTER = PAIR_BACK + 6 + ROOF_OVER + GIANT_DEPTH / 2
 local LARGE_BACK = LARGE_CENTER + GIANT_DEPTH / 2 + ROOF_OVER
-local LARGE_SIDE = GIANT_LAT / 2 + LANE_GAP + LARGE_LAT / 2
-local LARGE_LANE_CENTER = LARGE_FRONT + ROOF_OVER + LARGE_DEPTH / 2
-local LARGE_LANE_BACK = LARGE_LANE_CENTER + LARGE_DEPTH / 2 + ROOF_OVER
 
-local GARG_FRONT = LARGE_BACK + 8
-local GARG_GAP = 4
-local GARG_SPAN = GIANT_LAT + GARG_GAP + GARG_LAT
--- Giant lane on the plot's left, gargantuan lane on the right. Fronts line up.
-local GARG_GIANT_LAT = -GARG_SPAN / 2 + GIANT_LAT / 2
-local GARG_PEN_LAT = GARG_GIANT_LAT + GIANT_LAT / 2 + GARG_GAP + GARG_LAT / 2
-local GARG_GIANT_CENTER = GARG_FRONT + ROOF_OVER + GIANT_DEPTH / 2
-local GARG_CENTER = GARG_FRONT + ROOF_OVER + GARG_DEPTH / 2
-local GARG_GIANT_BACK = GARG_GIANT_CENTER + GIANT_DEPTH / 2 + ROOF_OVER
-local GARG_BACK = GARG_CENTER + GARG_DEPTH / 2 + ROOF_OVER
+-- Extra-large tier: a giant pen, then an open gargantuan pen with a skinny
+-- medium barn along the left, right, and back.
+local YARD_GAP = 6
+local G18_CENTER = LARGE_BACK + 8 + ROOF_OVER + GIANT_DEPTH / 2
+local G18_BACK = G18_CENTER + GIANT_DEPTH / 2 + ROOF_OVER
+local GARG_FRONT_EDGE = G18_BACK + YARD_GAP
+local GARG_CENTER = GARG_FRONT_EDGE + GARG_DEPTH / 2
+local GARG_BACK_EDGE = GARG_CENTER + GARG_DEPTH / 2
+local SURROUND_GAP = 8
+local SIDE_LAT = GARG_LAT / 2 + SURROUND_GAP + LARGE_LAT / 2
+local BACK_CENTER = GARG_BACK_EDGE + SURROUND_GAP + LARGE_LAT / 2
+
+-- Mega barn behind the gargantuan yard. Two gargantuan pens, side by side.
+-- Hidden until the upgrade after the gargantuan barn.
+local MEGA_GAP = 8
+local MEGA_LAT = GARG_LAT / 2 + MEGA_GAP / 2
+local MEGA_FRONT = BACK_CENTER + LARGE_LAT / 2 + ROOF_OVER + 10
+local MEGA_CENTER = MEGA_FRONT + GARG_DEPTH / 2
 
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
@@ -426,17 +445,19 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		lateral: number,
 		depthSize: number,
 		latSize: number,
-		class: string
+		class: string,
+		lookAt: Vector3?
 	)
 		local pen = Instance.new("Model")
 		pen.Name = "Pen" .. index
 		pen:SetAttribute("PenIndex", index)
 		pen:SetAttribute("PenClass", class)
-		local look = if class == "Giant"
-				or class == "Gargantuan"
-				or class == "Large"
-			then if math.abs(lateral) < 1 then plot.Look else inwardLook(plot, lateral)
-			else inwardLook(plot, lateral)
+		local look = lookAt
+		if not look then
+			look = if class == "Giant" or class == "Gargantuan" or class == "Large"
+				then if math.abs(lateral) < 1 then plot.Look else inwardLook(plot, lateral)
+				else inwardLook(plot, lateral)
+		end
 		buildFencedPen(plot, pen, depth, lateral, depthSize, latSize, look)
 		pen.Parent = zoo
 		if index > GameConfig.Zoo.StartPens then
@@ -468,14 +489,92 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		addPen(outerRight, depth, OUTER_LATERAL, LARGE_DEPTH, LARGE_LAT, "Medium")
 	end
 
-	-- Behind the path: a giant lane (3x) with a large lane on each side.
+	-- Two small barns side by side, then the giant's barn behind them.
+	addPen(16, PAIR_CENTER, -PAIR_LAT, LARGE_DEPTH, LARGE_LAT, "Large", plot.Look)
+	addPen(17, PAIR_CENTER, PAIR_LAT, LARGE_DEPTH, LARGE_LAT, "Large", plot.Look)
 	addPen(15, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant")
-	addPen(16, LARGE_LANE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
-	addPen(17, LARGE_LANE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
 
-	-- Further back, fronts aligned: a giant lane and a gargantuan lane (8x).
-	addPen(18, GARG_GIANT_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant")
-	addPen(19, GARG_CENTER, GARG_PEN_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan")
+	-- Open gargantuan pen. A giant pen sits in front of it. Three skinny medium
+	-- barns stand on the left, right, and back, each with one medium pen.
+	addPen(18, G18_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant")
+	addPen(19, GARG_CENTER, 0, GARG_DEPTH, GARG_LAT, "Gargantuan")
+	addPen(20, GARG_CENTER, -SIDE_LAT, LARGE_DEPTH, LARGE_LAT, "Medium")
+	addPen(21, GARG_CENTER, SIDE_LAT, LARGE_DEPTH, LARGE_LAT, "Medium")
+	addPen(22, BACK_CENTER, 0, LARGE_LAT, LARGE_DEPTH, "Medium", plot.Look)
+
+	-- Mega barn: two gargantuan pens. They stay hidden until that upgrade.
+	local megaFirst = GameConfig.Zoo.MaxPens - 1
+	addPen(megaFirst, MEGA_CENTER, -MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
+	addPen(megaFirst + 1, MEGA_CENTER, MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
+
+	local flexColor = Color3.fromRGB(130, 220, 255)
+	local function flexPen(index: number, lateral: number, side: string, lockText: string)
+		-- Gate faces the path, same as the six stalls in front of them.
+		addPen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex")
+		local built = zoo:FindFirstChild("Pen" .. index)
+		local builtFloor = built and built:FindFirstChild("Floor")
+		if builtFloor and builtFloor:IsA("BasePart") then
+			local classLabel = billboardLabel(builtFloor, "2 MEDIUM\nOR 1 LARGE", Vector3.new(0, 8, 0), Vector2.new(240, 80), flexColor)
+			classLabel.Name = "ClassLabel"
+			classLabel.TextWrapped = true
+		end
+		local pen = zoo:FindFirstChild("Pen" .. index)
+		if not pen then
+			return
+		end
+		pen:SetAttribute("FlexSide", side)
+		local function sideSlot(name: string, latOffset: number)
+			local pos = PlotLayout.point(plot, FLEX_CENTER, lateral + latOffset, FLOOR_Y)
+			local look = inwardLook(plot, lateral)
+			makeMarker(name, CFrame.lookAt(pos, pos + look), pen)
+		end
+		sideSlot("SlotMedium1", -FLEX_LAT_SIZE * 0.22)
+		sideSlot("SlotMedium2", FLEX_LAT_SIZE * 0.22)
+		local lock = Instance.new("Model")
+		lock.Name = "FlexLock"
+		local towardPath = if lateral >= 0 then 1 else -1
+		local bar = makePart({
+			Name = "Bar",
+			Size = Vector3.new(FLEX_DEPTH - 6, 8, 0.8),
+			Position = PlotLayout.point(plot, FLEX_CENTER, lateral - towardPath * (FLEX_LAT_SIZE / 2 - 1.2), 4),
+			Color = Color3.fromRGB(176, 48, 40),
+			Material = Enum.Material.Wood,
+			Parent = lock,
+		})
+		local lockLabel = billboardLabel(bar, lockText, Vector3.new(0, 6.5, 0), Vector2.new(240, 80), Color3.fromRGB(255, 230, 120))
+		lockLabel.Name = "LockLabel"
+		lockLabel.TextWrapped = true
+		local lockGui = lockLabel.Parent :: BillboardGui
+		lockGui.MaxDistance = 80
+		lock.Parent = pen
+		local post = pen:FindFirstChild("GatePost")
+		if post then
+			local sell2 = makePrompt("PenPrompt2", "Sell", 1, post, Enum.KeyCode.F)
+			sell2.UIOffset = Vector2.new(0, -90)
+			sell2.GamepadKeyCode = Enum.KeyCode.ButtonY
+			sell2.Enabled = false
+			sell2:SetAttribute("RestEnabled", true)
+			if side == "Right" then
+				local unlock = makePrompt("UnlockPrompt", "Unlock (99 ROBUX)", 0.4, post)
+				unlock.ObjectText = "Right pasture"
+				unlock.Enabled = false
+				unlock:SetAttribute("RestEnabled", true)
+			end
+		end
+		local classLabel = pen:FindFirstChild("ClassLabel", true)
+		if classLabel and classLabel:IsA("TextLabel") then
+			classLabel.TextWrapped = true
+			local gui = classLabel.Parent
+			if gui and gui:IsA("BillboardGui") then
+				gui.Size = UDim2.fromOffset(240, 80)
+			end
+		end
+		WorldBuilder.setShown(pen, false)
+	end
+	local flexLeft = GameConfig.Zoo.MaxPens + 1
+	-- Positive lateral is the left side when walking in from the road.
+	flexPen(flexLeft, FLEX_LATERAL, "Left", "SPEND ANY ROBUX")
+	flexPen(flexLeft + 1, -FLEX_LATERAL, "Right", "99 ROBUX\nOR AXOLOTL")
 
 	-- Barn upgrade, beside the mouth of the sidewalk.
 	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)
@@ -515,25 +614,33 @@ local function barnShelter(
 	lat0: number,
 	lat1: number,
 	eave: number,
-	post: number
+	post: number,
+	ridgeAlongLat: boolean?
 )
-	local span = depth1 - depth0
 	local midD = (depth0 + depth1) / 2
 	local midL = (lat0 + lat1) / 2
-	local run = (lat1 - lat0) / 2
+	local alongSpan = if ridgeAlongLat then lat1 - lat0 else depth1 - depth0
+	local acrossSpan = if ridgeAlongLat then depth1 - depth0 else lat1 - lat0
+	local run = acrossSpan / 2
 	local pitch = math.rad(18)
 	local overlap = 1
 	local panelLen = (run + overlap) / math.cos(pitch)
 	local halfHoriz = (run + overlap) / 2
+	-- Ridge along the plot. Local Z points toward the negative across-axis so the
+	-- same pitch puts the eave down on both sides of the road.
+	local xAxis = if ridgeAlongLat then -plot.Right else plot.Back
+	local zAxis = if ridgeAlongLat then -plot.Back else -plot.Right
 
-	local function posts(lateral: number)
-		local count = math.max(2, math.floor(span / 12) + 1)
+	local function posts(across: number)
+		local count = math.max(2, math.floor(alongSpan / 12) + 1)
 		for i = 0, count - 1 do
-			local depth = depth0 + span * (i / (count - 1))
+			local along = (if ridgeAlongLat then lat0 else depth0) + alongSpan * (i / (count - 1))
+			local depth = if ridgeAlongLat then across else along
+			local lat = if ridgeAlongLat then along else across
 			makePart({
 				Name = "Post",
 				Size = Vector3.new(post, eave, post),
-				Position = PlotLayout.point(plot, depth, lateral, eave / 2),
+				Position = PlotLayout.point(plot, depth, lat, eave / 2),
 				Color = POST_RED,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
@@ -541,17 +648,27 @@ local function barnShelter(
 			})
 		end
 	end
-	posts(lat0)
-	posts(lat1)
+	if ridgeAlongLat then
+		posts(depth0)
+		posts(depth1)
+	else
+		posts(lat0)
+		posts(lat1)
+	end
 
 	for _, side in { -1, 1 } do
-		local centerLat = midL + side * (run - halfHoriz)
+		local shift = side * (run - halfHoriz)
 		local centerY = eave + (panelLen / 2) * math.sin(pitch)
-		local center = PlotLayout.point(plot, midD, centerLat, centerY)
-		local cf = CFrame.fromMatrix(center, plot.Back, Vector3.yAxis, -plot.Right) * CFrame.Angles(-side * pitch, 0, 0)
+		local center = PlotLayout.point(
+			plot,
+			if ridgeAlongLat then midD + shift else midD,
+			if ridgeAlongLat then midL else midL + shift,
+			centerY
+		)
+		local cf = CFrame.fromMatrix(center, xAxis, Vector3.yAxis, zAxis) * CFrame.Angles(-side * pitch, 0, 0)
 		makePart({
 			Name = "Roof",
-			Size = Vector3.new(span + 1, 0.4, panelLen),
+			Size = Vector3.new(alongSpan + 1, 0.4, panelLen),
 			CFrame = cf,
 			Color = ROOF_RED,
 			Material = Enum.Material.Wood,
@@ -587,23 +704,78 @@ function buildBarns(plot: PlotLayout.PlotFrame, zoo: Folder)
 	local mediumLat = OUTER_LATERAL + LARGE_LAT / 2 + ROOF_OVER
 	barnShelter(plot, shell("BarnMedium"), BARN_FRONT, BARN_AISLE_END, -mediumLat, mediumLat, 14, 0.7)
 
-	-- Giant lane at 3x, plus a large lane on each side only as long as that pen.
+	-- Two small barns in front of the giant's barn. Each roof fits one pen.
 	local large = shell("BarnLarge")
-	local giantLat = GIANT_LAT / 2 + ROOF_OVER
-	barnShelter(plot, large, LARGE_FRONT, LARGE_BACK, -giantLat, giantLat, 12, 0.8)
-	local sideLat = LARGE_LAT / 2 + ROOF_OVER
+	local function cover(
+		parent: Instance,
+		depth: number,
+		lat: number,
+		depthSize: number,
+		latSize: number,
+		eave: number,
+		post: number,
+		ridgeAlongLat: boolean?
+	)
+		barnShelter(
+			plot,
+			parent,
+			depth - depthSize / 2 - ROOF_OVER,
+			depth + depthSize / 2 + ROOF_OVER,
+			lat - latSize / 2 - ROOF_OVER,
+			lat + latSize / 2 + ROOF_OVER,
+			eave,
+			post,
+			ridgeAlongLat
+		)
+	end
 	for _, side in { -1, 1 } do
-		local lat = side * LARGE_SIDE
-		barnShelter(plot, large, LARGE_FRONT, LARGE_LANE_BACK, lat - sideLat, lat + sideLat, 10, 0.65)
+		cover(large, PAIR_CENTER, side * PAIR_LAT, LARGE_DEPTH, LARGE_LAT, 7, 0.6)
 	end
+	cover(large, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, 12, 0.8)
 
-	-- Two lanes, fronts aligned. Each roof stops at the end of its own pen.
+	-- Gargantuan pen stays open. A giant barn sits in front of it, and three skinny
+	-- medium barns run along the left, the right, and the back.
 	local garg = shell("BarnGargantuan")
-	local function lane(lat: number, half: number, depth1: number, eave: number, post: number)
-		barnShelter(plot, garg, GARG_FRONT, depth1, lat - half, lat + half, eave, post)
+	cover(garg, G18_CENTER, 0, GIANT_DEPTH, GIANT_LAT, 12, 0.8)
+	local skinny = LARGE_LAT / 2 + ROOF_OVER
+	for _, side in { -1, 1 } do
+		local lat = side * SIDE_LAT
+		barnShelter(
+			plot,
+			garg,
+			GARG_FRONT_EDGE - ROOF_OVER,
+			GARG_BACK_EDGE + ROOF_OVER,
+			lat - skinny,
+			lat + skinny,
+			14,
+			0.7
+		)
 	end
-	lane(GARG_GIANT_LAT, GIANT_LAT / 2 + ROOF_OVER, GARG_GIANT_BACK, 12, 0.8)
-	lane(GARG_PEN_LAT, GARG_LAT / 2 + ROOF_OVER, GARG_BACK, 16, 1)
+	barnShelter(
+		plot,
+		garg,
+		BACK_CENTER - LARGE_LAT / 2 - ROOF_OVER,
+		BACK_CENTER + LARGE_LAT / 2 + ROOF_OVER,
+		-(GARG_LAT / 2 + ROOF_OVER),
+		GARG_LAT / 2 + ROOF_OVER,
+		14,
+		0.7,
+		true
+	)
+
+	-- Two gargantuan pens behind the last barn. Hidden until the mega upgrade.
+	local mega = shell("BarnMega")
+	local megaOuter = MEGA_LAT + GARG_LAT / 2 + ROOF_OVER
+	barnShelter(
+		plot,
+		mega,
+		MEGA_CENTER - GARG_DEPTH / 2 - ROOF_OVER,
+		MEGA_CENTER + GARG_DEPTH / 2 + ROOF_OVER,
+		-megaOuter,
+		megaOuter,
+		24,
+		1.2
+	)
 end
 
 local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)

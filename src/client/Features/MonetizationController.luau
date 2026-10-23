@@ -29,6 +29,7 @@ local ERROR_COLOR = Color3.fromRGB(255, 130, 120)
 local startedAt = os.clock()
 local state: ShopState = {
 	SoapEndsAt = 0,
+	AutoCollectEndsAt = 0,
 	LuckyLeft = 0,
 	Passes = {},
 	Once = {},

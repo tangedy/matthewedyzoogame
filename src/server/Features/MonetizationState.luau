@@ -27,6 +27,8 @@ export type Saved = {
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
+	PastureUnlocked: boolean, -- any Robux spend; the left pen after the stalls stays open
+	SidePastureUnlocked: boolean, -- 99 Robux, or the Axolotl; the right twin pen stays open
 }
 
 export type Session = {
@@ -79,6 +81,8 @@ local function sanitize(raw: any): Saved
 		Passes = {},
 		Once = {},
 		PendingAnimals = {},
+		PastureUnlocked = false,
+		SidePastureUnlocked = false,
 	}
 	if typeof(raw) ~= "table" then
 		return saved
@@ -112,7 +116,50 @@ local function sanitize(raw: any): Saved
 			end
 		end
 	end
+	local function anyFlag(map: { [string]: boolean }): boolean
+		for _ in map do
+			return true
+		end
+		return false
+	end
+	-- Any earlier Robux spend counts: a receipt, a pass, a once-only product, a queued
+	-- animal, or boost time still on the clock. The flag then sticks even after those expire.
+	saved.PastureUnlocked = raw.PastureUnlocked == true
+		or #saved.Receipts > 0
+		or #saved.PendingAnimals > 0
+		or anyFlag(saved.Passes)
+		or anyFlag(saved.Once)
+		or saved.SuperSoapLeft > 0
+		or saved.AutoCollectLeft > 0
+		or saved.LuckyLeft > 0
+	local pendingAxolotl = false
+	for _, entry in saved.PendingAnimals do
+		if entry.Species == "Axolotl" then
+			pendingAxolotl = true
+			break
+		end
+	end
+	saved.SidePastureUnlocked = raw.SidePastureUnlocked == true or saved.Once.SidePasture == true or pendingAxolotl
 	return saved
+end
+
+local function profileHasAxolotl(data: PlayerDataService.SavedData): boolean
+	for _, animal in data.Animals do
+		if animal.Species == "Axolotl" then
+			return true
+		end
+	end
+	for _, animal in data.Cache do
+		if animal.Species == "Axolotl" then
+			return true
+		end
+	end
+	for key, discovered in data.Index do
+		if discovered == true and string.match(key, "^Axolotl:") then
+			return true
+		end
+	end
+	return false
 end
 
 -- The player's validated monetization data, or nil while their profile isn't loaded.
@@ -125,9 +172,18 @@ function MonetizationState.saved(player: Player): Saved?
 	if cached and data.Extra.Monetization == cached then
 		return cached
 	end
+	local raw = data.Extra.Monetization
+	local already = typeof(raw) == "table" and raw.PastureUnlocked == true
+	local alreadySide = typeof(raw) == "table" and raw.SidePastureUnlocked == true
 	local saved = sanitize(data.Extra.Monetization)
+	if not saved.SidePastureUnlocked and profileHasAxolotl(data) then
+		saved.SidePastureUnlocked = true
+	end
 	data.Extra.Monetization = saved
 	savedCache[player] = saved
+	if (saved.PastureUnlocked and not already) or (saved.SidePastureUnlocked and not alreadySide) then
+		PlayerDataService.markDirty(player)
+	end
 	return saved
 end
 
@@ -206,6 +262,36 @@ function MonetizationState.ownsPass(player: Player, key: string): boolean
 	end
 	local saved = MonetizationState.saved(player)
 	return saved ~= nil and saved.Passes[key] == true
+end
+
+-- The left pen after the stalls stays open once any Robux has been spent.
+-- Returns true only the first time, so the caller can announce it.
+function MonetizationState.unlockPasture(player: Player): boolean
+	local saved = MonetizationState.saved(player)
+	if not saved or saved.PastureUnlocked then
+		return false
+	end
+	saved.PastureUnlocked = true
+	PlayerDataService.markDirty(player)
+	ZooService.refresh(player)
+	return true
+end
+
+-- The right twin pen. 99 Robux, or buying the Axolotl. Returns true only the first time.
+function MonetizationState.unlockSidePasture(player: Player): boolean
+	local saved = MonetizationState.saved(player)
+	if not saved or saved.SidePastureUnlocked then
+		return false
+	end
+	saved.SidePastureUnlocked = true
+	PlayerDataService.markDirty(player)
+	ZooService.refresh(player)
+	return true
+end
+
+function MonetizationState.sidePastureOpen(player: Player): boolean
+	local saved = MonetizationState.saved(player)
+	return saved ~= nil and saved.SidePastureUnlocked == true
 end
 
 function MonetizationState.soapActive(player: Player): boolean

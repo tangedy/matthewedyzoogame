@@ -1,5 +1,5 @@
 -- What each paid item does once it's paid for: boosts, cash, the limited animal (into the cache,
--- or queued until a slot frees) and game pass effects (VIP tag, Fire-Hose Rig unlock).
+-- or queued until a slot frees) and game pass effects (VIP tag, Fire-Hose Rig unlock, 2x speed).
 -- Called from Monetization for real receipts and Studio-simulated purchases alike.
 -- Part of the Monetization feature (no init of its own).
 
@@ -157,10 +157,12 @@ local function grantLimited(
 	table.insert(saved.PendingAnimals, { Species = species, Mutation = mutation })
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
+	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false
+	local bonus = if side then " Right pasture unlocked forever!" else ""
 	if MonetizationGrants.deliverPending(player) > 0 then
-		return true, `You got a Limited {name}!`
+		return true, `You got a Limited {name}!{bonus}`
 	end
-	return true, `You got a Limited {name}! It joins your cache when a slot is free.`
+	return true, `You got a Limited {name}! It joins your cache when a slot is free.{bonus}`
 end
 
 -- The delivery truck's animal: the offer recorded when the purchase was prompted
@@ -259,6 +261,9 @@ function MonetizationGrants.product(
 			return true, "Cleaned! That animal is spotless."
 		end
 		return true, "Clean Now is saved for the next animal this price covers."
+	elseif kind == "SidePasture" then
+		MonetizationState.unlockSidePasture(player)
+		return true, "Right pasture unlocked forever!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -286,6 +291,27 @@ local function addVipTag(character: Model)
 	shine.Color = ColorSequence.new(Color3.fromRGB(255, 250, 200), Color3.fromRGB(255, 170, 20))
 	shine.Parent = label
 	billboard.Parent = head
+end
+
+-- Doubles walk speed once per character. A spawn that isn't ready yet is retried shortly.
+local function applyDoubleSpeed(character: Model)
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not humanoid or not humanoid:IsA("Humanoid") then
+		return
+	end
+	local function boost()
+		if not humanoid.Parent or humanoid:GetAttribute("DoubleSpeed") then
+			return
+		end
+		local speed = humanoid.WalkSpeed
+		if speed <= 0 then
+			return
+		end
+		humanoid:SetAttribute("DoubleSpeed", true)
+		humanoid.WalkSpeed = speed * MonetizationConfig.Speed.Multiplier
+	end
+	boost()
+	task.delay(0.5, boost)
 end
 
 local function unlockTopHose(player: Player)
@@ -318,6 +344,11 @@ function MonetizationGrants.applyPass(player: Player, key: string)
 		unlockTopHose(player)
 	elseif key == "AutoCollectForever" and first then
 		ZooService.collectAll(player)
+	elseif key == MonetizationConfig.Speed.PassKey and first then
+		table.insert(session.Connections, player.CharacterAdded:Connect(applyDoubleSpeed))
+		if player.Character then
+			task.spawn(applyDoubleSpeed, player.Character)
+		end
 	end
 end
 
@@ -325,13 +356,19 @@ end
 -- pass on a live server only lasts the session, so it never outlives the switch to real ids.
 function MonetizationGrants.grantPass(player: Player, key: string, simulated: boolean)
 	local saved = MonetizationState.saved(player)
+	local pasture = false
 	if saved and (not simulated or RunService:IsStudio()) then
 		saved.Passes[key] = true
+		pasture = MonetizationState.unlockPasture(player)
 		PlayerDataService.saveNow(player)
 	end
 	MonetizationGrants.applyPass(player, key)
 	local pass = MonetizationConfig.PassesByKey[key]
-	MonetizationState.notify(player, `{pass.DisplayName} unlocked!`, true)
+	local text = `{pass.DisplayName} unlocked!`
+	if pasture then
+		text ..= " Left pasture unlocked forever!"
+	end
+	MonetizationState.notify(player, text, true)
 	MonetizationState.push(player)
 end
 

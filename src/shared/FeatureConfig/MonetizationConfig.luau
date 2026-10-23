@@ -15,7 +15,7 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SidePasture"
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
 	Seconds: number?, -- AutoCollect: play-time added per purchase
@@ -63,6 +63,7 @@ local GREEN = Color3.fromRGB(90, 220, 110)
 local GOLD = Color3.fromRGB(255, 200, 40)
 local PURPLE = Color3.fromRGB(170, 90, 255)
 local RED = Color3.fromRGB(255, 80, 80)
+local ORANGE = Color3.fromRGB(255, 140, 40)
 
 local products: { Product } = {
 	-- Boosts
@@ -198,7 +199,7 @@ local products: { Product } = {
 		Id = 0,
 		Robux = 1000,
 		DisplayName = "Axolotl",
-		Description = "Limited Mythic! Only 1,000 will ever exist. Never restocked.",
+		Description = "Limited Mythic! Only 1,000 will ever exist. Never restocked. Includes the right pasture.",
 		Tab = "Limited",
 		Order = 1,
 		Kind = "Limited",
@@ -206,6 +207,20 @@ local products: { Product } = {
 		Species = "Axolotl",
 		Mutation = "Normal",
 		Stock = 1000,
+	},
+	-- Prompt on the right twin pasture, not a shop card. The Axolotl grants the same pen.
+	{
+		Key = "SidePasture",
+		Id = 0,
+		Robux = 99,
+		DisplayName = "Right Pasture",
+		Description = "Unlock the right twin pasture forever. Two medium animals, or one large.",
+		Tab = "Boosts",
+		Order = 50,
+		Kind = "SidePasture",
+		Color = GOLD,
+		Hidden = true,
+		OncePerPlayer = true,
 	},
 }
 
@@ -236,6 +251,15 @@ local passes: { Pass } = {
 		Description = "Pens pay themselves forever. You never have to walk the collect pads again.",
 		Order = 3,
 		Color = GREEN,
+	},
+	{
+		Key = "DoubleSpeed",
+		Id = 0,
+		Robux = 99,
+		DisplayName = "2x Speed",
+		Description = "Walk twice as fast, forever.",
+		Order = 4,
+		Color = ORANGE,
 	},
 }
 
@@ -310,6 +334,10 @@ return {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",
 		TagColor = GOLD,
+	},
+	Speed = {
+		Multiplier = 2, -- WalkSpeed while DoubleSpeed is owned
+		PassKey = "DoubleSpeed",
 	},
 	AutoCollect = {
 		MaxSeconds = 8 * 3600, -- stacked 2-hour purchases stop here

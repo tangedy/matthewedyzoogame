@@ -116,8 +116,46 @@ end
 local BODY_RANK = { Standard = 1, Large = 2, ExtraLarge = 3, Giant = 4, Gargantuan = 5 }
 local PEN_ACCEPTS = { Standard = 1, Medium = 3, Large = 3, Giant = 4, Gargantuan = 5 }
 
+-- The pasture behind the barns is only for medium and large animals.
+-- Medium animals are BodyClass Large (cow, horse, lion). Large animals are ExtraLarge.
+-- PastureFlex holds two mediums or one large: a medium spends 1 slot, a large spends 2.
+local PASTURE_ONLY = {
+	PastureMedium = "Large",
+	PastureLarge = "ExtraLarge",
+}
+local FLEX_SLOTS = { Large = 1, ExtraLarge = 2 }
+local FLEX_CAPACITY = 2
+
 function AnimalConfig.fits(bodyClass: string, penClass: string): boolean
+	if penClass == "PastureFlex" then
+		return FLEX_SLOTS[bodyClass] ~= nil
+	end
+	local only = PASTURE_ONLY[penClass]
+	if only then
+		return bodyClass == only
+	end
 	return (BODY_RANK[bodyClass] or 1) <= (PEN_ACCEPTS[penClass] or 1)
+end
+
+-- Slots a flex pasture spends on this body. Nil when the body cannot go in one.
+function AnimalConfig.flexSlots(bodyClass: string): number?
+	return FLEX_SLOTS[bodyClass]
+end
+
+function AnimalConfig.flexCapacity(): number
+	return FLEX_CAPACITY
+end
+
+-- Prompt text when a carried animal does not fit the pen under the cursor.
+function AnimalConfig.placementHint(bodyClass: string, penClass: string): string
+	if penClass == "PastureMedium" and bodyClass == "ExtraLarge" then
+		return "Use a large pen"
+	elseif penClass == "PastureLarge" and bodyClass == "Large" then
+		return "Use a medium pen"
+	elseif penClass == "PastureFlex" then
+		return "Only medium or large animals"
+	end
+	return `Needs a {AnimalConfig.penNeeded(bodyClass)} pen`
 end
 
 -- The smallest pen that can hold this body, named for the prompt.
