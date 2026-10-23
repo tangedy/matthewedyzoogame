@@ -14,7 +14,7 @@ return {
 	MutationChances = { Gold = 0.15, Diamond = 0.08, Rainbow = 0.02 },
 
 	ParkOffset = Vector3.new(0, 0, 10), -- from the bay's road entrance; clear of the walk-in lane
-	StartDistance = 160, -- studs up the road the truck appears from
+	StartDistance = 90, -- studs up the road the truck appears from; stays on the eight-plot road
 	MaxAnimalLength = 7, -- the animal on the bed is scaled down to fit if longer
 
 	Colors = {

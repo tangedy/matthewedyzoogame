@@ -21,6 +21,7 @@ local EconomyService = require(script.Parent.EconomyService)
 local MutationPayout = require(script.Parent.MutationPayout)
 local GuideService = require(script.Parent.GuideService)
 local Hooks = require(script.Parent.Hooks)
+local WorldBuilder = require(script.Parent.WorldBuilder)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 type OwnedAnimal = PlayerDataService.OwnedAnimal
@@ -79,7 +80,7 @@ local function cacheSlot(zoo: Zoo, index: number): BasePart?
 	return if slot and slot:IsA("BasePart") then slot else nil
 end
 
-local function nextExpansion(zooSize: number): { Pens: number, Price: number }?
+local function nextExpansion(zooSize: number): { Pens: number, Price: number, Barn: string }?
 	for _, step in GameConfig.Zoo.Expansions do
 		if step.Pens > zooSize then
 			return step
@@ -203,18 +204,22 @@ local function refreshPens(player: Player)
 		if not pen then
 			continue
 		end
+		local unlocked = i <= data.ZooSize
+		WorldBuilder.setShown(pen, unlocked)
+		if not unlocked then
+			continue
+		end
 		local animal = animalInPen(data, i)
-		local locked = i > data.ZooSize
 		local floor = pen:FindFirstChild("Floor") :: BasePart
-		floor.Color = if locked then Color3.fromRGB(90, 90, 90) else Color3.fromRGB(120, 170, 80)
+		floor.Color = Color3.fromRGB(120, 170, 80)
 		local status = floor:FindFirstChild("Status")
 		local text = status and status:FindFirstChild("Label") :: TextLabel?
 		if text then
-			text.Text = if locked then "LOCKED" elseif animal then "" else "EMPTY"
+			text.Text = if animal then "" else "EMPTY"
 		end
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
-			pad.Transparency = if locked then 1 else 0
+			pad.Transparency = 0
 			-- The client renders the counter (count-up, bounce, money pop) from these.
 			pad:SetAttribute("Cash", if animal then math.floor(animal.Pending) else nil)
 			pad:SetAttribute("Rate", if animal then ZooService.income(animal.Species, animal.Mutation) else nil)
@@ -225,12 +230,18 @@ local function refreshPens(player: Player)
 		if not prompt then
 			continue
 		end
-		if locked or (not carried and not animal) then
+		local penClassAttr = pen:GetAttribute("PenClass")
+		local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
+		if not carried and not animal then
 			prompt.Enabled = false
 		elseif carried then
+			local bodyClass = AnimalConfig.Animals[carried.Species].BodyClass
 			prompt.Enabled = true
 			prompt.ObjectText = ZooService.label(carried.Species, carried.Mutation)
-			if animal then
+			if not AnimalConfig.fits(bodyClass, penClass) then
+				prompt.ActionText = `Needs a {AnimalConfig.penNeeded(bodyClass)} pen`
+				prompt.HoldDuration = 0
+			elseif animal then
 				local value = UIStyle.formatMoney(ZooService.sellValue(animal.Species, animal.Mutation))
 				prompt.ActionText = `Swap (sell {ZooService.label(animal.Species, animal.Mutation)} {value})`
 				prompt.HoldDuration = 0.5
@@ -246,14 +257,31 @@ local function refreshPens(player: Player)
 		end
 	end
 
-	local folder = zoo.Bay:FindFirstChild("Zoo")
-	local counter = folder and folder:FindFirstChild("ExpandCounter")
+	local tier = 0
+	for stepIndex, step in GameConfig.Zoo.Expansions do
+		if data.ZooSize >= step.Pens then
+			tier = stepIndex
+		end
+	end
+	local zooFolder = zoo.Bay:FindFirstChild("Zoo")
+	local function showBarn(name: string, shown: boolean)
+		local shell = zooFolder and zooFolder:FindFirstChild(name)
+		if shell then
+			WorldBuilder.setShown(shell, shown)
+		end
+	end
+	showBarn("BarnSmall", tier == 1)
+	showBarn("BarnMedium", tier >= 2)
+	showBarn("BarnLarge", tier >= 3)
+	showBarn("BarnGargantuan", tier >= 4)
+
+	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter")
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
 	local step = nextExpansion(data.ZooSize)
 	if expandPrompt then
 		expandPrompt.Enabled = step ~= nil
 		if step then
-			expandPrompt.ActionText = `Expand to {step.Pens} pens ({UIStyle.formatMoney(step.Price)})`
+			expandPrompt.ActionText = `{step.Barn} barn ({UIStyle.formatMoney(step.Price)})`
 		end
 	end
 end
@@ -336,6 +364,29 @@ local function dropCarry(player: Player)
 	zoo.CarriedId = nil
 end
 
+-- Pays for a cache animal and walks it forward off the pad, hops a sold beat, then jogs to the street.
+local function sendSoldHome(zoo: Zoo, model: Model?)
+	if not model then
+		return
+	end
+	local sold = zoo.Bay:FindFirstChild("SoldSpot")
+	local back = zoo.Bay:FindFirstChild("RoadReturn")
+	task.spawn(function()
+		if sold and sold:IsA("BasePart") and model.Parent then
+			AnimalService.walkCorners(model, { sold.CFrame }, 0.55)
+		end
+		if model.Parent then
+			AnimalService.sold(model)
+		end
+		if back and back:IsA("BasePart") and model.Parent then
+			AnimalService.walkCorners(model, { back.CFrame }, 0.7, 0.55)
+		end
+		if model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
 -- Pushes the oldest waiting animal out of the cache so a new one fits. Paid animals are never
 -- pushed out. Returns false if nothing could make room.
 local function makeCacheRoom(player: Player): boolean
@@ -354,9 +405,17 @@ local function makeCacheRoom(player: Player): boolean
 			local model = zoo.CacheModels[record.Id]
 			if model then
 				zoo.CacheModels[record.Id] = nil
-				AnimalService.poof(model)
 			end
+			EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
+			Hooks.fire(
+				"AnimalSold",
+				player,
+				record.Species,
+				record.Mutation,
+				ZooService.sellValue(record.Species, record.Mutation)
+			)
 			PlayerDataService.markDirty(player)
+			sendSoldHome(zoo, model)
 			return true
 		end
 	end
@@ -408,6 +467,18 @@ local function placeCarried(player: Player, penIndex: number)
 	local data = PlayerDataService.get(player)
 	local record = carriedRecord(player)
 	if not zoo or not data or not record or penIndex > data.ZooSize then
+		return
+	end
+	local penModel = penOf(zoo, penIndex)
+	local penClassAttr = penModel and penModel:GetAttribute("PenClass")
+	local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
+	local bodyClass = AnimalConfig.Animals[record.Species].BodyClass
+	if not AnimalConfig.fits(bodyClass, penClass) then
+		purchaseResult:FireClient(
+			player,
+			false,
+			`{ZooService.label(record.Species, record.Mutation)} needs a {AnimalConfig.penNeeded(bodyClass)} pen.`
+		)
 		return
 	end
 	local old, oldIndex = animalInPen(data, penIndex)
@@ -524,7 +595,7 @@ local function sellFromCache(player: Player, slotIndex: number)
 	local model = zoo.CacheModels[record.Id]
 	if model then
 		zoo.CacheModels[record.Id] = nil
-		AnimalService.poof(model)
+		sendSoldHome(zoo, model)
 	end
 	PlayerDataService.markDirty(player)
 	refreshAll(player)
@@ -583,7 +654,7 @@ local function expand(player: Player)
 	data.ZooSize = step.Pens
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
-	purchaseResult:FireClient(player, true, `Zoo expanded to {step.Pens} pens!`)
+	purchaseResult:FireClient(player, true, `{step.Barn} barn unlocked!`)
 end
 
 -- Washed animals ------------------------------------------------------------------------

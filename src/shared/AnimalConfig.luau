@@ -15,6 +15,9 @@ export type AnimalDefinition = {
 	RequiredToolTier: number,
 	WashTimeMultiplier: number,
 	Limited: boolean?, -- sold, never spawns (SpawnWeight 0); see the monetization feature
+	-- Which pens can hold this animal. Standard fits a face stall. Larger classes need a
+	-- barn pen built for them (see AnimalConfig.fits).
+	BodyClass: "Standard" | "Large" | "ExtraLarge" | "Giant" | "Gargantuan",
 }
 
 local function animal(
@@ -33,6 +36,7 @@ local function animal(
 		SpawnWeight = weight,
 		RequiredToolTier = toolTier,
 		WashTimeMultiplier = washTime,
+		BodyClass = "Standard",
 	}
 end
 
@@ -84,5 +88,48 @@ local AnimalConfig = {
 	} :: { [string]: AnimalDefinition },
 }
 AnimalConfig.Animals.TRex.TemplateName = "TRex"
+
+local BODY: { [string]: string } = {
+	Cow = "Large",
+	Donkey = "Large",
+	Horse = "Large",
+	Llama = "Large",
+	Zebra = "Large",
+	Panda = "Large",
+	Lion = "Large",
+	Giraffe = "ExtraLarge",
+	Hippo = "ExtraLarge",
+	Griffon = "ExtraLarge",
+	Phoenix = "ExtraLarge",
+	Kitsune = "ExtraLarge",
+	Elephant = "Giant",
+	Unicorn = "Giant",
+	Dragon = "Gargantuan",
+	TRex = "Gargantuan",
+	Kaiju = "Gargantuan",
+}
+for key, class in BODY do
+	AnimalConfig.Animals[key].BodyClass = class
+end
+
+-- Pen classes accept every body class at or below this rank.
+local BODY_RANK = { Standard = 1, Large = 2, ExtraLarge = 3, Giant = 4, Gargantuan = 5 }
+local PEN_ACCEPTS = { Standard = 1, Medium = 3, Large = 3, Giant = 4, Gargantuan = 5 }
+
+function AnimalConfig.fits(bodyClass: string, penClass: string): boolean
+	return (BODY_RANK[bodyClass] or 1) <= (PEN_ACCEPTS[penClass] or 1)
+end
+
+-- The smallest pen that can hold this body, named for the prompt.
+function AnimalConfig.penNeeded(bodyClass: string): string
+	if bodyClass == "Gargantuan" then
+		return "gargantuan"
+	elseif bodyClass == "Giant" then
+		return "giant"
+	elseif bodyClass == "ExtraLarge" or bodyClass == "Large" then
+		return "medium"
+	end
+	return "stall"
+end
 
 return AnimalConfig

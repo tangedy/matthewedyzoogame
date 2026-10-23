@@ -3,6 +3,9 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- The character waits until a base exists, then loads on that base's spawn.
+Players.CharacterAutoLoads = false
+
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Services
 local EnvironmentBuilder = require(Services.EnvironmentBuilder)
@@ -64,8 +67,21 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 end
 
 local function onPlayerAdded(player: Player)
-	player.CharacterAdded:Connect(function()
+	player.CharacterAdded:Connect(function(character)
 		CleaningService.refreshHose(player)
+		-- CharacterAutoLoads is off, so a death has to load the character again.
+		-- RespawnLocation is this player's base pad.
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		if not humanoid or not player.Parent or player.Character ~= character then
+			return
+		end
+		humanoid.Died:Once(function()
+			task.delay(Players.RespawnTime, function()
+				if player.Parent and player.Character == character then
+					player:LoadCharacter()
+				end
+			end)
+		end)
 	end)
 	if player.Character then
 		task.spawn(CleaningService.refreshHose, player)
@@ -80,6 +96,10 @@ local function onPlayerAdded(player: Player)
 	BayService.assign(player)
 	EconomyService.sendTool(player)
 	CleaningService.refreshHose(player) -- now that the tool tier is known
+	-- RespawnLocation is already the owner's pad, so this first load lands on the base.
+	if player.Parent and not player.Character then
+		player:LoadCharacter()
+	end
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
