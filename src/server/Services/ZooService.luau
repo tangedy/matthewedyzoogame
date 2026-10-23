@@ -382,9 +382,27 @@ local function makeCacheRoom(player: Player): boolean
 			local model = zoo.CacheModels[record.Id]
 			if model then
 				zoo.CacheModels[record.Id] = nil
-				AnimalService.poof(model)
 			end
+			EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
+			Hooks.fire(
+				"AnimalSold",
+				player,
+				record.Species,
+				record.Mutation,
+				ZooService.sellValue(record.Species, record.Mutation)
+			)
 			PlayerDataService.markDirty(player)
+			if model then
+				local back = zoo.Bay:FindFirstChild("RoadReturn")
+				task.spawn(function()
+					if back and back:IsA("BasePart") and model.Parent then
+						AnimalService.walkCorners(model, { back.CFrame }, 1.6)
+					end
+					if model.Parent then
+						model:Destroy()
+					end
+				end)
+			end
 			return true
 		end
 	end

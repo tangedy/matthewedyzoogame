@@ -5,16 +5,16 @@ local GameConfig = {
 	-- Eight plots: four on each side of a center road. Bays are built only while a player
 	-- owns one. BayCount caps how many; set the place's Max Players to match.
 	BayCount = 8,
-	BaySpacing = 120, -- along Z. Four centres per side: -180, -60, 60, 180
+	BaySpacing = 150, -- along Z. Four centres per side: -225, -75, 75, 225
 	-- The dirt road runs along Z through the middle. Plots grow away from it (east +X, west -X)
 	-- so a barn can expand backward without crossing the street or a neighbor.
 	RoadX = 0,
 	RoadWidth = 45, -- five times the old 9-stud road
-	SidewalkWidth = 9, -- the old road width, reused as each plot's stall path
-	PlotWidth = 100, -- along Z, inside the 120-stud pitch, leaving a tree gap
+	SidewalkWidth = 27, -- three times the old 9-stud road; cages sit off this path
+	PlotWidth = 130, -- along Z, inside the pitch, leaving a tree gap
 	PlotDepth = 380, -- from the road edge back through the gargantuan barn
-	GroundSize = Vector3.new(1100, 2, 1500),
-	WashQueue = 3, -- animals standing on the U; only the front one is washed
+	GroundSize = Vector3.new(900, 2, 760), -- the eight plots, barn depth, and a thin tree edge
+	WashQueue = 3, -- animals standing in the square lane; only the front one is washed
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart

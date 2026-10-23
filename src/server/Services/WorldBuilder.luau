@@ -1,15 +1,15 @@
 -- Builds one farm when a player is given a plot, and destroys it when they leave.
 -- Slots 1-4 are east of the road, 5-8 west. Each plot faces the road and grows backward:
---   U wash (three queue marks) -> cache -> sidewalk -> face stalls -> barns.
+--   square wash lane -> cache on the parallel dirt road -> wide path -> cages -> barns.
 --
 -- Each bay exposes:
---   Entrance, WashPosition, Queue2, Queue3, Exit   lane markers (LookVector = travel direction)
+--   Approach, TurnIn, WashPosition, Queue2, Queue3, RoadReturn, Exit
 --   Spawn                          the owner's SpawnLocation
 --   SignPost.Sign.BayLabel         owner name
 --   UpgradeStation.Counter         hose shop prompt
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
---   Zoo.ExpandCounter              barn upgrade, beside the sidewalk entrance
+--   Zoo.ExpandCounter              barn upgrade, beside the path entrance
 --   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan
 
 local CollectionService = game:GetService("CollectionService")
@@ -29,15 +29,16 @@ local WOOD = Color3.fromRGB(150, 110, 70)
 local WOOD_DARK = Color3.fromRGB(110, 75, 45)
 
 -- Depths measured from the road edge, away from the street.
-local MOUTH = 14
-local RADIUS = 30
-local QUEUE_DEPTH = { 40, 28, 16 } -- 1 is the wash, at the closed end of the U
-local CACHE_DEPTH = 52
-local WALK_START = 62
-local STALL_DEPTH = 16
-local STALL_LAT = 14
-local STALL_PITCH = 22
-local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 2 + STALL_LAT / 2
+-- The queue is a straight lane in from the road. The wash road runs parallel to the
+-- main road at the wash depth, and the cache is further along that road.
+local ROAD_D = -8
+local QUEUE_DEPTH = { 40, 28, 16 } -- 1 is the wash, furthest in; 3 is the back of the queue
+local CACHE_LAT = 18
+local WALK_START = 58
+local STALL_DEPTH = 8 -- half the old 16
+local STALL_LAT = 7 -- half the old 14
+local STALL_PITCH = 14
+local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
 local BARN_FRONT = WALK_END + 8
@@ -70,15 +71,6 @@ local GARG_BACK = GARG_CENTER + GARG_DEPTH / 2 + 8
 local GARG_SPAN = GIANT_LAT + 6 + GARG_LAT
 local GARG_GIANT_LAT = -GARG_SPAN / 2 + GIANT_LAT / 2
 local GARG_PEN_LAT = GARG_GIANT_LAT + GIANT_LAT / 2 + 6 + GARG_LAT / 2
-
-local FACES = {
-	{ Wall = Color3.fromRGB(255, 170, 185), Trim = Color3.fromRGB(230, 120, 145), Muzzle = Color3.fromRGB(255, 140, 165), Kind = "snout" },
-	{ Wall = Color3.fromRGB(245, 245, 240), Trim = Color3.fromRGB(40, 40, 45), Muzzle = Color3.fromRGB(255, 150, 175), Kind = "horns" },
-	{ Wall = Color3.fromRGB(255, 214, 80), Trim = Color3.fromRGB(210, 50, 45), Muzzle = Color3.fromRGB(255, 140, 40), Kind = "beak" },
-	{ Wall = Color3.fromRGB(245, 245, 245), Trim = Color3.fromRGB(35, 35, 40), Muzzle = Color3.fromRGB(40, 40, 45), Kind = "wool" },
-	{ Wall = Color3.fromRGB(255, 220, 70), Trim = Color3.fromRGB(255, 150, 40), Muzzle = Color3.fromRGB(255, 140, 30), Kind = "bill" },
-	{ Wall = Color3.fromRGB(250, 250, 250), Trim = Color3.fromRGB(255, 170, 190), Muzzle = Color3.fromRGB(255, 160, 180), Kind = "ears" },
-}
 
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
@@ -201,7 +193,7 @@ end
 local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local station = Instance.new("Model")
 	station.Name = "UpgradeStation"
-	local base = PlotLayout.point(plot, 30, 36, 0)
+	local base = PlotLayout.point(plot, 24, -30, 0)
 	local counter = makePart({
 		Name = "Counter",
 		Size = Vector3.new(3, 3, 6),
@@ -226,16 +218,19 @@ end
 local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	local cache = Instance.new("Folder")
 	cache.Name = "Cache"
+	local pos = PlotLayout.point(plot, QUEUE_DEPTH[1], CACHE_LAT, FLOOR_Y)
+	-- Faces along the wash road, the direction the animal walked. It does not turn around.
+	local facing = CFrame.lookAt(pos, pos + plot.Right)
 	makePart({
 		Name = "CacheFloor",
 		Size = Vector3.new(10, 0.4, 10),
-		Position = PlotLayout.point(plot, CACHE_DEPTH, 0, 0.2),
+		Position = pos,
 		Color = Color3.fromRGB(230, 190, 120),
 		Material = Enum.Material.WoodPlanks,
 		CanQuery = false,
 		Parent = cache,
 	})
-	local slot = makeMarker("Slot1", PlotLayout.outbound(plot, CACHE_DEPTH, 0, FLOOR_Y), cache)
+	local slot = makeMarker("Slot1", facing, cache)
 	slot:SetAttribute("SlotIndex", 1)
 	makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false
 	local sell = makePrompt("SellPrompt", "Sell", 1.5, slot, Enum.KeyCode.F)
@@ -243,182 +238,6 @@ local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	sell.GamepadKeyCode = Enum.KeyCode.ButtonY
 	sell.Enabled = false
 	cache.Parent = bay
-end
-
--- A stall whose sidewalk face is an animal: eyes, a muzzle, and a mouth-shaped gate.
-local function buildFace(
-	plot: PlotLayout.PlotFrame,
-	depth: number,
-	lateral: number,
-	faceIndex: number,
-	parent: Instance
-)
-	local face = FACES[faceIndex]
-	local halfD = STALL_DEPTH / 2
-	local halfL = STALL_LAT / 2
-	local sign = if lateral >= 0 then 1 else -1
-	local inner = lateral - sign * halfL
-	local outer = lateral + sign * halfL
-	local wallH = 8
-	local mouthW = 5
-	local mouthH = 4.6
-	local sideW = (STALL_DEPTH - mouthW) / 2
-
-	local function at(d: number, lat: number, y: number): Vector3
-		return PlotLayout.point(plot, d, lat, y)
-	end
-
-	makePart({
-		Name = "Floor",
-		Size = Vector3.new(STALL_DEPTH, 1, STALL_LAT),
-		Position = at(depth, lateral, 0),
-		Color = Color3.fromRGB(120, 170, 80),
-		Material = Enum.Material.Grass,
-		Parent = parent,
-	})
-	-- Back and sides.
-	makePart({
-		Name = "Wall",
-		Size = Vector3.new(STALL_DEPTH, wallH, 0.6),
-		Position = at(depth, outer, wallH / 2),
-		Color = face.Wall,
-		CanQuery = false,
-		Parent = parent,
-	})
-	for _, edge in { -1, 1 } do
-		makePart({
-			Name = "Wall",
-			Size = Vector3.new(0.6, wallH, STALL_LAT),
-			Position = at(depth + edge * halfD, lateral, wallH / 2),
-			Color = face.Wall,
-			CanQuery = false,
-			Parent = parent,
-		})
-	end
-	-- Front split around the mouth, which is the gate onto the sidewalk.
-	for _, edge in { -1, 1 } do
-		makePart({
-			Name = "Wall",
-			Size = Vector3.new(sideW, wallH, 0.6),
-			Position = at(depth + edge * (mouthW / 2 + sideW / 2), inner, wallH / 2),
-			Color = face.Wall,
-			CanQuery = false,
-			Parent = parent,
-		})
-	end
-	local lintelH = wallH - mouthH
-	makePart({
-		Name = "Wall",
-		Size = Vector3.new(mouthW, lintelH, 0.6),
-		Position = at(depth, inner, mouthH + lintelH / 2),
-		Color = face.Wall,
-		CanQuery = false,
-		Parent = parent,
-	})
-	-- Eyes sit on the lintel, proud of the wall toward the sidewalk.
-	local eyeLat = inner - sign * 0.7
-	for _, edge in { -1, 1 } do
-		local eye = makePart({
-			Name = "Eye",
-			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(1.5, 1.5, 1.5),
-			Position = at(depth + edge * 1.5, eyeLat, 6.3),
-			Color = Color3.fromRGB(255, 255, 255),
-			CanCollide = false,
-			CanQuery = false,
-			Parent = parent,
-		})
-		makePart({
-			Name = "Pupil",
-			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(0.7, 0.7, 0.7),
-			Position = eye.Position + plot.Right * (-sign) * 0.45,
-			Color = face.Trim,
-			CanCollide = false,
-			CanQuery = false,
-			Parent = parent,
-		})
-	end
-	local muzzleLat = inner - sign * 1.3
-	makePart({
-		Name = "Muzzle",
-		Size = if face.Kind == "bill" then Vector3.new(3.2, 0.8, 1.6) else Vector3.new(2.4, 1.5, 1.6),
-		Position = at(depth, muzzleLat, if face.Kind == "beak" or face.Kind == "bill" then 4.6 else 3.6),
-		Color = face.Muzzle,
-		CanCollide = false,
-		CanQuery = false,
-		Parent = parent,
-	})
-	if face.Kind == "snout" then
-		for _, edge in { -1, 1 } do
-			makePart({
-				Name = "Nostril",
-				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(0.35, 0.35, 0.35),
-				Position = at(depth + edge * 0.45, muzzleLat - sign * 0.7, 3.6),
-				Color = face.Trim,
-				CanCollide = false,
-				CanQuery = false,
-				Parent = parent,
-			})
-		end
-	elseif face.Kind == "horns" then
-		for _, edge in { -1, 1 } do
-			makePart({
-				Name = "Horn",
-				Size = Vector3.new(0.4, 1.6, 0.4),
-				Position = at(depth + edge * 2.2, inner, wallH + 0.4),
-				Color = Color3.fromRGB(230, 220, 190),
-				CanCollide = false,
-				CanQuery = false,
-				Parent = parent,
-			})
-		end
-		makePart({
-			Name = "Spot",
-			Size = Vector3.new(2.2, 1.4, 0.3),
-			Position = at(depth + 3.2, outer - sign * 0.2, 5),
-			Color = face.Trim,
-			CanCollide = false,
-			CanQuery = false,
-			Parent = parent,
-		})
-	elseif face.Kind == "beak" then
-		makePart({
-			Name = "Comb",
-			Size = Vector3.new(0.4, 1.4, 1.2),
-			Position = at(depth, inner, wallH + 0.4),
-			Color = face.Trim,
-			CanCollide = false,
-			CanQuery = false,
-			Parent = parent,
-		})
-	elseif face.Kind == "wool" then
-		for i = 1, 3 do
-			makePart({
-				Name = "Wool",
-				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(2.4, 2.4, 2.4),
-				Position = at(depth + (i - 2) * 2.2, outer - sign * 0.4, 6.2),
-				Color = Color3.fromRGB(250, 250, 250),
-				CanCollide = false,
-				CanQuery = false,
-				Parent = parent,
-			})
-		end
-	elseif face.Kind == "ears" then
-		for _, edge in { -1, 1 } do
-			makePart({
-				Name = "Ear",
-				Size = Vector3.new(0.5, 2.6, 1),
-				Position = at(depth + edge * 1.6, inner, wallH + 0.8),
-				Color = face.Wall,
-				CanCollide = false,
-				CanQuery = false,
-				Parent = parent,
-			})
-		end
-	end
 end
 
 local function addPenPrompts(
@@ -441,7 +260,15 @@ local function addPenPrompts(
 		Parent = pen,
 	})
 	makePrompt("PenPrompt", "Sell", 1, post).Enabled = false
-	local padPos = gate + look * 2.2
+	-- Collect pad sits on the path in front of the cage, not inside it.
+	local facingRoad = math.abs(look:Dot(plot.Look)) > 0.5
+	local padPos
+	if facingRoad then
+		padPos = gate + look * 2.2
+	else
+		local sign = if lateral >= 0 then 1 else -1
+		padPos = PlotLayout.point(plot, depth, sign * (GameConfig.SidewalkWidth / 2 - 3.5), 0.3)
+	end
 	local pad = makePart({
 		Name = "CollectPad",
 		Size = Vector3.new(3.2, 0.3, 3.2),
@@ -483,9 +310,9 @@ local function buildFencedPen(
 	local h = math.clamp(latSize * 0.28, 3.5, 8)
 	local y = h / 2
 	local halfD, halfL = depthSize / 2, latSize / 2
-	local gate = 4
+	local gate = if math.min(depthSize, latSize) <= 10 then 3 else 4
 	-- Back and sides are solid. The front, toward `look`, is split around a gate.
-	-- Front is the side the look vector leaves through. look is either ±Right (a side
+	-- Front is the side the look vector leaves through. look is either Â±Right (a side
 	-- pen) or Look (a pen facing the road). Both are axis-aligned, so the front wall
 	-- is the thin face on that axis.
 	local facingRoad = math.abs(look:Dot(plot.Look)) > 0.5
@@ -579,41 +406,29 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 	local zoo = Instance.new("Folder")
 	zoo.Name = "Zoo"
 
-	local function addPen(index: number, depth: number, lateral: number, depthSize: number, latSize: number, class: string, face: number?)
+	local function addPen(index: number, depth: number, lateral: number, depthSize: number, latSize: number, class: string)
 		local pen = Instance.new("Model")
 		pen.Name = "Pen" .. index
 		pen:SetAttribute("PenIndex", index)
 		pen:SetAttribute("PenClass", class)
-		local look = if face then inwardLook(plot, lateral) elseif class == "Giant" or class == "Gargantuan" or class == "Large"
+		local look = if class == "Giant" or class == "Gargantuan" or class == "Large"
 			then if math.abs(lateral) < 1 then plot.Look else inwardLook(plot, lateral)
 			else inwardLook(plot, lateral)
-		if face then
-			buildFace(plot, depth, lateral, face, pen)
-			local floor = pen:FindFirstChild("Floor") :: BasePart
-			local status = billboardLabel(floor, "", Vector3.new(0, 9, 0), Vector2.new(80, 18))
-			local stroke = status:FindFirstChildOfClass("UIStroke")
-			if stroke then
-				stroke.Thickness = 1.25
-			end
-			(status.Parent :: Instance).Name = "Status"
-			addPenPrompts(plot, pen, depth, lateral, look, STALL_LAT / 2 + 2)
-		else
-			buildFencedPen(plot, pen, depth, lateral, depthSize, latSize, look)
-		end
+		buildFencedPen(plot, pen, depth, lateral, depthSize, latSize, look)
 		pen.Parent = zoo
 		if index > GameConfig.Zoo.StartPens then
 			WorldBuilder.setShown(pen, false)
 		end
 	end
 
-	-- Six face stalls, three on each side of the sidewalk. Front of the row is nearest the road.
+	-- Six cages, three on each side of the path. Front of the row is nearest the road.
 	local stallDepth0 = WALK_START + 8 + STALL_DEPTH / 2
 	for row = 0, 2 do
 		local depth = stallDepth0 + row * STALL_PITCH
 		local left = row * 2 + 1
 		local right = left + 1
-		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", left)
-		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", right)
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
 	end
 
 	-- Small barn: two standard pens each side. Medium adds a wider column each side.
@@ -621,22 +436,22 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		local depth = ROW_DEPTH[row]
 		local left = 6 + row * 2 - 1 -- 7, 9
 		local right = left + 1 -- 8, 10
-		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", nil)
-		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", nil)
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
 		local outerLeft = 10 + row * 2 - 1 -- 11, 13
 		local outerRight = outerLeft + 1
-		addPen(outerLeft, depth, -OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium", nil)
-		addPen(outerRight, depth, OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium", nil)
+		addPen(outerLeft, depth, -OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium")
+		addPen(outerRight, depth, OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium")
 	end
 
 	-- Large barn, one rank behind: giant in the middle, a large pen on each side.
-	addPen(15, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant", nil)
-	addPen(16, LARGE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large", nil)
-	addPen(17, LARGE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large", nil)
+	addPen(15, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant")
+	addPen(16, LARGE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
+	addPen(17, LARGE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
 
 	-- Gargantuan barn, further back: one more giant and one gargantuan pen.
-	addPen(18, GARG_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant", nil)
-	addPen(19, GARG_CENTER, GARG_PEN_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", nil)
+	addPen(18, GARG_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant")
+	addPen(19, GARG_CENTER, GARG_PEN_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan")
 
 	-- Barn upgrade, beside the mouth of the sidewalk.
 	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)
@@ -795,16 +610,28 @@ function buildBarns(plot: PlotLayout.PlotFrame, zoo: Folder)
 end
 
 local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
-	-- Yard under the queue. The fence, not this pad, is what reads as the U.
-	local yardDepth = (QUEUE_DEPTH[3] + QUEUE_DEPTH[1]) / 2
-	local yardSpan = QUEUE_DEPTH[1] - QUEUE_DEPTH[3] + 14
+	local laneSpan = QUEUE_DEPTH[1] - ROAD_D
+	-- Inward lane: off the main road, a bit in, where the queue stands.
 	makePart({
-		Name = "WashCourt",
-		Size = Vector3.new(yardSpan, 0.4, RADIUS * 1.4),
-		Position = PlotLayout.point(plot, yardDepth, 0, 0.2),
-		Color = Color3.fromRGB(214, 196, 160),
-		Material = Enum.Material.Cobblestone,
+		Name = "QueueLane",
+		Size = Vector3.new(laneSpan, 0.25, 12),
+		Position = PlotLayout.point(plot, ROAD_D + laneSpan / 2, 0, 0.14),
+		Color = Color3.fromRGB(196, 154, 96),
+		Material = Enum.Material.Ground,
 		CanQuery = false,
+		CanCollide = false,
+		Parent = bay,
+	})
+	-- Wash road, parallel to the main road. The animal turns onto it and walks forward to the cache.
+	local roadSpan = CACHE_LAT + 16
+	makePart({
+		Name = "WashRoad",
+		Size = Vector3.new(12, 0.25, roadSpan),
+		Position = PlotLayout.point(plot, QUEUE_DEPTH[1], roadSpan / 2 - 4, 0.16),
+		Color = Color3.fromRGB(186, 142, 86),
+		Material = Enum.Material.Ground,
+		CanQuery = false,
+		CanCollide = false,
 		Parent = bay,
 	})
 	makePart({
@@ -817,27 +644,19 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		CanQuery = false,
 		Parent = bay,
 	})
-	for deg = -78, 78, 6 do
-		if math.abs(deg) >= 18 then
-			local theta = math.rad(deg)
-			local depth = MOUTH + math.cos(theta) * RADIUS
-			local lateral = math.sin(theta) * RADIUS
-			makePart({
-				Name = "WashFence",
-				Size = Vector3.new(0.7, 3.4, 0.7),
-				Position = PlotLayout.point(plot, depth, lateral, 1.7),
-				Color = Color3.fromRGB(235, 225, 200),
-				Material = Enum.Material.Wood,
-				CanQuery = false,
-				Parent = bay,
-			})
-		end
+	local function alongRoad(depth: number, lateral: number): CFrame
+		local pos = PlotLayout.point(plot, depth, lateral, FLOOR_Y)
+		return CFrame.lookAt(pos, pos + plot.Right)
 	end
+	makeMarker("Approach", alongRoad(ROAD_D, -40), bay)
+	makeMarker("TurnIn", alongRoad(ROAD_D, 0), bay)
 	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], 0, FLOOR_Y), bay)
 	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], 0, FLOOR_Y), bay)
 	makeMarker("Queue3", PlotLayout.inbound(plot, QUEUE_DEPTH[3], 0, FLOOR_Y), bay)
-	makeMarker("Entrance", PlotLayout.inbound(plot, -8, 0, 0.25), bay)
-	makeMarker("Exit", PlotLayout.inbound(plot, -8, 14, 0.25), bay)
+	makeMarker("Entrance", alongRoad(ROAD_D, -16), bay)
+	local back = PlotLayout.point(plot, ROAD_D, CACHE_LAT, FLOOR_Y)
+	makeMarker("RoadReturn", CFrame.lookAt(back, back + plot.Look), bay)
+	makeMarker("Exit", CFrame.lookAt(back, back + plot.Look), bay)
 end
 
 local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
@@ -864,7 +683,7 @@ function WorldBuilder.buildBay(index: number): Model
 	buildUpgradeStation(plot, bay)
 	buildZoo(plot, bay)
 
-	local spawnPos = PlotLayout.point(plot, 32, -16, FLOOR_Y)
+	local spawnPos = PlotLayout.point(plot, 50, -22, FLOOR_Y)
 	local washPos = PlotLayout.point(plot, QUEUE_DEPTH[1], 0, FLOOR_Y)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"

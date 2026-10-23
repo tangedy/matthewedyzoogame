@@ -60,6 +60,9 @@ type Bay = {
 	Label: TextLabel?,
 	Right: Vector3,
 	QueueMarks: { BasePart },
+	Approach: BasePart,
+	TurnIn: BasePart,
+	RoadReturn: BasePart,
 	Line: { Arrival },
 	Owner: Player?,
 	State: Types.BayState,
@@ -121,30 +124,6 @@ local function clearLine(bay: Bay)
 	disposeJob(bay)
 end
 
--- Stops if a newer walk takes the same animal, or the model is gone.
-local function moveArrival(arrival: Arrival, target: CFrame, duration: number)
-	local model = arrival.Model
-	if not model.Parent then
-		return
-	end
-	arrival.Token += 1
-	local token = arrival.Token
-	local start = model:GetPivot()
-	local elapsed = 0
-	while elapsed < duration and model.Parent and arrival.Token == token do
-		elapsed += task.wait()
-		if not model.Parent or arrival.Token ~= token then
-			break
-		end
-		local t = math.min(elapsed / duration, 1)
-		local bob = math.abs(math.sin(elapsed * 10)) * 0.25
-		model:PivotTo(start:Lerp(target, t) + Vector3.new(0, bob, 0))
-	end
-	if model.Parent and arrival.Token == token then
-		model:PivotTo(target)
-	end
-end
-
 local function waitAll(moves: { () -> () }, bay: Bay, owner: Player)
 	local left = #moves
 	for _, fn in moves do
@@ -174,7 +153,7 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	end
 	local id = HttpService:GenerateGUID(false)
 	local slot = #bay.Line + 1
-	local at = bay.Entrance.CFrame + bay.Right * (-(slot - 1) * 12)
+	local at = bay.Approach.CFrame + bay.Right * (-(slot - 1) * 14)
 	local model, patches = AnimalService.spawn(animalKey, mutationKey, id, at, bay.Model)
 	model.Name = "QueuedAnimal"
 	return {
@@ -199,13 +178,15 @@ local function ensureLine(bay: Bay, owner: Player)
 		local slot = #bay.Line + 1
 		table.insert(bay.Line, arrival)
 		local target = bay.QueueMarks[slot].CFrame
+		local turn = bay.TurnIn.CFrame
 		local delay = (slot - 1) * 1.1
 		table.insert(moves, function()
 			if delay > 0 then
 				task.wait(delay)
 			end
 			if arrival.Model.Parent and bay.Owner == owner then
-				moveArrival(arrival, target, GameConfig.ArriveDuration)
+				-- Along the road, one turn, then in to this queue spot.
+				AnimalService.walkCorners(arrival.Model, { turn, target }, GameConfig.ArriveDuration * 0.7)
 			end
 		end)
 	end
@@ -223,7 +204,7 @@ local function stepLine(bay: Bay, owner: Player)
 	for index, arrival in bay.Line do
 		local target = bay.QueueMarks[index].CFrame
 		table.insert(moves, function()
-			moveArrival(arrival, target, 1.6)
+			AnimalService.walkCorners(arrival.Model, { target }, 1.2)
 		end)
 	end
 	waitAll(moves, bay, owner)
@@ -233,7 +214,11 @@ local function stepLine(bay: Bay, owner: Player)
 	local arrival = rollArrival(bay, owner)
 	table.insert(bay.Line, arrival)
 	local target = bay.QueueMarks[#bay.Line].CFrame
-	task.spawn(moveArrival, arrival, target, GameConfig.ArriveDuration)
+	task.spawn(function()
+		if arrival.Model.Parent then
+			AnimalService.walkCorners(arrival.Model, { bay.TurnIn.CFrame, target }, GameConfig.ArriveDuration * 0.7)
+		end
+	end)
 end
 
 -- Called by CleaningService exactly when the last patch is cleaned.
@@ -324,7 +309,8 @@ local function runOneJob(bay: Bay, owner: Player)
 		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
 		setState(bay, "Departing")
 		front.Token += 1
-		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+		local back = bay.RoadReturn.CFrame
+		AnimalService.walkCorners(model, { bay.Model.Cache.Slot1.CFrame, back }, GameConfig.DepartDuration)
 		if bay.Line[1] == front then
 			table.remove(bay.Line, 1)
 		end
@@ -362,16 +348,12 @@ local function runOneJob(bay: Bay, owner: Player)
 	front.Token += 1
 	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey, { Evict = true })
 	if record and slot then
-		local pos = model:GetPivot().Position
-		local facing = (slot.Position - pos) * Vector3.new(1, 0, 1)
-		if facing.Magnitude > 0.1 then
-			AnimalService.moveTo(model, CFrame.lookAt(slot.Position, slot.Position + facing), GameConfig.DepartDuration)
-		end
-		AnimalService.moveTo(model, slot, 0.5) -- turn to face out of the cache
+		-- Turn onto the wash road and walk forward. The cache faces the same way.
+		AnimalService.walkCorners(model, { slot }, GameConfig.DepartDuration)
 		job.Model = nil
 		ZooService.adoptIntoCache(owner, record, model)
 	else
-		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+		AnimalService.walkCorners(model, { bay.RoadReturn.CFrame }, GameConfig.DepartDuration)
 		job.Model = nil
 		AnimalService.destroy(model)
 	end
@@ -413,6 +395,9 @@ local function makeBay(index: number): Bay
 		Label = sign and sign:FindFirstChild("BayLabel") :: TextLabel?,
 		Right = PlotLayout.frame(index).Right,
 		QueueMarks = { wash, queue2, queue3 },
+		Approach = model:FindFirstChild("Approach") :: BasePart,
+		TurnIn = model:FindFirstChild("TurnIn") :: BasePart,
+		RoadReturn = model:FindFirstChild("RoadReturn") :: BasePart,
 		Line = {},
 		Owner = nil,
 		State = "Empty",

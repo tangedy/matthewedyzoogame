@@ -266,6 +266,43 @@ function AnimalService.spawn(animalKey: string, mutationKey: string, jobId: stri
 	return model, patches
 end
 
+-- Right-angle walk. The animal turns in place at each corner, then slides straight to the
+-- next point without spinning on the way. Yields until the last point.
+function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach: number)
+	for _, target in points do
+		if not model.Parent then
+			return
+		end
+		local here = model:GetPivot().Position
+		local flat = Vector3.new(target.Position.X - here.X, 0, target.Position.Z - here.Z)
+		if flat.Magnitude < 0.4 then
+			continue
+		end
+		local dir = flat.Unit
+		local turnFrom = model:GetPivot()
+		local elapsed = 0
+		while elapsed < 0.28 and model.Parent do
+			elapsed += task.wait()
+			local t = math.min(elapsed / 0.28, 1)
+			local pos = turnFrom.Position
+			model:PivotTo(turnFrom:Lerp(CFrame.lookAt(pos, pos + dir), t))
+		end
+		local startPos = model:GetPivot().Position
+		local goal = Vector3.new(target.Position.X, startPos.Y, target.Position.Z)
+		elapsed = 0
+		while elapsed < secondsEach and model.Parent do
+			elapsed += task.wait()
+			local t = math.min(elapsed / secondsEach, 1)
+			local bob = math.abs(math.sin(elapsed * 10)) * 0.25
+			local pos = startPos:Lerp(goal, t) + Vector3.new(0, bob, 0)
+			model:PivotTo(CFrame.lookAt(pos, pos + dir))
+		end
+		if model.Parent then
+			model:PivotTo(CFrame.lookAt(goal, goal + dir))
+		end
+	end
+end
+
 -- Linear walk with a small bob. Yields until arrival; always ends exactly at `target`.
 function AnimalService.moveTo(model: Model, target: CFrame, duration: number)
 	local start = model:GetPivot()

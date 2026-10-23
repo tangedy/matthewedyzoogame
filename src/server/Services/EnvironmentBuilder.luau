@@ -20,8 +20,8 @@ local LEAF_COLORS = {
 	Color3.fromRGB(130, 210, 90),
 }
 
-local WORLD_HALF_LENGTH = 700 -- along Z, past the furthest plot and the truck's drive-in
-local BOARD_Z = -520 -- LiveOpsConfig.Board.Position, kept clear of trees
+local WORLD_HALF_LENGTH = 370 -- along Z, just past the plots and the truck's drive-in
+local BOARD_Z = -350 -- LiveOpsConfig.Board.Position, kept clear of trees
 
 local rng = Random.new(20261022)
 local folder: Folder
