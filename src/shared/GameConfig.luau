@@ -61,10 +61,10 @@ local GameConfig = {
 		MaxPens = 19,
 		StartPens = 6,
 		Expansions = {
-			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4, two each side
-			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- widens; +4, fits through extra large
-			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- 1 giant + 2 large
-			{ Pens = 19, Price = 10000000, Barn = "Gargantuan" }, -- +1 giant + 1 gargantuan
+			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
+			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large
+			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- giant lane (3x) + 2 large lanes
+			{ Pens = 19, Price = 10000000, Barn = "Gargantuan" }, -- giant lane + gargantuan lane (8x)
 		},
 	},
 

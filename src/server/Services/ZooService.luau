@@ -364,6 +364,29 @@ local function dropCarry(player: Player)
 	zoo.CarriedId = nil
 end
 
+-- Pays for a cache animal and walks it forward off the pad, hops a sold beat, then jogs to the street.
+local function sendSoldHome(zoo: Zoo, model: Model?)
+	if not model then
+		return
+	end
+	local sold = zoo.Bay:FindFirstChild("SoldSpot")
+	local back = zoo.Bay:FindFirstChild("RoadReturn")
+	task.spawn(function()
+		if sold and sold:IsA("BasePart") and model.Parent then
+			AnimalService.walkCorners(model, { sold.CFrame }, 0.55)
+		end
+		if model.Parent then
+			AnimalService.sold(model)
+		end
+		if back and back:IsA("BasePart") and model.Parent then
+			AnimalService.walkCorners(model, { back.CFrame }, 0.7, 0.55)
+		end
+		if model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
 -- Pushes the oldest waiting animal out of the cache so a new one fits. Paid animals are never
 -- pushed out. Returns false if nothing could make room.
 local function makeCacheRoom(player: Player): boolean
@@ -392,17 +415,7 @@ local function makeCacheRoom(player: Player): boolean
 				ZooService.sellValue(record.Species, record.Mutation)
 			)
 			PlayerDataService.markDirty(player)
-			if model then
-				local back = zoo.Bay:FindFirstChild("RoadReturn")
-				task.spawn(function()
-					if back and back:IsA("BasePart") and model.Parent then
-						AnimalService.walkCorners(model, { back.CFrame }, 1.6)
-					end
-					if model.Parent then
-						model:Destroy()
-					end
-				end)
-			end
+			sendSoldHome(zoo, model)
 			return true
 		end
 	end
@@ -582,7 +595,7 @@ local function sellFromCache(player: Player, slotIndex: number)
 	local model = zoo.CacheModels[record.Id]
 	if model then
 		zoo.CacheModels[record.Id] = nil
-		AnimalService.poof(model)
+		sendSoldHome(zoo, model)
 	end
 	PlayerDataService.markDirty(player)
 	refreshAll(player)

@@ -8,6 +8,7 @@
 -- releasing the bay cancels that thread and disposes of whatever the job left behind.
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
@@ -76,6 +77,7 @@ local BayService = {}
 local bayBySlot: { [number]: Bay } = {}
 local bayByOwner: { [Player]: Bay } = {}
 local waiting: { Player } = {} -- players who joined while every slot was taken, oldest first
+local spawnBound: { [Player]: RBXScriptConnection } = {}
 
 local bayStateChanged = Remotes.event("BayStateChanged")
 local washCompleted = Remotes.event("WashCompleted")
@@ -377,6 +379,27 @@ local function runBay(bay: Bay, owner: Player)
 	end
 end
 
+-- Feet on the pad, facing the wash. Used for the first spawn and every respawn.
+local function placeOnSpawn(player: Player)
+	local bay = bayByOwner[player]
+	local character = player.Character
+	if not bay or not character or not bay.Spawn.Parent then
+		return
+	end
+	character:PivotTo(bay.Spawn.CFrame + Vector3.new(0, 3, 0))
+end
+
+local function bindSpawn(player: Player)
+	local existing = spawnBound[player]
+	if existing then
+		existing:Disconnect()
+	end
+	-- After Roblox places the character, so a leftover pad cannot win.
+	spawnBound[player] = player.CharacterAdded:Connect(function()
+		task.defer(placeOnSpawn, player)
+	end)
+end
+
 local function makeBay(index: number): Bay
 	local model = WorldBuilder.buildBay(index)
 	local post = model:FindFirstChild("SignPost")
@@ -437,10 +460,8 @@ function BayService.assign(player: Player): boolean
 		bay.Label.Text = player.DisplayName .. "'s Zoo"
 	end
 	player.RespawnLocation = bay.Spawn
-	local character = player.Character
-	if character then
-		character:PivotTo(bay.Spawn.CFrame + Vector3.new(0, 3, 0))
-	end
+	bindSpawn(player)
+	placeOnSpawn(player)
 	ZooService.attach(player, bay.Model)
 	Hooks.fire("BayAssigned", player, bay.Model)
 	bay.Thread = task.spawn(runBay, bay, player)
@@ -458,6 +479,12 @@ function BayService.release(player: Player)
 	end
 	bayByOwner[player] = nil
 	bay.Owner = nil
+	player.RespawnLocation = nil
+	local bound = spawnBound[player]
+	if bound then
+		bound:Disconnect()
+		spawnBound[player] = nil
+	end
 	local thread = bay.Thread
 	bay.Thread = nil
 	if thread and coroutine.status(thread) ~= "dead" then
@@ -529,7 +556,7 @@ Remotes.event("GuideAdvance").OnServerEvent:Connect(function(player)
 	GuideService.onReachedUpgrade(player)
 end)
 
-game:GetService("Players").PlayerRemoving:Connect(function(player)
+Players.PlayerRemoving:Connect(function(player)
 	lastLetGoAt[player] = nil
 end)
 

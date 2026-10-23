@@ -10,7 +10,7 @@
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandCounter              barn upgrade, beside the path entrance
---   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan
+--   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan   a roof on red posts over each lane
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,7 +26,6 @@ local folder: Folder
 
 local FLOOR_Y = 0.5
 local WOOD = Color3.fromRGB(150, 110, 70)
-local WOOD_DARK = Color3.fromRGB(110, 75, 45)
 
 -- Depths measured from the road edge, away from the street.
 -- The queue is a straight lane in from the road. The wash road runs parallel to the
@@ -34,43 +33,54 @@ local WOOD_DARK = Color3.fromRGB(110, 75, 45)
 local ROAD_D = -8
 local QUEUE_DEPTH = { 40, 28, 16 } -- 1 is the wash, furthest in; 3 is the back of the queue
 local CACHE_LAT = 18
+local SOLD_LAT = CACHE_LAT + 10 -- forward of the cache, still facing along the wash road
 local WALK_START = 58
-local STALL_DEPTH = 8 -- half the old 16
-local STALL_LAT = 7 -- half the old 14
+local STALL_DEPTH = 8 -- half the old 16; every larger pen is a multiple of this
+local STALL_LAT = 7
 local STALL_PITCH = 14
 local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
-local BARN_FRONT = WALK_END + 8
-local MED_DEPTH = 26
-local MED_LAT = 22
-local MED_PITCH = MED_DEPTH + 8
+-- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
+local LARGE_DEPTH = STALL_DEPTH * 1.5
+local LARGE_LAT = STALL_LAT * 1.5
+local GIANT_DEPTH = STALL_DEPTH * 3
+local GIANT_LAT = STALL_LAT * 3
+local GARG_DEPTH = STALL_DEPTH * 8
+local GARG_LAT = STALL_LAT * 8
+
+local ROOF_OVER = 1 -- roof and posts sit just outside the pen
+local LANE_GAP = 4
+local ROW_GAP = 3
+
+local BARN_FRONT = WALK_END + 4
+local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
-	BARN_FRONT + 8 + MED_DEPTH / 2,
+	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
 	0,
 }
-ROW_DEPTH[2] = ROW_DEPTH[1] + MED_PITCH
-local BARN_BACK = ROW_DEPTH[2] + MED_DEPTH / 2 + 8
-local OUTER_LATERAL = STALL_LATERAL + STALL_LAT / 2 + 3 + MED_LAT / 2
+ROW_DEPTH[2] = ROW_DEPTH[1] + ROW_PITCH
+-- The path ends at the back of the front barn. Rear lanes sit behind that.
+local BARN_AISLE_END = ROW_DEPTH[2] + LARGE_DEPTH / 2 + ROOF_OVER
+local OUTER_LATERAL = STALL_LATERAL + STALL_LAT / 2 + LANE_GAP + LARGE_LAT / 2
 
-local LARGE_FRONT = BARN_BACK + 12
-local GIANT_DEPTH = 36
-local GIANT_LAT = 32
-local LARGE_DEPTH = 26
-local LARGE_LAT = 22
-local LARGE_CENTER = LARGE_FRONT + 8 + GIANT_DEPTH / 2
-local LARGE_BACK = LARGE_CENTER + GIANT_DEPTH / 2 + 8
-local LARGE_SIDE = GIANT_LAT / 2 + 4 + LARGE_LAT / 2
+local LARGE_FRONT = BARN_AISLE_END + 8
+local LARGE_CENTER = LARGE_FRONT + ROOF_OVER + GIANT_DEPTH / 2
+local LARGE_BACK = LARGE_CENTER + GIANT_DEPTH / 2 + ROOF_OVER
+local LARGE_SIDE = GIANT_LAT / 2 + LANE_GAP + LARGE_LAT / 2
+local LARGE_LANE_CENTER = LARGE_FRONT + ROOF_OVER + LARGE_DEPTH / 2
+local LARGE_LANE_BACK = LARGE_LANE_CENTER + LARGE_DEPTH / 2 + ROOF_OVER
 
-local GARG_FRONT = LARGE_BACK + 12
-local GARG_DEPTH = 48
-local GARG_LAT = 44
-local GARG_CENTER = GARG_FRONT + 8 + GARG_DEPTH / 2
-local GARG_BACK = GARG_CENTER + GARG_DEPTH / 2 + 8
--- The pair is centred: giant on the left of the plot, gargantuan on the right.
-local GARG_SPAN = GIANT_LAT + 6 + GARG_LAT
+local GARG_FRONT = LARGE_BACK + 8
+local GARG_GAP = 4
+local GARG_SPAN = GIANT_LAT + GARG_GAP + GARG_LAT
+-- Giant lane on the plot's left, gargantuan lane on the right. Fronts line up.
 local GARG_GIANT_LAT = -GARG_SPAN / 2 + GIANT_LAT / 2
-local GARG_PEN_LAT = GARG_GIANT_LAT + GIANT_LAT / 2 + 6 + GARG_LAT / 2
+local GARG_PEN_LAT = GARG_GIANT_LAT + GIANT_LAT / 2 + GARG_GAP + GARG_LAT / 2
+local GARG_GIANT_CENTER = GARG_FRONT + ROOF_OVER + GIANT_DEPTH / 2
+local GARG_CENTER = GARG_FRONT + ROOF_OVER + GARG_DEPTH / 2
+local GARG_GIANT_BACK = GARG_GIANT_CENTER + GIANT_DEPTH / 2 + ROOF_OVER
+local GARG_BACK = GARG_CENTER + GARG_DEPTH / 2 + ROOF_OVER
 
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
@@ -246,7 +256,8 @@ local function addPenPrompts(
 	depth: number,
 	lateral: number,
 	look: Vector3,
-	reach: number
+	reach: number,
+	depthSize: number
 )
 	local slotPos = PlotLayout.point(plot, depth, lateral, FLOOR_Y)
 	makeMarker("Slot", CFrame.lookAt(slotPos, slotPos + look), pen)
@@ -265,6 +276,9 @@ local function addPenPrompts(
 	local padPos
 	if facingRoad then
 		padPos = gate + look * 2.2
+	elseif depth > BARN_AISLE_END then
+		-- Rear lanes are not on the sidewalk. The pad sits on the near side of the pen.
+		padPos = PlotLayout.point(plot, depth - depthSize / 2 - 2.4, lateral, 0.3)
 	else
 		local sign = if lateral >= 0 then 1 else -1
 		padPos = PlotLayout.point(plot, depth, sign * (GameConfig.SidewalkWidth / 2 - 3.5), 0.3)
@@ -393,7 +407,7 @@ local function buildFencedPen(
 	end
 	(status.Parent :: Instance).Name = "Status"
 	local reach = if facingRoad then depthSize / 2 + 2 else latSize / 2 + 2
-	addPenPrompts(plot, pen, depth, lateral, look, reach)
+	addPenPrompts(plot, pen, depth, lateral, look, reach, depthSize)
 end
 
 local buildBarns: (plot: PlotLayout.PlotFrame, zoo: Folder) -> ()
@@ -431,7 +445,8 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
 	end
 
-	-- Small barn: two standard pens each side. Medium adds a wider column each side.
+	-- Small barn: two standard pens each side of the path. Medium adds an outer lane
+	-- each side, 1.5x the small pen, for large animals.
 	for row = 1, 2 do
 		local depth = ROW_DEPTH[row]
 		local left = 6 + row * 2 - 1 -- 7, 9
@@ -440,17 +455,17 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
 		local outerLeft = 10 + row * 2 - 1 -- 11, 13
 		local outerRight = outerLeft + 1
-		addPen(outerLeft, depth, -OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium")
-		addPen(outerRight, depth, OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium")
+		addPen(outerLeft, depth, -OUTER_LATERAL, LARGE_DEPTH, LARGE_LAT, "Medium")
+		addPen(outerRight, depth, OUTER_LATERAL, LARGE_DEPTH, LARGE_LAT, "Medium")
 	end
 
-	-- Large barn, one rank behind: giant in the middle, a large pen on each side.
+	-- Behind the path: a giant lane (3x) with a large lane on each side.
 	addPen(15, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant")
-	addPen(16, LARGE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
-	addPen(17, LARGE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
+	addPen(16, LARGE_LANE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
+	addPen(17, LARGE_LANE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large")
 
-	-- Gargantuan barn, further back: one more giant and one gargantuan pen.
-	addPen(18, GARG_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant")
+	-- Further back, fronts aligned: a giant lane and a gargantuan lane (8x).
+	addPen(18, GARG_GIANT_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant")
 	addPen(19, GARG_CENTER, GARG_PEN_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan")
 
 	-- Barn upgrade, beside the mouth of the sidewalk.
@@ -477,81 +492,60 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 	zoo.Parent = bay
 end
 
-local function barnBox(
+-- Open shelter: red posts and a gable roof, no walls, so the pens stay visible.
+-- The ridge runs along the plot depth. Pitch is around the plot's back axis, so the
+-- peak is up on both sides of the road.
+local POST_RED = Color3.fromRGB(186, 42, 36)
+local ROOF_RED = Color3.fromRGB(150, 34, 30)
+
+local function barnShelter(
 	plot: PlotLayout.PlotFrame,
 	parent: Instance,
 	depth0: number,
 	depth1: number,
-	halfLat: number,
-	height: number,
-	wall: Color3,
-	roof: Color3
+	lat0: number,
+	lat1: number,
+	eave: number,
+	post: number
 )
-	local mid = (depth0 + depth1) / 2
 	local span = depth1 - depth0
-	local y = height / 2
-	for _, side in { -1, 1 } do
-		makePart({
-			Name = "Wall",
-			Size = Vector3.new(span, height, 1.2),
-			Position = PlotLayout.point(plot, mid, side * halfLat, y),
-			Color = wall,
-			Material = Enum.Material.Wood,
-			CanQuery = false,
-			Parent = parent,
-		})
+	local midD = (depth0 + depth1) / 2
+	local midL = (lat0 + lat1) / 2
+	local run = (lat1 - lat0) / 2
+	local pitch = math.rad(18)
+	local overlap = 1
+	local panelLen = (run + overlap) / math.cos(pitch)
+	local halfHoriz = (run + overlap) / 2
+
+	local function posts(lateral: number)
+		local count = math.max(2, math.floor(span / 12) + 1)
+		for i = 0, count - 1 do
+			local depth = depth0 + span * (i / (count - 1))
+			makePart({
+				Name = "Post",
+				Size = Vector3.new(post, eave, post),
+				Position = PlotLayout.point(plot, depth, lateral, eave / 2),
+				Color = POST_RED,
+				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = parent,
+			})
+		end
 	end
-	makePart({
-		Name = "Wall",
-		Size = Vector3.new(1.2, height, halfLat * 2),
-		Position = PlotLayout.point(plot, depth1, 0, y),
-		Color = wall,
-		Material = Enum.Material.Wood,
-		CanQuery = false,
-		Parent = parent,
-	})
-	local doorW = 8
-	local doorH = math.min(10, height - 3)
-	local sideW = (halfLat * 2 - doorW) / 2
+	posts(lat0)
+	posts(lat1)
+
 	for _, side in { -1, 1 } do
-		makePart({
-			Name = "Wall",
-			Size = Vector3.new(1.2, height, sideW),
-			Position = PlotLayout.point(plot, depth0, side * (doorW / 2 + sideW / 2), y),
-			Color = wall,
-			Material = Enum.Material.Wood,
-			CanQuery = false,
-			Parent = parent,
-		})
-	end
-	local lintel = height - doorH
-	makePart({
-		Name = "Wall",
-		Size = Vector3.new(1.2, lintel, doorW),
-		Position = PlotLayout.point(plot, depth0, 0, doorH + lintel / 2),
-		Color = wall,
-		Material = Enum.Material.Wood,
-		CanQuery = false,
-		Parent = parent,
-	})
-	-- Aisle floor, so the barn reads as a building even before its pens are noticed.
-	makePart({
-		Name = "Aisle",
-		Size = Vector3.new(span, 0.3, GameConfig.SidewalkWidth),
-		Position = PlotLayout.point(plot, mid, 0, 0.15),
-		Color = Color3.fromRGB(190, 175, 150),
-		Material = Enum.Material.Cobblestone,
-		CanQuery = false,
-		Parent = parent,
-	})
-	local panel = (halfLat + 1.5) / math.cos(math.rad(28))
-	for _, side in { -1, 1 } do
-		local center = PlotLayout.point(plot, mid, side * halfLat * 0.5, height + 1.2)
+		local centerLat = midL + side * (run - halfHoriz)
+		local centerY = eave + (panelLen / 2) * math.sin(pitch)
+		local center = PlotLayout.point(plot, midD, centerLat, centerY)
+		local cf = CFrame.fromMatrix(center, plot.Back, Vector3.yAxis, -plot.Right)
+			* CFrame.Angles(-side * pitch, 0, 0)
 		makePart({
 			Name = "Roof",
-			Size = Vector3.new(span + 2, 0.8, panel),
-			CFrame = CFrame.new(center) * CFrame.Angles(side * math.rad(-28), 0, 0),
-			Color = roof,
+			Size = Vector3.new(span + 1, 0.4, panelLen),
+			CFrame = cf,
+			Color = ROOF_RED,
 			Material = Enum.Material.Wood,
 			CanQuery = false,
 			Parent = parent,
@@ -560,53 +554,57 @@ local function barnBox(
 end
 
 function buildBarns(plot: PlotLayout.PlotFrame, zoo: Folder)
-	local red = Color3.fromRGB(200, 60, 50)
-	local redDark = Color3.fromRGB(120, 45, 40)
-	local shells = {
-		{
-			Name = "BarnSmall",
-			Depth0 = BARN_FRONT,
-			Depth1 = BARN_BACK,
-			Half = STALL_LATERAL + STALL_LAT / 2 + 2,
-			Height = 14,
-			Wall = red,
-			Roof = redDark,
-		},
-		{
-			Name = "BarnMedium",
-			Depth0 = BARN_FRONT,
-			Depth1 = BARN_BACK,
-			Half = OUTER_LATERAL + MED_LAT / 2 + 2,
-			Height = 16,
-			Wall = Color3.fromRGB(180, 70, 50),
-			Roof = Color3.fromRGB(90, 50, 40),
-		},
-		{
-			Name = "BarnLarge",
-			Depth0 = LARGE_FRONT,
-			Depth1 = LARGE_BACK,
-			Half = LARGE_SIDE + LARGE_LAT / 2 + 2,
-			Height = 20,
-			Wall = Color3.fromRGB(150, 55, 45),
-			Roof = WOOD_DARK,
-		},
-		{
-			Name = "BarnGargantuan",
-			Depth0 = GARG_FRONT,
-			Depth1 = GARG_BACK,
-			Half = GARG_SPAN / 2 + 2,
-			Height = 28,
-			Wall = Color3.fromRGB(120, 70, 50),
-			Roof = Color3.fromRGB(70, 45, 35),
-		},
-	}
-	for _, spec in shells do
+	local function shell(name: string): Model
 		local model = Instance.new("Model")
-		model.Name = spec.Name
-		barnBox(plot, model, spec.Depth0, spec.Depth1, spec.Half, spec.Height, spec.Wall, spec.Roof)
+		model.Name = name
 		model.Parent = zoo
 		WorldBuilder.setShown(model, false)
+		return model
 	end
+
+	-- Small: the two standard lanes and the path between them. Only as deep as those pens.
+	local smallLat = STALL_LATERAL + STALL_LAT / 2 + ROOF_OVER
+	barnShelter(
+		plot,
+		shell("BarnSmall"),
+		ROW_DEPTH[1] - STALL_DEPTH / 2 - ROOF_OVER,
+		ROW_DEPTH[2] + STALL_DEPTH / 2 + ROOF_OVER,
+		-smallLat,
+		smallLat,
+		7,
+		0.6
+	)
+
+	-- Medium replaces it and reaches the outer 1.5x lanes. Taller, so a giraffe fits under the eave.
+	local mediumLat = OUTER_LATERAL + LARGE_LAT / 2 + ROOF_OVER
+	barnShelter(plot, shell("BarnMedium"), BARN_FRONT, BARN_AISLE_END, -mediumLat, mediumLat, 14, 0.7)
+
+	-- Giant lane at 3x, plus a large lane on each side only as long as that pen.
+	local large = shell("BarnLarge")
+	local giantLat = GIANT_LAT / 2 + ROOF_OVER
+	barnShelter(plot, large, LARGE_FRONT, LARGE_BACK, -giantLat, giantLat, 12, 0.8)
+	local sideLat = LARGE_LAT / 2 + ROOF_OVER
+	for _, side in { -1, 1 } do
+		local lat = side * LARGE_SIDE
+		barnShelter(
+			plot,
+			large,
+			LARGE_FRONT,
+			LARGE_LANE_BACK,
+			lat - sideLat,
+			lat + sideLat,
+			10,
+			0.65
+		)
+	end
+
+	-- Two lanes, fronts aligned. Each roof stops at the end of its own pen.
+	local garg = shell("BarnGargantuan")
+	local function lane(lat: number, half: number, depth1: number, eave: number, post: number)
+		barnShelter(plot, garg, GARG_FRONT, depth1, lat - half, lat + half, eave, post)
+	end
+	lane(GARG_GIANT_LAT, GIANT_LAT / 2 + ROOF_OVER, GARG_GIANT_BACK, 12, 0.8)
+	lane(GARG_PEN_LAT, GARG_LAT / 2 + ROOF_OVER, GARG_BACK, 16, 1)
 end
 
 local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
@@ -622,20 +620,37 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		CanCollide = false,
 		Parent = bay,
 	})
-	-- Wash road, parallel to the main road. The animal turns onto it and walks forward to the cache.
-	local roadSpan = CACHE_LAT + 16
+	-- Wash road, parallel to the main road. It runs a little past the queue lane on
+	-- both edges so the join is a sharp corner, and sits a few bits higher so the
+	-- two dirt surfaces don't flicker.
+	local laneHalf = 6
+	local nearLat = -(laneHalf + 2)
+	local farLat = SOLD_LAT + 8
+	local roadSpan = farLat - nearLat
+	local roadCenterLat = (nearLat + farLat) / 2
 	makePart({
 		Name = "WashRoad",
-		Size = Vector3.new(12, 0.25, roadSpan),
-		Position = PlotLayout.point(plot, QUEUE_DEPTH[1], roadSpan / 2 - 4, 0.16),
+		Size = Vector3.new(16, 0.25, roadSpan),
+		Position = PlotLayout.point(plot, QUEUE_DEPTH[1], roadCenterLat, 0.22),
 		Color = Color3.fromRGB(186, 142, 86),
 		Material = Enum.Material.Ground,
 		CanQuery = false,
 		CanCollide = false,
 		Parent = bay,
 	})
+	-- Road from just ahead of the cache back to the street. Sold animals jog down it.
+	local exitSpan = QUEUE_DEPTH[1] - ROAD_D
 	makePart({
-		Name = "Drain",
+		Name = "ExitRoad",
+		Size = Vector3.new(exitSpan, 0.25, 10),
+		Position = PlotLayout.point(plot, ROAD_D + exitSpan / 2, SOLD_LAT, 0.28),
+		Color = Color3.fromRGB(176, 132, 78),
+		Material = Enum.Material.Ground,
+		CanQuery = false,
+		CanCollide = false,
+		Parent = bay,
+	})
+	makePart({
 		Shape = Enum.PartType.Cylinder,
 		Size = Vector3.new(0.15, 8, 8),
 		CFrame = CFrame.new(PlotLayout.point(plot, QUEUE_DEPTH[1], 0, FLOOR_Y + 0.05)) * CFrame.Angles(0, 0, math.rad(90)),
@@ -654,17 +669,18 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], 0, FLOOR_Y), bay)
 	makeMarker("Queue3", PlotLayout.inbound(plot, QUEUE_DEPTH[3], 0, FLOOR_Y), bay)
 	makeMarker("Entrance", alongRoad(ROAD_D, -16), bay)
-	local back = PlotLayout.point(plot, ROAD_D, CACHE_LAT, FLOOR_Y)
+	makeMarker("SoldSpot", alongRoad(QUEUE_DEPTH[1], SOLD_LAT), bay)
+	local back = PlotLayout.point(plot, ROAD_D, SOLD_LAT, FLOOR_Y)
 	makeMarker("RoadReturn", CFrame.lookAt(back, back + plot.Look), bay)
 	makeMarker("Exit", CFrame.lookAt(back, back + plot.Look), bay)
 end
 
 local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
-	local span = WALK_END - WALK_START
+	local span = BARN_AISLE_END - WALK_START
 	makePart({
 		Name = "Sidewalk",
 		Size = Vector3.new(span, 0.35, GameConfig.SidewalkWidth),
-		Position = PlotLayout.point(plot, (WALK_START + WALK_END) / 2, 0, 0.18),
+		Position = PlotLayout.point(plot, (WALK_START + BARN_AISLE_END) / 2, 0, 0.18),
 		Color = Color3.fromRGB(190, 175, 150),
 		Material = Enum.Material.Cobblestone,
 		CanQuery = false,
@@ -688,7 +704,10 @@ function WorldBuilder.buildBay(index: number): Model
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Anchored = true
-	spawn.Neutral = true
+	-- Not neutral: only the owner, via Player.RespawnLocation, appears here.
+	spawn.Neutral = false
+	spawn.AllowTeamChangeOnTouch = false
+	spawn.Enabled = true
 	spawn.Duration = 0
 	spawn.Size = Vector3.new(6, 0.2, 6)
 	spawn.CFrame = CFrame.lookAt(spawnPos, washPos)
@@ -718,6 +737,12 @@ end
 
 function WorldBuilder.init()
 	ensureGround()
+	-- The place file's pad sits at the middle of the road. Bases bring their own spawn.
+	for _, descendant in Workspace:GetDescendants() do
+		if descendant:IsA("SpawnLocation") then
+			descendant:Destroy()
+		end
+	end
 	local existing = Workspace:FindFirstChild("WashBays")
 	if existing then
 		existing:Destroy()
