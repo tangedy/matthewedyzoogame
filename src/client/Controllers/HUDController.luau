@@ -96,7 +96,6 @@ local function buildGui()
 	progressBoard = Instance.new("BillboardGui")
 	progressBoard.Name = "CleanProgress"
 	progressBoard.Size = UDim2.fromOffset(220, PROGRESS_HEIGHT)
-	progressBoard.SizeOffset = Vector2.new(0, 1.9) -- just above the nameplate
 	progressBoard.MaxDistance = 80
 	progressBoard.Enabled = false
 	progressBoard.Parent = gui.Parent
@@ -251,9 +250,7 @@ local function mountProgress(animal: Model): boolean
 	if mountedHead == head and progressBoard.Enabled then
 		return true
 	end
-	local plate = head:FindFirstChild("Nameplate")
-	local lift = if plate and plate:IsA("BillboardGui") then plate.StudsOffset.Y else head.Size.Y / 2 + 2.6
-	progressBoard.StudsOffset = Vector3.new(0, lift, 0)
+	UIStyle.overhead(progressBoard, head, UIStyle.Overhead.Meter)
 	progressBoard.Adornee = head
 	progressBoard.Enabled = true
 	mountedHead = head
@@ -291,8 +288,7 @@ local function applyBay(bay: Types.BaySnapshot?)
 	currentJobId = bay.JobId
 	currentState = bay.State
 
-	wantProgress = bay.AnimalName ~= nil
-		and (bay.State == "Arriving" or bay.State == "Washing" or bay.State == "Completing")
+	wantProgress = bay.AnimalName ~= nil and (bay.State == "Washing" or bay.State == "Completing") -- not while it walks in
 	if wantProgress then
 		rewardLabel.Text = `Wash {UIStyle.formatMoney(bay.Reward or 0)}`
 		local animal = findAnimal()
@@ -304,10 +300,7 @@ local function applyBay(bay: Types.BaySnapshot?)
 		unmountProgress()
 	end
 
-	if bay.State == "Arriving" then
-		setProgress(0, false)
-		percentLabel.Text = "ARRIVING..."
-	elseif bay.State == "Washing" then
+	if bay.State == "Washing" then
 		setProgress(bay.Progress or 0, false)
 	elseif bay.State == "Completing" or bay.State == "Departing" then
 		setProgress(1, true)

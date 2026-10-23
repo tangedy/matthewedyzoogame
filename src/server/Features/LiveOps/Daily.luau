@@ -84,8 +84,7 @@ local function addTag(model: Model)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = TAG_NAME
 	billboard.Size = UDim2.fromOffset(240, 34)
-	billboard.StudsOffset = Vector3.new(0, head.Size.Y / 2 + 2.6, 0)
-	billboard.SizeOffset = Vector2.new(0, 4.2) -- above the nameplate and the clean meter
+	UIStyle.overhead(billboard, head, UIStyle.Overhead.Tag) -- above the nameplate and the clean meter
 	billboard.MaxDistance = 80
 	billboard.Parent = head
 	local label = Instance.new("TextLabel")

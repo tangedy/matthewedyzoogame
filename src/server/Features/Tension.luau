@@ -30,6 +30,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local TensionConfig = require(ReplicatedStorage.Shared.FeatureConfig.TensionConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Services = script.Parent.Parent.Services
 local BayService = require(Services.BayService)
 local CleaningService = require(Services.CleaningService)
@@ -392,7 +393,7 @@ local function exclaim(model: Model, seconds: number)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "TensionExclaim"
 	billboard.Size = UDim2.fromOffset(60, 60)
-	billboard.StudsOffset = Vector3.new(0, head.Size.Y / 2 + 1.5, 0)
+	UIStyle.overhead(billboard, head, UIStyle.Overhead.Callout)
 	billboard.MaxDistance = 80
 	billboard.AlwaysOnTop = true
 	local label = Instance.new("TextLabel")

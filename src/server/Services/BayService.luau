@@ -1,8 +1,9 @@
 -- Bay assignment, ownership, and the per-bay animal lifecycle:
 --   Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
 -- Bays are built when a player is given a slot and destroyed when they leave. After a wash
--- the animal walks into the bay's one-slot cache (Departing). An animal still waiting there
--- leaves when the next wash finishes, so the line never stops.
+-- the animal walks into the bay's one-slot cache on its own while the next one is already
+-- walking in. An animal still waiting there leaves when the next wash finishes, so the line
+-- never stops.
 --
 -- BayService owns job state. Each owned bay runs one thread that walks the state machine;
 -- releasing the bay cancels that thread and disposes of whatever the job left behind.
@@ -119,6 +120,32 @@ local function announce(owner: Player, animalKey: string, mutationKey: string)
 	announcement:FireAllClients(`{owner.DisplayName} found a {rarity.DisplayName} {name}!`, def.Rarity)
 end
 
+-- Celebrate, then walk into the cache. The animal still waiting there (if any) leaves to make
+-- room, unless it was bought with Robux, in which case this one walks off instead.
+local function departToCache(bay: Bay, owner: Player, model: Model, animalKey: string, mutationKey: string)
+	AnimalService.celebrate(model)
+	if bay.Owner ~= owner or not model.Parent then
+		AnimalService.destroy(model)
+		return
+	end
+	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey, { Evict = true })
+	if record and slot then
+		local pos = model:GetPivot().Position
+		local facing = (slot.Position - pos) * Vector3.new(1, 0, 1)
+		if facing.Magnitude > 0.1 then
+			AnimalService.moveTo(model, CFrame.lookAt(slot.Position, slot.Position + facing), GameConfig.DepartDuration)
+		end
+		AnimalService.moveTo(model, slot, 0.5) -- turn to face out of the cache
+		if bay.Owner == owner and model.Parent then
+			ZooService.adoptIntoCache(owner, record, model)
+			return
+		end
+	else
+		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
+	end
+	AnimalService.destroy(model)
+end
+
 local function runOneJob(bay: Bay, owner: Player)
 	setState(bay, "Empty")
 	local profile = EconomyService.getProfile(owner)
@@ -220,24 +247,10 @@ local function runOneJob(bay: Bay, owner: Player)
 			CleanGateService.onWashed(owner)
 		end
 	end
-	AnimalService.celebrate(model)
-
-	-- Walk into the cache. The animal still waiting there (if any) leaves to make room,
-	-- unless it was bought with Robux, in which case this one walks off instead.
-	setState(bay, "Departing")
-	local record, slot = ZooService.addToCache(owner, animalKey, mutationKey, { Evict = true })
-	if record and slot then
-		local pos = model:GetPivot().Position
-		local facing = (slot.Position - pos) * Vector3.new(1, 0, 1)
-		if facing.Magnitude > 0.1 then
-			AnimalService.moveTo(model, CFrame.lookAt(slot.Position, slot.Position + facing), GameConfig.DepartDuration)
-		end
-		AnimalService.moveTo(model, slot, 0.5) -- turn to face out of the cache
-		job.Model = nil
-		ZooService.adoptIntoCache(owner, record, model)
-	else
-		AnimalService.moveTo(model, bay.Exit.CFrame, GameConfig.DepartDuration)
-	end
+	-- Hand the washed animal off so the next one starts walking in right away.
+	job.Model = nil
+	model.Name = "DepartingAnimal" -- clients look up the bay's current animal by "Animal"
+	task.spawn(departToCache, bay, owner, model, animalKey, mutationKey)
 	disposeJob(bay)
 	setState(bay, "Empty")
 	task.wait(GameConfig.NextAnimalDelay)

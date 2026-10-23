@@ -58,6 +58,9 @@ local function refresh()
 	local head = if blocked then animalHead() else nil
 	marker.Adornee = head
 	marker.Enabled = head ~= nil
+	if head then
+		UIStyle.overhead(marker, head, UIStyle.Overhead.Callout)
+	end
 	if not blocked or typeof(rarityKey) ~= "string" then
 		return
 	end
@@ -154,7 +157,6 @@ local function build()
 	marker = Instance.new("BillboardGui")
 	marker.Name = "TooDirty"
 	marker.Size = UDim2.fromOffset(180, 48)
-	marker.StudsOffset = Vector3.new(0, 3.2, 0)
 	marker.AlwaysOnTop = true
 	marker.Enabled = false
 	marker.ResetOnSpawn = false

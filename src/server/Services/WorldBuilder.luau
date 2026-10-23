@@ -146,7 +146,7 @@ local function buildCache(center: Vector3, padTop: number, bay: Model)
 	cache.Name = "Cache"
 	local first = center + cfg.Origin
 	local width = (cfg.Slots - 1) * cfg.SlotSpacing + 6
-	local floor = makePart({
+	makePart({
 		Name = "CacheFloor",
 		Size = Vector3.new(width, 0.2, 9),
 		Position = Vector3.new(first.X + (cfg.Slots - 1) * cfg.SlotSpacing / 2, padTop + 0.1, first.Z),
@@ -156,7 +156,6 @@ local function buildCache(center: Vector3, padTop: number, bay: Model)
 		CanQuery = false,
 		Parent = cache,
 	})
-	billboardLabel(floor, "CACHE", Vector3.new(0, 7, 0), Vector2.new(160, 40), Color3.fromRGB(110, 200, 255))
 	for i = 1, cfg.Slots do
 		local pos = Vector3.new(first.X + (i - 1) * cfg.SlotSpacing, padTop, first.Z)
 		local slot = makeMarker("Slot" .. i, CFrame.lookAt(pos, pos + Vector3.zAxis), cache)

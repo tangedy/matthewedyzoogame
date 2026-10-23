@@ -118,6 +118,27 @@ local function escapeRich(text: string): string
 	return text
 end
 
+-- Everything drawn over an animal hangs from the nameplate's anchor and is stacked in
+-- pixels, so the rows never overlap at any distance. Values are each row's bottom edge,
+-- in pixels above the nameplate's centre (a 4-line nameplate reaches 48).
+UIStyle.Overhead = {
+	Meter = 56, -- clean bar + patience row
+	Tag = 136, -- DAILY DIRTY ANIMAL
+	Callout = 176, -- Wash me! / TOO DIRTY! / Squeaky clean! / !
+}
+
+local function overheadLift(head: BasePart): number
+	return head.Size.Y / 2 + 2.6
+end
+
+-- Places a pixel-sized billboard so its bottom edge sits `bottom` pixels above the nameplate.
+-- `bob` nudges it up and down in pixels.
+function UIStyle.overhead(billboard: BillboardGui, head: BasePart, bottom: number, bob: number?)
+	local height = math.max(1, billboard.Size.Y.Offset)
+	billboard.StudsOffset = Vector3.new(0, overheadLift(head), 0)
+	billboard.SizeOffset = Vector2.new(0, (bottom + (bob or 0) + height / 2) / height)
+end
+
 -- One label, so the stacked strokes don't artifact. A mutation line is included when set.
 function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: number): BillboardGui
 	local rarity = RarityConfig.ByKey[info.Rarity] or RarityConfig.ByKey.Common
@@ -129,7 +150,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
 	billboard.Size = UDim2.fromOffset(220, lines * 24)
-	billboard.StudsOffset = Vector3.new(0, adornee.Size.Y / 2 + 2.6, 0)
+	billboard.StudsOffset = Vector3.new(0, overheadLift(adornee), 0)
 	billboard.MaxDistance = maxDistance
 	billboard.Parent = adornee
 

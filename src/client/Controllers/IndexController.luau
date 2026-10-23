@@ -1,6 +1,6 @@
 -- The index: every species x mutation. Rows are grouped by rarity tier (Common ... Secret),
 -- columns are mutations (Normal, Gold, Diamond, Rainbow). Discovered cells light up.
--- A button under the cash shows progress ("INDEX 3/88"); new discoveries pop a toast.
+-- A button under the cash shows progress ("INDEX 3/88").
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,9 +25,7 @@ local speciesOrder: { string } = {}
 local button: TextButton
 local panel: Frame
 local dim: TextButton
-local toast: TextLabel
 local cells: { [string]: TextLabel } = {}
-local toastToken = 0
 
 local function total(): number
 	return #speciesOrder * #MutationConfig.List
@@ -56,18 +54,6 @@ local function refresh()
 			cell.Text = "?"
 		end
 	end
-end
-
-local function showToast(text: string)
-	toastToken += 1
-	local token = toastToken
-	toast.Text = text
-	toast.Visible = true
-	task.delay(4, function()
-		if toastToken == token then
-			toast.Visible = false
-		end
-	end)
 end
 
 local function buildGui()
@@ -187,17 +173,6 @@ local function buildGui()
 		end
 	end
 
-	toast = Instance.new("TextLabel")
-	toast.AnchorPoint = Vector2.new(0.5, 0)
-	toast.Position = UDim2.new(0.5, 0, 0, 214)
-	toast.Size = UDim2.new(0.9, 0, 0, 30)
-	toast.Visible = false
-	toast.Parent = gui
-	UIStyle.text(toast, Color3.fromRGB(255, 230, 120))
-	local toastConstraint = Instance.new("UISizeConstraint")
-	toastConstraint.MaxSize = Vector2.new(600, 30)
-	toastConstraint.Parent = toast
-
 	local function closePanel()
 		panel.Visible = false
 		dim.Visible = false
@@ -234,19 +209,9 @@ function IndexController.init(initial: Types.InitialState)
 	buildGui()
 	refresh()
 
-	Remotes.event("IndexChanged").OnClientEvent:Connect(function(newIndex: { [string]: boolean }, newKey: string?)
+	Remotes.event("IndexChanged").OnClientEvent:Connect(function(newIndex: { [string]: boolean })
 		index = newIndex
 		refresh()
-		if newKey then
-			local species, mutationKey = string.match(newKey, "^(%w+):(%w+)$")
-			local def = species and AnimalConfig.Animals[species]
-			if def and mutationKey then
-				local name = if mutationKey == MutationConfig.Default
-					then def.DisplayName
-					else `{mutationKey} {def.DisplayName}`
-				showToast(`NEW! {name} added to your index (bonus cash!)`)
-			end
-		end
 	end)
 end
 

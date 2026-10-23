@@ -301,8 +301,9 @@ function AnimalService.celebrate(model: Model)
 		local billboard = Instance.new("BillboardGui")
 		billboard.Name = "CleanBanner"
 		billboard.Size = UDim2.fromOffset(220, 50)
-		billboard.StudsOffset = Vector3.new(0, 3.5, 0)
 		billboard.MaxDistance = 80
+		-- The clean meter is gone by now, so this takes its row above the nameplate.
+		UIStyle.overhead(billboard, head, UIStyle.Overhead.Meter)
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.fromScale(1, 1)
 		label.BackgroundTransparency = 1
