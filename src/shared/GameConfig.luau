@@ -2,14 +2,19 @@
 
 local GameConfig = {
 	-- World
-	-- Bays are built only while a player owns one, at fixed slots; BayCount caps how many.
-	BayCount = 8, -- set the place's Max Players to match (Game Settings > Places)
-	BaySpacing = 70, -- slots alternate +Z/-Z from the origin: 8 bays span z -262..262
-	BayPadSize = Vector3.new(44, 1, 34),
-	-- The dirt road runs along Z west of every zoo (pens reach x -43.5). Animals walk down it,
-	-- then turn into their bay; the delivery truck parks on it.
-	RoadX = -54,
-	RoadWidth = 9,
+	-- Eight plots: four on each side of a center road. Bays are built only while a player
+	-- owns one. BayCount caps how many; set the place's Max Players to match.
+	BayCount = 8,
+	BaySpacing = 120, -- along Z. Four centres per side: -180, -60, 60, 180
+	-- The dirt road runs along Z through the middle. Plots grow away from it (east +X, west -X)
+	-- so a barn can expand backward without crossing the street or a neighbor.
+	RoadX = 0,
+	RoadWidth = 45, -- five times the old 9-stud road
+	SidewalkWidth = 9, -- the old road width, reused as each plot's stall path
+	PlotWidth = 100, -- along Z, inside the 120-stud pitch, leaving a tree gap
+	PlotDepth = 380, -- from the road edge back through the gargantuan barn
+	GroundSize = Vector3.new(1100, 2, 1500),
+	WashQueue = 3, -- animals standing on the U; only the front one is washed
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart
@@ -51,18 +56,16 @@ local GameConfig = {
 	DiscoveryBonusMultiplier = 1, -- first wash of a species+mutation pays this much extra
 	IncomeTickSeconds = 1, -- how often pens accumulate cash
 
-	-- Zoo: pens beside each bay, one row along X behind the pad. Each pen earns its animal's
-	-- income into a collect pad in front of it; stepping on the pad collects it.
+	-- Zoo. Pens 1-6 are the face stalls beside the sidewalk. Each later step is a barn.
 	Zoo = {
-		MaxPens = 8,
-		StartPens = 4,
-		Expansions = { -- bought in order
-			{ Pens = 6, Price = 2500 },
-			{ Pens = 8, Price = 25000 },
+		MaxPens = 19,
+		StartPens = 6,
+		Expansions = {
+			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4, two each side
+			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- widens; +4, fits through extra large
+			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- 1 giant + 2 large
+			{ Pens = 19, Price = 10000000, Barn = "Gargantuan" }, -- +1 giant + 1 gargantuan
 		},
-		PenSize = Vector3.new(10, 1, 12), -- interior floor
-		PenSpacing = 11,
-		PenRowZ = -25, -- pen centres, relative to the bay centre
 	},
 
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
@@ -70,7 +73,6 @@ local GameConfig = {
 	Cache = {
 		Slots = 1, -- the waiting animal leaves when the next wash finishes
 		SlotSpacing = 7,
-		Origin = Vector3.new(8, 0, 9), -- first slot, relative to the bay centre; slots run +X
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
 	},
 

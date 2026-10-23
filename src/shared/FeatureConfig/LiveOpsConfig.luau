@@ -63,7 +63,7 @@ local LiveOpsConfig = {
 	},
 
 	Board = {
-		Position = Vector3.new(17, 0, -7), -- behind the plaza fountain, facing the welcome sign
+		Position = Vector3.new(0, 0, -520), -- south end of the road, clear of the eight plots
 		Size = Vector3.new(0.6, 9, 13),
 		Height = 3, -- gap under the board
 		Rows = 8,

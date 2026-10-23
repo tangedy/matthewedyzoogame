@@ -22,7 +22,8 @@ local Hooks = require(script.Parent.Hooks)
 -- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
 -- v3: species have fixed rarities and walk-ins roll a mutation instead; adds the cache and
 -- each pen's uncollected cash. v2 rarities map onto mutations when migrating.
-local SCHEMA_VERSION = 3
+-- v4: the eight-plot barn ladder. Old sizes 4/6/8 become 6 or the small barn (10).
+local SCHEMA_VERSION = 4
 
 export type CachedAnimal = {
 	Id: string,
@@ -182,12 +183,19 @@ local function sanitize(raw: any): SavedData
 	local tier = cleanCount(raw.ToolTier)
 	data.ToolTier = if ToolConfig[tier] then tier else 1
 
-	-- v2 fields. A v1 record simply has none of them and keeps the defaults.
+	local version = cleanCount(raw.SchemaVersion)
+	-- v4 replaced the 4/6/8 pen row with face stalls (6) and a small barn (10).
 	local zooSize = cleanCount(raw.ZooSize)
+	if version < 4 then
+		if zooSize == 4 then
+			zooSize = 6
+		elseif zooSize == 6 or zooSize == 8 then
+			zooSize = 10
+		end
+	end
 	data.ZooSize = if isValidZooSize(zooSize) then zooSize else GameConfig.Zoo.StartPens
 	data.NextAnimalId = math.max(cleanCount(raw.NextAnimalId), 1)
 
-	local version = cleanCount(raw.SchemaVersion)
 	if typeof(raw.Index) == "table" then
 		for key, discovered in raw.Index do
 			if typeof(key) == "string" and discovered == true then

@@ -1,35 +1,99 @@
--- Builds the map. Bays are built on demand: one appears when a player is given a slot and is
--- destroyed when they leave, so empty lanes never show. Slots alternate either side of the
--- world origin (+Z, -Z, +Z ...), leaving the origin clear for the default spawn.
+-- Builds one farm when a player is given a plot, and destroys it when they leave.
+-- Slots 1-4 are east of the road, 5-8 west. Each plot faces the road and grows backward:
+--   U wash (three queue marks) -> cache -> sidewalk -> face stalls -> barns.
 --
 -- Each bay exposes:
---   Entrance, WashPosition, Exit   lane markers (LookVector = travel direction)
+--   Entrance, WashPosition, Queue2, Queue3, Exit   lane markers (LookVector = travel direction)
 --   Spawn                          the owner's SpawnLocation
 --   SignPost.Sign.BayLabel         owner name
 --   UpgradeStation.Counter         hose shop prompt
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
---   Zoo.Pen{i}                     Floor, Slot, Gate, GatePost.PenPrompt, CollectPad (+ Cash label)
---   Zoo.ExpandCounter              zoo expansion prompt
+--   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
+--   Zoo.ExpandCounter              barn upgrade, beside the sidewalk entrance
+--   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local PlotLayout = require(ReplicatedStorage.Shared.PlotLayout)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
 local WorldBuilder = {}
 
 local folder: Folder
 
+local FLOOR_Y = 0.5
+local WOOD = Color3.fromRGB(150, 110, 70)
+local WOOD_DARK = Color3.fromRGB(110, 75, 45)
+
+-- Depths measured from the road edge, away from the street.
+local MOUTH = 14
+local RADIUS = 30
+local QUEUE_DEPTH = { 40, 28, 16 } -- 1 is the wash, at the closed end of the U
+local CACHE_DEPTH = 52
+local WALK_START = 62
+local STALL_DEPTH = 16
+local STALL_LAT = 14
+local STALL_PITCH = 22
+local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 2 + STALL_LAT / 2
+local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
+
+local BARN_FRONT = WALK_END + 8
+local MED_DEPTH = 26
+local MED_LAT = 22
+local MED_PITCH = MED_DEPTH + 8
+local ROW_DEPTH = {
+	BARN_FRONT + 8 + MED_DEPTH / 2,
+	0,
+}
+ROW_DEPTH[2] = ROW_DEPTH[1] + MED_PITCH
+local BARN_BACK = ROW_DEPTH[2] + MED_DEPTH / 2 + 8
+local OUTER_LATERAL = STALL_LATERAL + STALL_LAT / 2 + 3 + MED_LAT / 2
+
+local LARGE_FRONT = BARN_BACK + 12
+local GIANT_DEPTH = 36
+local GIANT_LAT = 32
+local LARGE_DEPTH = 26
+local LARGE_LAT = 22
+local LARGE_CENTER = LARGE_FRONT + 8 + GIANT_DEPTH / 2
+local LARGE_BACK = LARGE_CENTER + GIANT_DEPTH / 2 + 8
+local LARGE_SIDE = GIANT_LAT / 2 + 4 + LARGE_LAT / 2
+
+local GARG_FRONT = LARGE_BACK + 12
+local GARG_DEPTH = 48
+local GARG_LAT = 44
+local GARG_CENTER = GARG_FRONT + 8 + GARG_DEPTH / 2
+local GARG_BACK = GARG_CENTER + GARG_DEPTH / 2 + 8
+-- The pair is centred: giant on the left of the plot, gargantuan on the right.
+local GARG_SPAN = GIANT_LAT + 6 + GARG_LAT
+local GARG_GIANT_LAT = -GARG_SPAN / 2 + GIANT_LAT / 2
+local GARG_PEN_LAT = GARG_GIANT_LAT + GIANT_LAT / 2 + 6 + GARG_LAT / 2
+
+local FACES = {
+	{ Wall = Color3.fromRGB(255, 170, 185), Trim = Color3.fromRGB(230, 120, 145), Muzzle = Color3.fromRGB(255, 140, 165), Kind = "snout" },
+	{ Wall = Color3.fromRGB(245, 245, 240), Trim = Color3.fromRGB(40, 40, 45), Muzzle = Color3.fromRGB(255, 150, 175), Kind = "horns" },
+	{ Wall = Color3.fromRGB(255, 214, 80), Trim = Color3.fromRGB(210, 50, 45), Muzzle = Color3.fromRGB(255, 140, 40), Kind = "beak" },
+	{ Wall = Color3.fromRGB(245, 245, 245), Trim = Color3.fromRGB(35, 35, 40), Muzzle = Color3.fromRGB(40, 40, 45), Kind = "wool" },
+	{ Wall = Color3.fromRGB(255, 220, 70), Trim = Color3.fromRGB(255, 150, 40), Muzzle = Color3.fromRGB(255, 140, 30), Kind = "bill" },
+	{ Wall = Color3.fromRGB(250, 250, 250), Trim = Color3.fromRGB(255, 170, 190), Muzzle = Color3.fromRGB(255, 160, 180), Kind = "ears" },
+}
+
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
 	part.Anchored = true
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Material = Enum.Material.SmoothPlastic
 	for key, value in props do
 		(part :: any)[key] = value
 	end
+	part:SetAttribute("LayoutPart", true)
+	part:SetAttribute("RestTransparency", part.Transparency)
+	part:SetAttribute("RestCollide", part.CanCollide)
+	part:SetAttribute("RestTouch", part.CanTouch)
+	part:SetAttribute("RestQuery", part.CanQuery)
 	return part
 end
 
@@ -44,6 +108,11 @@ local function makeMarker(name: string, cframe: CFrame, parent: Instance): Part
 		CanTouch = false,
 		Parent = parent,
 	})
+end
+
+local function stampDecor(inst: Instance, enabled: boolean)
+	inst:SetAttribute("LayoutDecor", true)
+	inst:SetAttribute("RestEnabled", enabled)
 end
 
 local function makePrompt(
@@ -61,10 +130,10 @@ local function makePrompt(
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = key or Enum.KeyCode.E
 	prompt.Parent = parent
+	stampDecor(prompt, prompt.Enabled)
 	return prompt
 end
 
--- Outlined floating label (Steal a Brainrot style).
 local function billboardLabel(
 	adornee: BasePart,
 	text: string,
@@ -77,6 +146,7 @@ local function billboardLabel(
 	billboard.StudsOffset = offset
 	billboard.MaxDistance = 50
 	billboard.Parent = adornee
+	stampDecor(billboard, true)
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.Size = UDim2.fromScale(1, 1)
@@ -86,29 +156,55 @@ local function billboardLabel(
 	return label
 end
 
+-- Shows or hides a pen or barn shell. Only parts stamped at build time move, so an
+-- animal standing in the pen is left alone.
+function WorldBuilder.setShown(root: Instance, shown: boolean)
+	for _, d in root:GetDescendants() do
+		if d:GetAttribute("LayoutPart") == true and d:IsA("BasePart") then
+			if shown then
+				d.Transparency = d:GetAttribute("RestTransparency") :: number
+				d.CanCollide = d:GetAttribute("RestCollide") == true
+				d.CanTouch = d:GetAttribute("RestTouch") == true
+				d.CanQuery = d:GetAttribute("RestQuery") == true
+			else
+				d.Transparency = 1
+				d.CanCollide = false
+				d.CanTouch = false
+				d.CanQuery = false
+			end
+		elseif d:GetAttribute("LayoutDecor") == true then
+			local enabled = shown and d:GetAttribute("RestEnabled") == true
+			if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Light") then
+				d.Enabled = enabled
+			end
+		end
+	end
+end
+
 local function ensureGround()
-	if Workspace:FindFirstChild("Baseplate") or Workspace:FindFirstChild("Ground") then
+	local ground = Workspace:FindFirstChild("Baseplate") or Workspace:FindFirstChild("Ground")
+	if ground and ground:IsA("BasePart") then
+		ground.Size = GameConfig.GroundSize
+		ground.Position = Vector3.new(0, -GameConfig.GroundSize.Y / 2, 0)
 		return
 	end
 	makePart({
 		Name = "Ground",
-		Size = Vector3.new(512, 2, 1024),
-		Position = Vector3.new(0, -1, 0),
+		Size = GameConfig.GroundSize,
+		Position = Vector3.new(0, -GameConfig.GroundSize.Y / 2, 0),
 		Color = Color3.fromRGB(106, 168, 79),
 		Material = Enum.Material.Grass,
 		Parent = Workspace,
 	})
 end
 
--- Hose upgrade counter. The client opens the shop panel when its ProximityPrompt fires;
--- purchases still go through the server.
-local function buildUpgradeStation(base: Vector3, parent: Instance)
+local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local station = Instance.new("Model")
 	station.Name = "UpgradeStation"
-
+	local base = PlotLayout.point(plot, 30, 36, 0)
 	local counter = makePart({
 		Name = "Counter",
-		Size = Vector3.new(6, 3, 3),
+		Size = Vector3.new(3, 3, 6),
 		Position = base + Vector3.new(0, 1.5, 0),
 		Color = Color3.fromRGB(60, 150, 230),
 		Material = Enum.Material.SmoothPlastic,
@@ -116,220 +212,667 @@ local function buildUpgradeStation(base: Vector3, parent: Instance)
 	})
 	makePart({
 		Name = "Awning",
-		Size = Vector3.new(7, 0.4, 4),
+		Size = Vector3.new(4, 0.4, 7),
 		Position = base + Vector3.new(0, 6.5, 0),
 		Color = Color3.fromRGB(255, 210, 70),
-		Material = Enum.Material.SmoothPlastic,
+		CanQuery = false,
 		Parent = station,
 	})
-	for _, side in { -1, 1 } do
-		makePart({
-			Name = "Pole",
-			Size = Vector3.new(0.4, 3.5, 0.4),
-			Position = base + Vector3.new(side * 3.2, 4.75, 0),
-			Color = Color3.fromRGB(240, 240, 240),
-			Material = Enum.Material.SmoothPlastic,
-			Parent = station,
-		})
-	end
-	-- No static sign: the owner's client floats a bobbing "UPGRADE!" over this counter.
 	local prompt = makePrompt("UpgradePrompt", "Upgrade Hose", 0, counter)
 	prompt.ObjectText = "Hose Shop"
-
 	station.Parent = parent
 end
 
--- Washed animals wait here. ZooService enables each slot's prompts while it holds an animal.
-local function buildCache(center: Vector3, padTop: number, bay: Model)
-	local cfg = GameConfig.Cache
+local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	local cache = Instance.new("Folder")
 	cache.Name = "Cache"
-	local first = center + cfg.Origin
-	local width = (cfg.Slots - 1) * cfg.SlotSpacing + 6
-	local floor = makePart({
+	makePart({
 		Name = "CacheFloor",
-		Size = Vector3.new(width, 0.2, 9),
-		Position = Vector3.new(first.X + (cfg.Slots - 1) * cfg.SlotSpacing / 2, padTop + 0.1, first.Z),
-		Color = Color3.fromRGB(110, 200, 255),
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
+		Size = Vector3.new(10, 0.4, 10),
+		Position = PlotLayout.point(plot, CACHE_DEPTH, 0, 0.2),
+		Color = Color3.fromRGB(230, 190, 120),
+		Material = Enum.Material.WoodPlanks,
 		CanQuery = false,
 		Parent = cache,
 	})
-	billboardLabel(floor, "CACHE", Vector3.new(0, 7, 0), Vector2.new(160, 40), Color3.fromRGB(110, 200, 255))
-	for i = 1, cfg.Slots do
-		local pos = Vector3.new(first.X + (i - 1) * cfg.SlotSpacing, padTop, first.Z)
-		local slot = makeMarker("Slot" .. i, CFrame.lookAt(pos, pos + Vector3.zAxis), cache)
-		slot:SetAttribute("SlotIndex", i)
-		makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false
-		-- Below the pickup prompt, and a hold, so the two labels don't draw on top of each other.
-		local sell = makePrompt("SellPrompt", "Sell", 1.5, slot, Enum.KeyCode.F)
-		-- Positive Y shifts the billboard up. Negative puts Sell under Pick up.
-		sell.UIOffset = Vector2.new(0, -110)
-		sell.GamepadKeyCode = Enum.KeyCode.ButtonY
-		sell.Enabled = false
-	end
+	local slot = makeMarker("Slot1", PlotLayout.outbound(plot, CACHE_DEPTH, 0, FLOOR_Y), cache)
+	slot:SetAttribute("SlotIndex", 1)
+	makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false
+	local sell = makePrompt("SellPrompt", "Sell", 1.5, slot, Enum.KeyCode.F)
+	sell.UIOffset = Vector2.new(0, -110)
+	sell.GamepadKeyCode = Enum.KeyCode.ButtonY
+	sell.Enabled = false
 	cache.Parent = bay
 end
 
--- One row of pens behind the pad (toward -Z), gates facing the pad. ZooService fills them,
--- locks/unlocks them, drives the prompts and the cash labels.
-local function buildZoo(center: Vector3, padTop: number, bay: Model)
-	local cfg = GameConfig.Zoo
-	local zoo = Instance.new("Folder")
-	zoo.Name = "Zoo"
-	local size = cfg.PenSize
-	local fenceColor = Color3.fromRGB(150, 110, 70)
-	for i = 1, cfg.MaxPens do
-		local pen = Instance.new("Model")
-		pen.Name = "Pen" .. i
-		pen:SetAttribute("PenIndex", i)
-		local x = center.X + (i - (cfg.MaxPens + 1) / 2) * cfg.PenSpacing
-		local z = center.Z + cfg.PenRowZ
-		local floor = makePart({
-			Name = "Floor",
-			Size = size,
-			Position = Vector3.new(x, padTop - size.Y / 2, z),
-			Color = Color3.fromRGB(120, 170, 80),
-			Material = Enum.Material.Grass,
+-- A stall whose sidewalk face is an animal: eyes, a muzzle, and a mouth-shaped gate.
+local function buildFace(
+	plot: PlotLayout.PlotFrame,
+	depth: number,
+	lateral: number,
+	faceIndex: number,
+	parent: Instance
+)
+	local face = FACES[faceIndex]
+	local halfD = STALL_DEPTH / 2
+	local halfL = STALL_LAT / 2
+	local sign = if lateral >= 0 then 1 else -1
+	local inner = lateral - sign * halfL
+	local outer = lateral + sign * halfL
+	local wallH = 8
+	local mouthW = 5
+	local mouthH = 4.6
+	local sideW = (STALL_DEPTH - mouthW) / 2
+
+	local function at(d: number, lat: number, y: number): Vector3
+		return PlotLayout.point(plot, d, lat, y)
+	end
+
+	makePart({
+		Name = "Floor",
+		Size = Vector3.new(STALL_DEPTH, 1, STALL_LAT),
+		Position = at(depth, lateral, 0),
+		Color = Color3.fromRGB(120, 170, 80),
+		Material = Enum.Material.Grass,
+		Parent = parent,
+	})
+	-- Back and sides.
+	makePart({
+		Name = "Wall",
+		Size = Vector3.new(STALL_DEPTH, wallH, 0.6),
+		Position = at(depth, outer, wallH / 2),
+		Color = face.Wall,
+		CanQuery = false,
+		Parent = parent,
+	})
+	for _, edge in { -1, 1 } do
+		makePart({
+			Name = "Wall",
+			Size = Vector3.new(0.6, wallH, STALL_LAT),
+			Position = at(depth + edge * halfD, lateral, wallH / 2),
+			Color = face.Wall,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	-- Front split around the mouth, which is the gate onto the sidewalk.
+	for _, edge in { -1, 1 } do
+		makePart({
+			Name = "Wall",
+			Size = Vector3.new(sideW, wallH, 0.6),
+			Position = at(depth + edge * (mouthW / 2 + sideW / 2), inner, wallH / 2),
+			Color = face.Wall,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	local lintelH = wallH - mouthH
+	makePart({
+		Name = "Wall",
+		Size = Vector3.new(mouthW, lintelH, 0.6),
+		Position = at(depth, inner, mouthH + lintelH / 2),
+		Color = face.Wall,
+		CanQuery = false,
+		Parent = parent,
+	})
+	-- Eyes sit on the lintel, proud of the wall toward the sidewalk.
+	local eyeLat = inner - sign * 0.7
+	for _, edge in { -1, 1 } do
+		local eye = makePart({
+			Name = "Eye",
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.new(1.5, 1.5, 1.5),
+			Position = at(depth + edge * 1.5, eyeLat, 6.3),
+			Color = Color3.fromRGB(255, 255, 255),
+			CanCollide = false,
+			CanQuery = false,
+			Parent = parent,
+		})
+		makePart({
+			Name = "Pupil",
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.new(0.7, 0.7, 0.7),
+			Position = eye.Position + plot.Right * (-sign) * 0.45,
+			Color = face.Trim,
+			CanCollide = false,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	local muzzleLat = inner - sign * 1.3
+	makePart({
+		Name = "Muzzle",
+		Size = if face.Kind == "bill" then Vector3.new(3.2, 0.8, 1.6) else Vector3.new(2.4, 1.5, 1.6),
+		Position = at(depth, muzzleLat, if face.Kind == "beak" or face.Kind == "bill" then 4.6 else 3.6),
+		Color = face.Muzzle,
+		CanCollide = false,
+		CanQuery = false,
+		Parent = parent,
+	})
+	if face.Kind == "snout" then
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Nostril",
+				Shape = Enum.PartType.Ball,
+				Size = Vector3.new(0.35, 0.35, 0.35),
+				Position = at(depth + edge * 0.45, muzzleLat - sign * 0.7, 3.6),
+				Color = face.Trim,
+				CanCollide = false,
+				CanQuery = false,
+				Parent = parent,
+			})
+		end
+	elseif face.Kind == "horns" then
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Horn",
+				Size = Vector3.new(0.4, 1.6, 0.4),
+				Position = at(depth + edge * 2.2, inner, wallH + 0.4),
+				Color = Color3.fromRGB(230, 220, 190),
+				CanCollide = false,
+				CanQuery = false,
+				Parent = parent,
+			})
+		end
+		makePart({
+			Name = "Spot",
+			Size = Vector3.new(2.2, 1.4, 0.3),
+			Position = at(depth + 3.2, outer - sign * 0.2, 5),
+			Color = face.Trim,
+			CanCollide = false,
+			CanQuery = false,
+			Parent = parent,
+		})
+	elseif face.Kind == "beak" then
+		makePart({
+			Name = "Comb",
+			Size = Vector3.new(0.4, 1.4, 1.2),
+			Position = at(depth, inner, wallH + 0.4),
+			Color = face.Trim,
+			CanCollide = false,
+			CanQuery = false,
+			Parent = parent,
+		})
+	elseif face.Kind == "wool" then
+		for i = 1, 3 do
+			makePart({
+				Name = "Wool",
+				Shape = Enum.PartType.Ball,
+				Size = Vector3.new(2.4, 2.4, 2.4),
+				Position = at(depth + (i - 2) * 2.2, outer - sign * 0.4, 6.2),
+				Color = Color3.fromRGB(250, 250, 250),
+				CanCollide = false,
+				CanQuery = false,
+				Parent = parent,
+			})
+		end
+	elseif face.Kind == "ears" then
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Ear",
+				Size = Vector3.new(0.5, 2.6, 1),
+				Position = at(depth + edge * 1.6, inner, wallH + 0.8),
+				Color = face.Wall,
+				CanCollide = false,
+				CanQuery = false,
+				Parent = parent,
+			})
+		end
+	end
+end
+
+local function addPenPrompts(
+	plot: PlotLayout.PlotFrame,
+	pen: Model,
+	depth: number,
+	lateral: number,
+	look: Vector3,
+	reach: number
+)
+	local slotPos = PlotLayout.point(plot, depth, lateral, FLOOR_Y)
+	makeMarker("Slot", CFrame.lookAt(slotPos, slotPos + look), pen)
+	local gate = slotPos + look * reach
+	makeMarker("Gate", CFrame.lookAt(gate, gate + look), pen)
+	local post = makePart({
+		Name = "GatePost",
+		Size = Vector3.new(0.6, 3.5, 0.6),
+		Position = gate + Vector3.new(0, 1.75, 0) + plot.Right * 1.6,
+		Color = Color3.fromRGB(240, 240, 240),
+		Parent = pen,
+	})
+	makePrompt("PenPrompt", "Sell", 1, post).Enabled = false
+	local padPos = gate + look * 2.2
+	local pad = makePart({
+		Name = "CollectPad",
+		Size = Vector3.new(3.2, 0.3, 3.2),
+		Position = padPos + Vector3.new(0, 0.15, 0),
+		Color = Color3.fromRGB(80, 220, 90),
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		Parent = pen,
+	})
+	local cash = billboardLabel(pad, "", Vector3.new(0, 2.6, 0), Vector2.new(170, 44), UIStyle.CashColor);
+	(cash.Parent :: Instance).Name = "Cash"
+	local glow = Instance.new("PointLight")
+	glow.Color = UIStyle.CashColor
+	glow.Brightness = 1.2
+	glow.Range = 7
+	glow.Parent = pad
+	stampDecor(glow, true)
+	CollectionService:AddTag(pad, "CollectPad")
+end
+
+local function buildFencedPen(
+	plot: PlotLayout.PlotFrame,
+	pen: Model,
+	depth: number,
+	lateral: number,
+	depthSize: number,
+	latSize: number,
+	look: Vector3
+)
+	local pos = PlotLayout.point(plot, depth, lateral, 0)
+	local floor = makePart({
+		Name = "Floor",
+		Size = Vector3.new(depthSize, 1, latSize),
+		Position = pos,
+		Color = Color3.fromRGB(120, 170, 80),
+		Material = Enum.Material.Grass,
+		Parent = pen,
+	})
+	local h = math.clamp(latSize * 0.28, 3.5, 8)
+	local y = h / 2
+	local halfD, halfL = depthSize / 2, latSize / 2
+	local gate = 4
+	-- Back and sides are solid. The front, toward `look`, is split around a gate.
+	-- Front is the side the look vector leaves through. look is either ±Right (a side
+	-- pen) or Look (a pen facing the road). Both are axis-aligned, so the front wall
+	-- is the thin face on that axis.
+	local facingRoad = math.abs(look:Dot(plot.Look)) > 0.5
+	if facingRoad then
+		local frontDepth = depth - halfD
+		makePart({
+			Name = "Fence",
+			Size = Vector3.new(0.4, h, latSize),
+			Position = PlotLayout.point(plot, depth + halfD, lateral, y),
+			Color = WOOD,
+			Material = Enum.Material.Wood,
+			CanQuery = false,
 			Parent = pen,
 		})
-		-- Fence: back and sides solid, front split around a 4-stud gate.
-		local h = 2.5
-		local y = padTop + h / 2
-		local halfX, halfZ = size.X / 2, size.Z / 2
-		local rails = {
-			{ Vector3.new(size.X, h, 0.3), Vector3.new(x, y, z - halfZ) },
-			{ Vector3.new(0.3, h, size.Z), Vector3.new(x - halfX, y, z) },
-			{ Vector3.new(0.3, h, size.Z), Vector3.new(x + halfX, y, z) },
-			{ Vector3.new((size.X - 4) / 2, h, 0.3), Vector3.new(x - halfX + (size.X - 4) / 4, y, z + halfZ) },
-			{ Vector3.new((size.X - 4) / 2, h, 0.3), Vector3.new(x + halfX - (size.X - 4) / 4, y, z + halfZ) },
-		}
-		for _, rail in rails do
+		for _, edge in { -1, 1 } do
 			makePart({
 				Name = "Fence",
-				Size = rail[1],
-				Position = rail[2],
-				Color = fenceColor,
+				Size = Vector3.new(depthSize, h, 0.4),
+				Position = PlotLayout.point(plot, depth, lateral + edge * halfL, y),
+				Color = WOOD,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
 			})
 		end
-		local slotPos = Vector3.new(x, padTop, z)
-		makeMarker("Slot", CFrame.lookAt(slotPos, slotPos + Vector3.zAxis), pen)
-		local gatePos = Vector3.new(x, padTop, z + halfZ + 4)
-		makeMarker("Gate", CFrame.lookAt(gatePos, gatePos - Vector3.zAxis), pen)
-
-		local post = makePart({
-			Name = "GatePost",
-			Size = Vector3.new(0.6, 3.5, 0.6),
-			Position = Vector3.new(x + 2.4, padTop + 1.75, z + halfZ + 0.4),
-			Color = Color3.fromRGB(240, 240, 240),
-			Material = Enum.Material.SmoothPlastic,
-			Parent = pen,
-		})
-		makePrompt("PenPrompt", "Sell", 1, post).Enabled = false
-
-		-- Step on the pad to collect the pen's earnings.
-		local pad = makePart({
-			Name = "CollectPad",
-			Size = Vector3.new(3.4, 0.3, 3.4),
-			Position = Vector3.new(x - 3, padTop + 0.15, z + halfZ + 2.4),
-			Color = Color3.fromRGB(80, 220, 90),
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Parent = pen,
-		})
-		local cash = billboardLabel(pad, "", Vector3.new(0, 2.6, 0), Vector2.new(170, 44), UIStyle.CashColor);
-		(cash.Parent :: Instance).Name = "Cash"
-		local glow = Instance.new("PointLight")
-		glow.Color = UIStyle.CashColor
-		glow.Brightness = 1.2
-		glow.Range = 7
-		glow.Parent = pad
-		CollectionService:AddTag(pad, "CollectPad") -- PenCashController animates these
-
-		local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(80, 18))
-		local stroke = status:FindFirstChildOfClass("UIStroke")
-		if stroke then
-			stroke.Thickness = 1.25
+		local sideW = (latSize - gate) / 2
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Fence",
+				Size = Vector3.new(0.4, h, sideW),
+				Position = PlotLayout.point(plot, frontDepth, lateral + edge * (gate / 2 + sideW / 2), y),
+				Color = WOOD,
+				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = pen,
+			})
 		end
-		(status.Parent :: Instance).Name = "Status"
+	else
+		local sign = if lateral >= 0 then 1 else -1
+		local frontLat = lateral - sign * halfL
+		makePart({
+			Name = "Fence",
+			Size = Vector3.new(depthSize, h, 0.4),
+			Position = PlotLayout.point(plot, depth, lateral + sign * halfL, y),
+			Color = WOOD,
+			Material = Enum.Material.Wood,
+			CanQuery = false,
+			Parent = pen,
+		})
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Fence",
+				Size = Vector3.new(0.4, h, latSize),
+				Position = PlotLayout.point(plot, depth + edge * halfD, lateral, y),
+				Color = WOOD,
+				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = pen,
+			})
+		end
+		local sideW = (depthSize - gate) / 2
+		for _, edge in { -1, 1 } do
+			makePart({
+				Name = "Fence",
+				Size = Vector3.new(sideW, h, 0.4),
+				Position = PlotLayout.point(plot, depth + edge * (gate / 2 + sideW / 2), frontLat, y),
+				Color = WOOD,
+				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = pen,
+			})
+		end
+	end
+	local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(80, 18))
+	local stroke = status:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Thickness = 1.25
+	end
+	(status.Parent :: Instance).Name = "Status"
+	local reach = if facingRoad then depthSize / 2 + 2 else latSize / 2 + 2
+	addPenPrompts(plot, pen, depth, lateral, look, reach)
+end
+
+local buildBarns: (plot: PlotLayout.PlotFrame, zoo: Folder) -> ()
+
+local function inwardLook(plot: PlotLayout.PlotFrame, lateral: number): Vector3
+	return if lateral >= 0 then -plot.Right else plot.Right
+end
+
+local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
+	local zoo = Instance.new("Folder")
+	zoo.Name = "Zoo"
+
+	local function addPen(index: number, depth: number, lateral: number, depthSize: number, latSize: number, class: string, face: number?)
+		local pen = Instance.new("Model")
+		pen.Name = "Pen" .. index
+		pen:SetAttribute("PenIndex", index)
+		pen:SetAttribute("PenClass", class)
+		local look = if face then inwardLook(plot, lateral) elseif class == "Giant" or class == "Gargantuan" or class == "Large"
+			then if math.abs(lateral) < 1 then plot.Look else inwardLook(plot, lateral)
+			else inwardLook(plot, lateral)
+		if face then
+			buildFace(plot, depth, lateral, face, pen)
+			local floor = pen:FindFirstChild("Floor") :: BasePart
+			local status = billboardLabel(floor, "", Vector3.new(0, 9, 0), Vector2.new(80, 18))
+			local stroke = status:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Thickness = 1.25
+			end
+			(status.Parent :: Instance).Name = "Status"
+			addPenPrompts(plot, pen, depth, lateral, look, STALL_LAT / 2 + 2)
+		else
+			buildFencedPen(plot, pen, depth, lateral, depthSize, latSize, look)
+		end
 		pen.Parent = zoo
+		if index > GameConfig.Zoo.StartPens then
+			WorldBuilder.setShown(pen, false)
+		end
 	end
 
-	-- Zoo expansion stand on the pad, next to the pens
-	local standPos = Vector3.new(center.X + 16, padTop, center.Z - 12)
+	-- Six face stalls, three on each side of the sidewalk. Front of the row is nearest the road.
+	local stallDepth0 = WALK_START + 8 + STALL_DEPTH / 2
+	for row = 0, 2 do
+		local depth = stallDepth0 + row * STALL_PITCH
+		local left = row * 2 + 1
+		local right = left + 1
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", left)
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", right)
+	end
+
+	-- Small barn: two standard pens each side. Medium adds a wider column each side.
+	for row = 1, 2 do
+		local depth = ROW_DEPTH[row]
+		local left = 6 + row * 2 - 1 -- 7, 9
+		local right = left + 1 -- 8, 10
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", nil)
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", nil)
+		local outerLeft = 10 + row * 2 - 1 -- 11, 13
+		local outerRight = outerLeft + 1
+		addPen(outerLeft, depth, -OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium", nil)
+		addPen(outerRight, depth, OUTER_LATERAL, MED_DEPTH, MED_LAT, "Medium", nil)
+	end
+
+	-- Large barn, one rank behind: giant in the middle, a large pen on each side.
+	addPen(15, LARGE_CENTER, 0, GIANT_DEPTH, GIANT_LAT, "Giant", nil)
+	addPen(16, LARGE_CENTER, -LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large", nil)
+	addPen(17, LARGE_CENTER, LARGE_SIDE, LARGE_DEPTH, LARGE_LAT, "Large", nil)
+
+	-- Gargantuan barn, further back: one more giant and one gargantuan pen.
+	addPen(18, GARG_CENTER, GARG_GIANT_LAT, GIANT_DEPTH, GIANT_LAT, "Giant", nil)
+	addPen(19, GARG_CENTER, GARG_PEN_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", nil)
+
+	-- Barn upgrade, beside the mouth of the sidewalk.
+	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)
 	local counter = makePart({
 		Name = "ExpandCounter",
-		Size = Vector3.new(5, 3, 2.5),
-		Position = standPos + Vector3.new(0, 1.5, 0),
+		Size = Vector3.new(3, 3, 5),
+		Position = stand + Vector3.new(0, 1.5, 0),
 		Color = Color3.fromRGB(120, 170, 80),
-		Material = Enum.Material.SmoothPlastic,
 		Parent = zoo,
 	})
-	billboardLabel(counter, "ZOO EXPANSION", Vector3.new(0, 4, 0), Vector2.new(190, 36))
-	makePrompt("ExpandPrompt", "Expand Zoo", 0.5, counter).ObjectText = "Zoo Expansion"
+	makePart({
+		Name = "Awning",
+		Size = Vector3.new(4, 0.4, 6),
+		Position = stand + Vector3.new(0, 5.2, 0),
+		Color = Color3.fromRGB(200, 60, 50),
+		CanQuery = false,
+		Parent = zoo,
+	})
+	billboardLabel(counter, "BARN", Vector3.new(0, 4.2, 0), Vector2.new(160, 36))
+	makePrompt("ExpandPrompt", "Expand Zoo", 0.5, counter).ObjectText = "Barn Upgrade"
 
+	buildBarns(plot, zoo)
 	zoo.Parent = bay
 end
 
--- Slot 1 at +Z, slot 2 at -Z, slot 3 further +Z, and so on.
-local function slotCenter(index: number): Vector3
-	local row = math.ceil(index / 2)
-	local side = if index % 2 == 1 then 1 else -1
-	return Vector3.new(0, 0, side * (row - 0.5) * GameConfig.BaySpacing)
+local function barnBox(
+	plot: PlotLayout.PlotFrame,
+	parent: Instance,
+	depth0: number,
+	depth1: number,
+	halfLat: number,
+	height: number,
+	wall: Color3,
+	roof: Color3
+)
+	local mid = (depth0 + depth1) / 2
+	local span = depth1 - depth0
+	local y = height / 2
+	for _, side in { -1, 1 } do
+		makePart({
+			Name = "Wall",
+			Size = Vector3.new(span, height, 1.2),
+			Position = PlotLayout.point(plot, mid, side * halfLat, y),
+			Color = wall,
+			Material = Enum.Material.Wood,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	makePart({
+		Name = "Wall",
+		Size = Vector3.new(1.2, height, halfLat * 2),
+		Position = PlotLayout.point(plot, depth1, 0, y),
+		Color = wall,
+		Material = Enum.Material.Wood,
+		CanQuery = false,
+		Parent = parent,
+	})
+	local doorW = 8
+	local doorH = math.min(10, height - 3)
+	local sideW = (halfLat * 2 - doorW) / 2
+	for _, side in { -1, 1 } do
+		makePart({
+			Name = "Wall",
+			Size = Vector3.new(1.2, height, sideW),
+			Position = PlotLayout.point(plot, depth0, side * (doorW / 2 + sideW / 2), y),
+			Color = wall,
+			Material = Enum.Material.Wood,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	local lintel = height - doorH
+	makePart({
+		Name = "Wall",
+		Size = Vector3.new(1.2, lintel, doorW),
+		Position = PlotLayout.point(plot, depth0, 0, doorH + lintel / 2),
+		Color = wall,
+		Material = Enum.Material.Wood,
+		CanQuery = false,
+		Parent = parent,
+	})
+	-- Aisle floor, so the barn reads as a building even before its pens are noticed.
+	makePart({
+		Name = "Aisle",
+		Size = Vector3.new(span, 0.3, GameConfig.SidewalkWidth),
+		Position = PlotLayout.point(plot, mid, 0, 0.15),
+		Color = Color3.fromRGB(190, 175, 150),
+		Material = Enum.Material.Cobblestone,
+		CanQuery = false,
+		Parent = parent,
+	})
+	local panel = (halfLat + 1.5) / math.cos(math.rad(28))
+	for _, side in { -1, 1 } do
+		local center = PlotLayout.point(plot, mid, side * halfLat * 0.5, height + 1.2)
+		makePart({
+			Name = "Roof",
+			Size = Vector3.new(span + 2, 0.8, panel),
+			CFrame = CFrame.new(center) * CFrame.Angles(side * math.rad(-28), 0, 0),
+			Color = roof,
+			Material = Enum.Material.Wood,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
 end
 
-function WorldBuilder.buildBay(index: number): Model
-	local center = slotCenter(index)
-	local bay = Instance.new("Model")
-	bay.Name = "Bay" .. index
+function buildBarns(plot: PlotLayout.PlotFrame, zoo: Folder)
+	local red = Color3.fromRGB(200, 60, 50)
+	local redDark = Color3.fromRGB(120, 45, 40)
+	local shells = {
+		{
+			Name = "BarnSmall",
+			Depth0 = BARN_FRONT,
+			Depth1 = BARN_BACK,
+			Half = STALL_LATERAL + STALL_LAT / 2 + 2,
+			Height = 14,
+			Wall = red,
+			Roof = redDark,
+		},
+		{
+			Name = "BarnMedium",
+			Depth0 = BARN_FRONT,
+			Depth1 = BARN_BACK,
+			Half = OUTER_LATERAL + MED_LAT / 2 + 2,
+			Height = 16,
+			Wall = Color3.fromRGB(180, 70, 50),
+			Roof = Color3.fromRGB(90, 50, 40),
+		},
+		{
+			Name = "BarnLarge",
+			Depth0 = LARGE_FRONT,
+			Depth1 = LARGE_BACK,
+			Half = LARGE_SIDE + LARGE_LAT / 2 + 2,
+			Height = 20,
+			Wall = Color3.fromRGB(150, 55, 45),
+			Roof = WOOD_DARK,
+		},
+		{
+			Name = "BarnGargantuan",
+			Depth0 = GARG_FRONT,
+			Depth1 = GARG_BACK,
+			Half = GARG_SPAN / 2 + 2,
+			Height = 28,
+			Wall = Color3.fromRGB(120, 70, 50),
+			Roof = Color3.fromRGB(70, 45, 35),
+		},
+	}
+	for _, spec in shells do
+		local model = Instance.new("Model")
+		model.Name = spec.Name
+		barnBox(plot, model, spec.Depth0, spec.Depth1, spec.Half, spec.Height, spec.Wall, spec.Roof)
+		model.Parent = zoo
+		WorldBuilder.setShown(model, false)
+	end
+end
 
-	local padSize = GameConfig.BayPadSize
-	local padTop = center.Y + padSize.Y / 2
-	local halfLength = padSize.X / 2
-
+local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
+	-- Yard under the queue. The fence, not this pad, is what reads as the U.
+	local yardDepth = (QUEUE_DEPTH[3] + QUEUE_DEPTH[1]) / 2
+	local yardSpan = QUEUE_DEPTH[1] - QUEUE_DEPTH[3] + 14
 	makePart({
-		Name = "Pad",
-		Size = padSize,
-		Position = center,
-		Color = Color3.fromRGB(200, 200, 205),
-		Material = Enum.Material.Concrete,
+		Name = "WashCourt",
+		Size = Vector3.new(yardSpan, 0.4, RADIUS * 1.4),
+		Position = PlotLayout.point(plot, yardDepth, 0, 0.2),
+		Color = Color3.fromRGB(214, 196, 160),
+		Material = Enum.Material.Cobblestone,
+		CanQuery = false,
 		Parent = bay,
 	})
-
-	-- Drain under the wash position, a visual cue for where animals stop.
 	makePart({
 		Name = "Drain",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.1, 10, 10),
-		CFrame = CFrame.new(center.X, padTop + 0.05, center.Z) * CFrame.Angles(0, 0, math.rad(90)),
+		Size = Vector3.new(0.15, 8, 8),
+		CFrame = CFrame.new(PlotLayout.point(plot, QUEUE_DEPTH[1], 0, FLOOR_Y + 0.05)) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = Color3.fromRGB(90, 140, 190),
-		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 		CanQuery = false,
 		Parent = bay,
 	})
-
-	-- Animals walk along +X: in at the entrance, stop at the drain.
-	local function laneCFrame(x: number): CFrame
-		local pos = Vector3.new(center.X + x, padTop, center.Z)
-		return CFrame.lookAt(pos, pos + Vector3.xAxis)
+	for deg = -78, 78, 6 do
+		if math.abs(deg) >= 18 then
+			local theta = math.rad(deg)
+			local depth = MOUTH + math.cos(theta) * RADIUS
+			local lateral = math.sin(theta) * RADIUS
+			makePart({
+				Name = "WashFence",
+				Size = Vector3.new(0.7, 3.4, 0.7),
+				Position = PlotLayout.point(plot, depth, lateral, 1.7),
+				Color = Color3.fromRGB(235, 225, 200),
+				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = bay,
+			})
+		end
 	end
-	makeMarker("Entrance", laneCFrame(GameConfig.RoadX - center.X), bay) -- on the road
-	makeMarker("WashPosition", laneCFrame(0), bay)
-	makeMarker("Exit", laneCFrame(halfLength + 6), bay)
+	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], 0, FLOOR_Y), bay)
+	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], 0, FLOOR_Y), bay)
+	makeMarker("Queue3", PlotLayout.inbound(plot, QUEUE_DEPTH[3], 0, FLOOR_Y), bay)
+	makeMarker("Entrance", PlotLayout.inbound(plot, -8, 0, 0.25), bay)
+	makeMarker("Exit", PlotLayout.inbound(plot, -8, 14, 0.25), bay)
+end
 
-	local spawnPos = Vector3.new(center.X - 4, padTop + 0.1, center.Z + 11)
+local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
+	local span = WALK_END - WALK_START
+	makePart({
+		Name = "Sidewalk",
+		Size = Vector3.new(span, 0.35, GameConfig.SidewalkWidth),
+		Position = PlotLayout.point(plot, (WALK_START + WALK_END) / 2, 0, 0.18),
+		Color = Color3.fromRGB(190, 175, 150),
+		Material = Enum.Material.Cobblestone,
+		CanQuery = false,
+		Parent = bay,
+	})
+end
+
+function WorldBuilder.buildBay(index: number): Model
+	local plot = PlotLayout.frame(index)
+	local bay = Instance.new("Model")
+	bay.Name = "Bay" .. index
+
+	buildWash(plot, bay)
+	buildCache(plot, bay)
+	buildSidewalk(plot, bay)
+	buildUpgradeStation(plot, bay)
+	buildZoo(plot, bay)
+
+	local spawnPos = PlotLayout.point(plot, 32, -16, FLOOR_Y)
+	local washPos = PlotLayout.point(plot, QUEUE_DEPTH[1], 0, FLOOR_Y)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Duration = 0
-	spawn.Size = Vector3.new(5, 0.2, 5)
-	spawn.CFrame = CFrame.lookAt(spawnPos, Vector3.new(center.X, spawnPos.Y, center.Z))
+	spawn.Size = Vector3.new(6, 0.2, 6)
+	spawn.CFrame = CFrame.lookAt(spawnPos, washPos)
 	spawn.Color = Color3.fromRGB(120, 190, 255)
 	spawn.Material = Enum.Material.SmoothPlastic
 	spawn.CanCollide = false
@@ -338,19 +881,16 @@ function WorldBuilder.buildBay(index: number): Model
 	local post = makePart({
 		Name = "SignPost",
 		Size = Vector3.new(1, 8, 1),
-		Position = Vector3.new(center.X, padTop + 4, center.Z - padSize.Z / 2 + 1),
+		Position = PlotLayout.point(plot, 6, 22, 4),
 		Color = Color3.fromRGB(120, 85, 60),
 		Material = Enum.Material.Wood,
 		Parent = bay,
 	})
 	local sign = billboardLabel(post, "", Vector3.new(0, 5.5, 0), Vector2.new(260, 50))
 	sign.Name = "BayLabel"
-	(sign.Parent :: BillboardGui).Name = "Sign"
-	(sign.Parent :: BillboardGui).MaxDistance = 80
-
-	buildUpgradeStation(Vector3.new(center.X - 14, padTop, center.Z + 12), bay)
-	buildCache(center, padTop, bay)
-	buildZoo(center, padTop, bay)
+	local signGui = sign.Parent :: BillboardGui
+	signGui.Name = "Sign"
+	signGui.MaxDistance = 80
 
 	bay:SetAttribute("BayIndex", index)
 	bay.Parent = folder

@@ -106,7 +106,7 @@ local function label(parent: Instance, props: { [string]: any }, color: Color3?,
 	return l
 end
 
--- The board stands on two posts and faces -X, toward the plaza and the welcome sign.
+-- The board stands on two posts at the south end of the road and faces -X.
 local function buildBoard()
 	local existing = Workspace:FindFirstChild("LiveOpsLeaderboard")
 	if existing then
