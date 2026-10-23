@@ -74,11 +74,7 @@ local function penOf(zoo: Zoo, index: number): Model?
 	return if pen and pen:IsA("Model") then pen else nil
 end
 
-local function isPasturePen(index: number): boolean
-	return index > GameConfig.Zoo.MaxPens and index <= GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens
-end
-
-local FLEX_LEFT = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + 1
+local FLEX_LEFT = GameConfig.Zoo.MaxPens + 1
 local FLEX_RIGHT = FLEX_LEFT + 1
 
 local function flexSide(index: number): string?
@@ -104,7 +100,7 @@ local function penOpen(data: PlayerDataService.SavedData, index: number): boolea
 	if index >= 1 and index <= data.ZooSize then
 		return true
 	end
-	if isPasturePen(index) or flexSide(index) == "Left" then
+	if flexSide(index) == "Left" then
 		return pastureUnlocked(data)
 	end
 	if flexSide(index) == "Right" then
@@ -113,7 +109,7 @@ local function penOpen(data: PlayerDataService.SavedData, index: number): boolea
 	return false
 end
 
-local LAST_PEN = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + GameConfig.Zoo.FlexPasturePens
+local LAST_PEN = GameConfig.Zoo.MaxPens + GameConfig.Zoo.FlexPasturePens
 
 local function cacheSlot(zoo: Zoo, index: number): BasePart?
 	local folder = zoo.Bay:FindFirstChild("Cache")
@@ -375,11 +371,7 @@ local function refreshPens(player: Player)
 	showBarn("BarnMedium", tier >= 2)
 	showBarn("BarnLarge", tier >= 3)
 	showBarn("BarnGargantuan", tier >= 4)
-
-	local gate = zooFolder and zooFolder:FindFirstChild("PastureGate")
-	if gate then
-		WorldBuilder.setShown(gate, not pastureUnlocked(data))
-	end
+	showBarn("BarnMega", tier >= 5)
 
 	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter")
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
@@ -621,7 +613,7 @@ local function placeCarried(player: Player, penIndex: number)
 	end
 	if not penOpen(data, penIndex) then
 		local side = flexSide(penIndex)
-		if isPasturePen(penIndex) or side == "Left" then
+		if side == "Left" then
 			purchaseResult:FireClient(player, false, "Spend any Robux to unlock this pasture.")
 		elseif side == "Right" then
 			purchaseResult:FireClient(player, false, "Unlock this pasture for 99 Robux, or with the Axolotl.")

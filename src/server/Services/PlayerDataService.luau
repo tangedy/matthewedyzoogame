@@ -180,11 +180,7 @@ local function spentRobux(extra: any): boolean
 	return positive(mon.SuperSoapLeft) or positive(mon.AutoCollectLeft) or positive(mon.LuckyLeft)
 end
 
-local function isPasturePen(index: number): boolean
-	return index > GameConfig.Zoo.MaxPens and index <= GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens
-end
-
-local FLEX_LEFT = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + 1
+local FLEX_LEFT = GameConfig.Zoo.MaxPens + 1
 local FLEX_RIGHT = FLEX_LEFT + 1
 
 -- The right twin pasture stays if it was bought, or if this profile has an Axolotl.
@@ -329,10 +325,9 @@ local function sanitize(raw: any): SavedData
 		for _, animal in raw.Animals do
 			local pen = if typeof(animal) == "table" then cleanCount(animal.Pen) else 0
 			local inZoo = pen >= 1 and pen <= data.ZooSize
-			local inPasture = spent and isPasturePen(pen)
 			local inLeft = spent and pen == FLEX_LEFT
 			local inRight = sideOpen and pen == FLEX_RIGHT
-			if not inZoo and not inPasture and not inLeft and not inRight then
+			if not inZoo and not inLeft and not inRight then
 				continue
 			end
 			local species, mutation = validAnimal(animal)

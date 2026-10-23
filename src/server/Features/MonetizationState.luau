@@ -27,7 +27,7 @@ export type Saved = {
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
-	PastureUnlocked: boolean, -- any Robux spend; the medium/large pasture and the left twin pen stay open
+	PastureUnlocked: boolean, -- any Robux spend; the left pen after the stalls stays open
 	SidePastureUnlocked: boolean, -- 99 Robux, or the Axolotl; the right twin pen stays open
 }
 
@@ -264,7 +264,7 @@ function MonetizationState.ownsPass(player: Player, key: string): boolean
 	return saved ~= nil and saved.Passes[key] == true
 end
 
--- The medium and large pasture, and the left twin pen, stay open once any Robux has been spent.
+-- The left pen after the stalls stays open once any Robux has been spent.
 -- Returns true only the first time, so the caller can announce it.
 function MonetizationState.unlockPasture(player: Player): boolean
 	local saved = MonetizationState.saved(player)

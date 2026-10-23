@@ -10,9 +10,9 @@
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandCounter              barn upgrade, beside the path entrance
---   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan   a roof on red posts over each lane
---   Zoo.PastureSign / PastureGate / Pen23-28   medium and large pasture, behind the barns
---   Zoo.Pen29 / Pen30   twin pastures beside the near end of the medium pens
+--   Zoo.BarnSmall / BarnMedium / BarnLarge / BarnGargantuan / BarnMega   a roof on red posts over each lane
+--   Zoo.Pen23 / Pen24   the mega barn: two gargantuan pens behind the last barn
+--   Zoo.Pen29 / Pen30   two pens on the path, just after the six stalls and in front of the barns
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,6 +43,13 @@ local STALL_PITCH = 14
 local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
 local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
 
+-- Two pens the size of a large pasture, left and right of the path, immediately
+-- behind the six stalls. The barns all start behind these.
+local FLEX_DEPTH = 24
+local FLEX_LAT_SIZE = 42
+local FLEX_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + FLEX_LAT_SIZE / 2
+local FLEX_CENTER = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
+
 -- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
 local LARGE_DEPTH = STALL_DEPTH * 1.5
 local LARGE_LAT = STALL_LAT * 1.5
@@ -55,7 +62,7 @@ local ROOF_OVER = 1 -- roof and posts sit just outside the pen
 local LANE_GAP = 4
 local ROW_GAP = 3
 
-local BARN_FRONT = WALK_END + 4
+local BARN_FRONT = FLEX_CENTER + FLEX_DEPTH / 2 + 8
 local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
 	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
@@ -87,36 +94,12 @@ local SURROUND_GAP = 8
 local SIDE_LAT = GARG_LAT / 2 + SURROUND_GAP + LARGE_LAT / 2
 local BACK_CENTER = GARG_BACK_EDGE + SURROUND_GAP + LARGE_LAT / 2
 
--- Pasture behind the barns. Four medium pens (BodyClass Large), then two large pens
--- (BodyClass ExtraLarge). The gate stays up until any Robux spend opens it.
-local AISLE = 10
-local PM_DEPTH = 16
-local PM_LAT = 36
-local PL_DEPTH = 24
-local PL_LAT = 42
-local PASTURE_ROW_GAP = 10
-local PASTURE_PAD = 18
-local PASTURE_NEAR = BACK_CENTER + LARGE_LAT / 2 + ROOF_OVER + PASTURE_PAD
-local PASTURE_ROW1 = PASTURE_NEAR + 12 + PM_DEPTH / 2
-local PASTURE_ROW2 = PASTURE_ROW1 + PM_DEPTH + PASTURE_ROW_GAP
-local PASTURE_ROW3 = PASTURE_ROW2 + PM_DEPTH / 2 + PASTURE_ROW_GAP + PL_DEPTH / 2
-local PASTURE_FAR = PASTURE_ROW3 + PL_DEPTH / 2 + 7
-local function pairLat(latSize: number): number
-	return latSize / 2 + AISLE / 2
-end
-local PASTURE_HALF = pairLat(PL_LAT) + PL_LAT / 2 + 4
--- Twin pens, the same footprint as a large pasture pen. They sit on the near end of
--- the medium pasture (the end toward the barns), left and right of the path.
-local FLEX_DEPTH = PL_DEPTH
-local FLEX_LAT_SIZE = PL_LAT
-local FLEX_INNER = AISLE / 2 + 5
-local FLEX_LATERAL = FLEX_INNER + FLEX_LAT_SIZE / 2
-local FLEX_OUTER = FLEX_LATERAL + FLEX_LAT_SIZE / 2
--- Held just in front of the medium pens, clear of their gates and of the barn roof.
-local FLEX_FAR = PASTURE_NEAR + 7
-local FLEX_CENTER = FLEX_FAR - FLEX_DEPTH / 2
-local FLEX_NEAR = FLEX_CENTER - FLEX_DEPTH / 2
-local YARD_HALF = math.max(PASTURE_HALF, FLEX_OUTER + 3)
+-- Mega barn behind the gargantuan yard. Two gargantuan pens, side by side.
+-- Hidden until the upgrade after the gargantuan barn.
+local MEGA_GAP = 8
+local MEGA_LAT = GARG_LAT / 2 + MEGA_GAP / 2
+local MEGA_FRONT = BACK_CENTER + LARGE_LAT / 2 + ROOF_OVER + 10
+local MEGA_CENTER = MEGA_FRONT + GARG_DEPTH / 2
 
 local function makePart(props: { [string]: any }): Part
 	local part = Instance.new("Part")
@@ -447,7 +430,6 @@ local function buildFencedPen(
 end
 
 local buildBarns: (plot: PlotLayout.PlotFrame, zoo: Folder) -> ()
-local buildPastureYard: (plot: PlotLayout.PlotFrame, zoo: Folder) -> ()
 
 local function inwardLook(plot: PlotLayout.PlotFrame, lateral: number): Vector3
 	return if lateral >= 0 then -plot.Right else plot.Right
@@ -520,30 +502,22 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 	addPen(21, GARG_CENTER, SIDE_LAT, LARGE_DEPTH, LARGE_LAT, "Medium")
 	addPen(22, BACK_CENTER, 0, LARGE_LAT, LARGE_DEPTH, "Medium", plot.Look)
 
-	-- Pasture: medium animals in front, large animals in the back row.
-	local mediumLat = pairLat(PM_LAT)
-	local largeLat = pairLat(PL_LAT)
-	local function pasturePen(index: number, depth: number, lateral: number, depthSize: number, latSize: number, class: string, title: string, color: Color3)
-		addPen(index, depth, lateral, depthSize, latSize, class, plot.Look)
-		local pen = zoo:FindFirstChild("Pen" .. index)
-		local floor = pen and pen:FindFirstChild("Floor")
-		if floor and floor:IsA("BasePart") then
-			local label = billboardLabel(floor, title, Vector3.new(0, 8, 0), Vector2.new(180, 40), color)
-			label.Name = "ClassLabel"
-		end
-	end
-	local mediumColor = Color3.fromRGB(255, 214, 90)
-	local largeColor = Color3.fromRGB(255, 150, 70)
-	pasturePen(23, PASTURE_ROW1, -mediumLat, PM_DEPTH, PM_LAT, "PastureMedium", "MEDIUM", mediumColor)
-	pasturePen(24, PASTURE_ROW1, mediumLat, PM_DEPTH, PM_LAT, "PastureMedium", "MEDIUM", mediumColor)
-	pasturePen(25, PASTURE_ROW2, -mediumLat, PM_DEPTH, PM_LAT, "PastureMedium", "MEDIUM", mediumColor)
-	pasturePen(26, PASTURE_ROW2, mediumLat, PM_DEPTH, PM_LAT, "PastureMedium", "MEDIUM", mediumColor)
-	pasturePen(27, PASTURE_ROW3, -largeLat, PL_DEPTH, PL_LAT, "PastureLarge", "LARGE", largeColor)
-	pasturePen(28, PASTURE_ROW3, largeLat, PL_DEPTH, PL_LAT, "PastureLarge", "LARGE", largeColor)
+	-- Mega barn: two gargantuan pens. They stay hidden until that upgrade.
+	local megaFirst = GameConfig.Zoo.MaxPens - 1
+	addPen(megaFirst, MEGA_CENTER, -MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
+	addPen(megaFirst + 1, MEGA_CENTER, MEGA_LAT, GARG_DEPTH, GARG_LAT, "Gargantuan", plot.Look)
 
 	local flexColor = Color3.fromRGB(130, 220, 255)
 	local function flexPen(index: number, lateral: number, side: string, lockText: string)
-		pasturePen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex", "2 MEDIUM\nOR 1 LARGE", flexColor)
+		-- Gate faces the path, same as the six stalls in front of them.
+		addPen(index, FLEX_CENTER, lateral, FLEX_DEPTH, FLEX_LAT_SIZE, "PastureFlex")
+		local built = zoo:FindFirstChild("Pen" .. index)
+		local builtFloor = built and built:FindFirstChild("Floor")
+		if builtFloor and builtFloor:IsA("BasePart") then
+			local classLabel = billboardLabel(builtFloor, "2 MEDIUM\nOR 1 LARGE", Vector3.new(0, 8, 0), Vector2.new(240, 80), flexColor)
+			classLabel.Name = "ClassLabel"
+			classLabel.TextWrapped = true
+		end
 		local pen = zoo:FindFirstChild("Pen" .. index)
 		if not pen then
 			return
@@ -551,16 +525,18 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		pen:SetAttribute("FlexSide", side)
 		local function sideSlot(name: string, latOffset: number)
 			local pos = PlotLayout.point(plot, FLEX_CENTER, lateral + latOffset, FLOOR_Y)
-			makeMarker(name, CFrame.lookAt(pos, pos + plot.Look), pen)
+			local look = inwardLook(plot, lateral)
+			makeMarker(name, CFrame.lookAt(pos, pos + look), pen)
 		end
 		sideSlot("SlotMedium1", -FLEX_LAT_SIZE * 0.22)
 		sideSlot("SlotMedium2", FLEX_LAT_SIZE * 0.22)
 		local lock = Instance.new("Model")
 		lock.Name = "FlexLock"
+		local towardPath = if lateral >= 0 then 1 else -1
 		local bar = makePart({
 			Name = "Bar",
-			Size = Vector3.new(0.8, 8, FLEX_LAT_SIZE - 6),
-			Position = PlotLayout.point(plot, FLEX_CENTER - FLEX_DEPTH / 2 + 1.2, lateral, 4),
+			Size = Vector3.new(FLEX_DEPTH - 6, 8, 0.8),
+			Position = PlotLayout.point(plot, FLEX_CENTER, lateral - towardPath * (FLEX_LAT_SIZE / 2 - 1.2), 4),
 			Color = Color3.fromRGB(176, 48, 40),
 			Material = Enum.Material.Wood,
 			Parent = lock,
@@ -595,11 +571,10 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		end
 		WorldBuilder.setShown(pen, false)
 	end
-	local flexLeft = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + 1
+	local flexLeft = GameConfig.Zoo.MaxPens + 1
 	-- Positive lateral is the left side when walking in from the road.
 	flexPen(flexLeft, FLEX_LATERAL, "Left", "SPEND ANY ROBUX")
 	flexPen(flexLeft + 1, -FLEX_LATERAL, "Right", "99 ROBUX\nOR AXOLOTL")
-	buildPastureYard(plot, zoo)
 
 	-- Barn upgrade, beside the mouth of the sidewalk.
 	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)
@@ -623,107 +598,6 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 
 	buildBarns(plot, zoo)
 	zoo.Parent = bay
-end
-
--- Fenced field behind the barns. The gate is the only part that hides once the
--- pasture is unlocked; the grass, path, and sign stay.
-function buildPastureYard(plot: PlotLayout.PlotFrame, zoo: Folder)
-	local midDepth = (FLEX_NEAR + PASTURE_FAR) / 2
-	local depthSpan = PASTURE_FAR - FLEX_NEAR
-	local latSpan = YARD_HALF * 2
-	local fenceH = 10
-	local wood = Color3.fromRGB(236, 232, 214)
-	local pathStart = BACK_CENTER + LARGE_LAT / 2 + 2
-	local pathSpan = PASTURE_NEAR + 2 - pathStart
-	makePart({
-		Name = "PasturePath",
-		Size = Vector3.new(pathSpan, 0.3, AISLE + 4),
-		Position = PlotLayout.point(plot, pathStart + pathSpan / 2, 0, 0.2),
-		Color = Color3.fromRGB(196, 154, 96),
-		Material = Enum.Material.Ground,
-		CanCollide = false,
-		CanQuery = false,
-		Parent = zoo,
-	})
-	makePart({
-		Name = "PastureGround",
-		Size = Vector3.new(depthSpan, 0.35, latSpan),
-		Position = PlotLayout.point(plot, midDepth, 0, 0.12),
-		Color = Color3.fromRGB(74, 148, 58),
-		Material = Enum.Material.Grass,
-		CanCollide = false,
-		CanQuery = false,
-		Parent = zoo,
-	})
-
-	local function rail(depth: number, lateral: number, size: Vector3)
-		makePart({
-			Name = "PastureFence",
-			Size = size,
-			Position = PlotLayout.point(plot, depth, lateral, fenceH / 2),
-			Color = wood,
-			Material = Enum.Material.Wood,
-			CanQuery = false,
-			Parent = zoo,
-		})
-	end
-	rail(midDepth, -YARD_HALF, Vector3.new(depthSpan, fenceH, 0.5))
-	rail(midDepth, YARD_HALF, Vector3.new(depthSpan, fenceH, 0.5))
-	rail(PASTURE_FAR, 0, Vector3.new(0.5, fenceH, latSpan))
-	local mouth = AISLE + 6
-	-- The twin pens cross the old front line, so the front fence stops at their edges.
-	local function frontRail(lat0: number, lat1: number)
-		local span = lat1 - lat0
-		if span < 1 then
-			return
-		end
-		rail(PASTURE_NEAR, (lat0 + lat1) / 2, Vector3.new(0.5, fenceH, span))
-	end
-	frontRail(-YARD_HALF, -FLEX_OUTER)
-	frontRail(-FLEX_INNER, -mouth / 2)
-	frontRail(mouth / 2, FLEX_INNER)
-	frontRail(FLEX_OUTER, YARD_HALF)
-
-	local sign = makePart({
-		Name = "PastureSign",
-		Size = Vector3.new(0.8, 8, 0.8),
-		Position = PlotLayout.point(plot, PASTURE_NEAR - 2, -(mouth / 2 + 6), 4),
-		Color = Color3.fromRGB(120, 85, 60),
-		Material = Enum.Material.Wood,
-		Parent = zoo,
-	})
-	local title = billboardLabel(sign, "MEDIUM & LARGE\nPASTURE", Vector3.new(0, 7.5, 0), Vector2.new(280, 90))
-	title.Name = "PastureTitle"
-	title.TextWrapped = true
-	local titleGui = title.Parent :: BillboardGui
-	titleGui.MaxDistance = 110
-
-	local gate = Instance.new("Model")
-	gate.Name = "PastureGate"
-	local bar = makePart({
-		Name = "Bar",
-		Size = Vector3.new(0.8, fenceH, mouth - 1),
-		Position = PlotLayout.point(plot, PASTURE_NEAR, 0, fenceH / 2),
-		Color = Color3.fromRGB(176, 48, 40),
-		Material = Enum.Material.Wood,
-		Parent = gate,
-	})
-	-- Painted on the road-facing side so it stays on the gate on both sides of the street.
-	local lockGui = Instance.new("SurfaceGui")
-	lockGui.Name = "LockSign"
-	lockGui.Face = if plot.Side == 1 then Enum.NormalId.Left else Enum.NormalId.Right
-	lockGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	lockGui.PixelsPerStud = 32
-	lockGui.Parent = bar
-	stampDecor(lockGui, true)
-	local locked = Instance.new("TextLabel")
-	locked.Name = "LockedLabel"
-	locked.Size = UDim2.fromScale(1, 0.22)
-	locked.Position = UDim2.fromScale(0, 0.39)
-	locked.Text = "SPEND ANY ROBUX"
-	locked.Parent = lockGui
-	UIStyle.text(locked, Color3.fromRGB(255, 230, 120))
-	gate.Parent = zoo
 end
 
 -- Open shelter: red posts and a gable roof, no walls, so the pens stay visible.
@@ -887,6 +761,20 @@ function buildBarns(plot: PlotLayout.PlotFrame, zoo: Folder)
 		14,
 		0.7,
 		true
+	)
+
+	-- Two gargantuan pens behind the last barn. Hidden until the mega upgrade.
+	local mega = shell("BarnMega")
+	local megaOuter = MEGA_LAT + GARG_LAT / 2 + ROOF_OVER
+	barnShelter(
+		plot,
+		mega,
+		MEGA_CENTER - GARG_DEPTH / 2 - ROOF_OVER,
+		MEGA_CENTER + GARG_DEPTH / 2 + ROOF_OVER,
+		-megaOuter,
+		megaOuter,
+		24,
+		1.2
 	)
 end
 

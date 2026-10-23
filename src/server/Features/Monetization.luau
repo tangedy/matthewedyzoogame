@@ -263,7 +263,7 @@ local function processPurchase(
 	local pasture = MonetizationState.unlockPasture(player)
 	PlayerDataService.saveNow(player)
 	if pasture then
-		local extra = "Medium and large pasture unlocked forever, plus the left twin pen!"
+		local extra = "Left pasture unlocked forever!"
 		message = if message then `{message} {extra}` else extra
 	end
 	if message then
@@ -599,7 +599,7 @@ local function connectHooks()
 						MonetizationGrants.applyPass(player, pass.Key)
 						if MonetizationState.unlockPasture(player) then
 							PlayerDataService.saveNow(player)
-							MonetizationState.notify(player, "Medium and large pasture unlocked forever, plus the left twin pen!", true)
+							MonetizationState.notify(player, "Left pasture unlocked forever!", true)
 						end
 						MonetizationState.push(player)
 					elseif not ok then

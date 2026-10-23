@@ -12,7 +12,7 @@ local GameConfig = {
 	RoadWidth = 45, -- five times the old 9-stud road
 	SidewalkWidth = 27, -- three times the old 9-stud road; cages sit off this path
 	PlotWidth = 130, -- along Z, inside the pitch, leaving a tree gap
-	PlotDepth = 460, -- from the road edge back through the pasture behind the barns
+	PlotDepth = 490, -- from the road edge back through the pasture behind the barns
 	GroundSize = Vector3.new(1100, 2, 760), -- the eight plots, pasture depth, and a thin tree edge
 	WashQueue = 3, -- animals standing in the square lane; only the front one is washed
 
@@ -59,23 +59,18 @@ local GameConfig = {
 
 	-- Zoo. Pens 1-6 are the face stalls beside the sidewalk. Each later step is a barn.
 	Zoo = {
-		MaxPens = 22,
+		MaxPens = 24,
 		StartPens = 6,
-		-- Pens just past MaxPens. A fenced pasture behind the barns. Any Robux spend
-		-- unlocks all of them forever (see MonetizationState.PastureUnlocked).
-		-- The first four take medium animals (BodyClass Large); the last two take large
-		-- animals (BodyClass ExtraLarge).
-		PasturePens = 6,
-		-- Two more pens, same footprint as a large pasture pen, on the left and right
-		-- of the near end of the medium pasture. Each holds two medium animals or one
-		-- large animal. The left opens with any Robux spend. The right is its own
-		-- 99 Robux purchase, or comes with the Axolotl.
+		-- Two pens the size of a large pasture, left and right of the path immediately
+		-- after the six stalls. Each holds two medium animals or one large animal.
+		-- The left opens with any Robux spend. The right is 99 Robux, or the Axolotl.
 		FlexPasturePens = 2,
 		Expansions = {
 			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
 			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large
 			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- 2 small barns, then a giant barn behind
 			{ Pens = 22, Price = 10000000, Barn = "Gargantuan" }, -- open gargantuan pen, 3 skinny medium barns
+			{ Pens = 24, Price = 50000000, Barn = "Mega" }, -- two gargantuan pens behind that barn
 		},
 	},
 

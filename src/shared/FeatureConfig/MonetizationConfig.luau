@@ -63,6 +63,7 @@ local GREEN = Color3.fromRGB(90, 220, 110)
 local GOLD = Color3.fromRGB(255, 200, 40)
 local PURPLE = Color3.fromRGB(170, 90, 255)
 local RED = Color3.fromRGB(255, 80, 80)
+local ORANGE = Color3.fromRGB(255, 140, 40)
 
 local products: { Product } = {
 	-- Boosts
@@ -251,6 +252,15 @@ local passes: { Pass } = {
 		Order = 3,
 		Color = GREEN,
 	},
+	{
+		Key = "DoubleSpeed",
+		Id = 0,
+		Robux = 99,
+		DisplayName = "2x Speed",
+		Description = "Walk twice as fast, forever.",
+		Order = 4,
+		Color = ORANGE,
+	},
 }
 
 -- One hidden product per step above the cheapest unwashable rarity. Roblox charges a
@@ -324,6 +334,10 @@ return {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",
 		TagColor = GOLD,
+	},
+	Speed = {
+		Multiplier = 2, -- WalkSpeed while DoubleSpeed is owned
+		PassKey = "DoubleSpeed",
 	},
 	AutoCollect = {
 		MaxSeconds = 8 * 3600, -- stacked 2-hour purchases stop here
