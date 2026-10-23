@@ -71,11 +71,11 @@ local function refresh()
 end
 
 function Stars.start(gui: ScreenGui)
-	-- Above the core HUD wallet (which starts at 0.5 - 120 on the left).
+	-- Top of the left column, just above the INDEX button (the wallet is bottom left).
 	label = Instance.new("TextLabel")
 	label.Name = "ZooStars"
 	label.AnchorPoint = Vector2.new(0, 1)
-	label.Position = UDim2.new(0, 16, 0.5, -128)
+	label.Position = UDim2.new(0, 16, 0.5, -10)
 	label.Size = UDim2.fromOffset(170, 30)
 	label.RichText = true
 	label.TextXAlignment = Enum.TextXAlignment.Left

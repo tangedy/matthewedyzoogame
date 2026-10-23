@@ -110,7 +110,14 @@ local function patchesInSpray(job: Job, hit: BasePart, position: Vector3, direct
 	return found
 end
 
-local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
+local function isFiniteVector(v: any): boolean
+	return typeof(v) == "Vector3" and isFiniteNumber(v.X) and isFiniteNumber(v.Y) and isFiniteNumber(v.Z)
+end
+
+-- aimOrigin (optional) is the client's camera position: the spray lands on whatever part of
+-- the animal is under the cursor, so the side facing the camera is washed no matter where the
+-- player stands. Without it the ray comes from the hose nozzle.
+local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, aimOrigin: any)
 	-- Rate cap first: cheap, and the accepted step below is measured from this clock.
 	local now = os.clock()
 	local last = lastRequestAt[player]
@@ -143,8 +150,15 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 		return
 	end
 
-	-- Line of sight from the server-derived nozzle; characters don't block the spray.
+	-- Line of sight from the camera (or the server-derived nozzle); characters don't block it.
 	local origin = root.Position + GameConfig.NozzleOffset
+	local reach = tool.Range
+	local fromCamera = isFiniteVector(aimOrigin)
+		and ((aimOrigin :: Vector3) - root.Position).Magnitude <= GameConfig.MaxAimCameraDistance
+	if fromCamera then
+		origin = aimOrigin :: Vector3
+		reach = (origin - root.Position).Magnitude + tool.Range + GameConfig.AimReachSlack
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local ignore = {}
@@ -154,8 +168,12 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any)
 		end
 	end
 	params.FilterDescendantsInstances = ignore
-	local result = Workspace:Raycast(origin, (aimDirection :: Vector3).Unit * tool.Range, params)
+	local result = Workspace:Raycast(origin, (aimDirection :: Vector3).Unit * reach, params)
 	if not result or not result.Instance:IsDescendantOf(job.Model) then
+		return
+	end
+	-- The hose still has to reach that spot from where the player is standing.
+	if fromCamera and (result.Position - root.Position).Magnitude > tool.Range + GameConfig.AimReachSlack then
 		return
 	end
 

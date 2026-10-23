@@ -459,9 +459,11 @@ local function onHeartbeat()
 
 	-- Aim assist (touch/gamepad only): if the reticle isn't on the animal, snap to the nearest
 	-- dirty patch on screen that the hose can actually reach.
+	local assistUsed = false
 	if assisted and animal and not (camHit and camHit.Instance:IsDescendantOf(animal)) then
 		local assist = findAssistTarget(camera, animal, origin, screenPoint, params)
 		if assist then
+			assistUsed = true
 			target = assist.Position
 			local projected = camera:WorldToViewportPoint(assist.Position)
 			screenPoint = Vector2.new(projected.X, projected.Y)
@@ -476,10 +478,20 @@ local function onHeartbeat()
 		return
 	end
 	local direction = toTarget.Unit
+	-- The spray lands wherever the cursor is on the animal, whichever side the player stands
+	-- on, as long as the hose can reach it. The server checks the same camera ray.
+	local aimOrigin = ray.Origin
+	local aimVector = target - aimOrigin
+	local aimDirection = if aimVector.Magnitude > 0.01 then aimVector.Unit else ray.Direction
+	local cursorOnAnimal = animal ~= nil and (assistUsed or (camHit ~= nil and camHit.Instance:IsDescendantOf(animal)))
+	local inReach = toTarget.Magnitude <= range + GameConfig.AimReachSlack
 	local sprayHit = Workspace:Raycast(origin, direction * range, params)
 	local impact = if sprayHit then sprayHit.Position else origin + direction * range
-
 	local onTarget = sprayHit ~= nil and animal ~= nil and sprayHit.Instance:IsDescendantOf(animal)
+	if cursorOnAnimal and inReach then
+		impact = target
+		onTarget = true
+	end
 	local stroke = reticle:FindFirstChildOfClass("UIStroke")
 	if stroke then
 		stroke.Color = if onTarget then RETICLE_ON_TARGET else RETICLE_IDLE
@@ -502,7 +514,7 @@ local function onHeartbeat()
 	impactPart.CFrame = CFrame.new(impact)
 	beam.Attachment0 = getNozzle(root)
 	beam.Enabled = true
-	splash.Enabled = sprayHit ~= nil
+	splash.Enabled = sprayHit ~= nil or onTarget
 	foam.Enabled = onTarget
 	mist.Enabled = onTarget
 	splash.Rate = if onTarget then 110 else 60
@@ -516,7 +528,7 @@ local function onHeartbeat()
 	local now = os.clock()
 	if washing and jobId and now - lastSendAt >= 1 / GameConfig.RequestRateHz then
 		lastSendAt = now
-		cleaningIntent:FireServer(jobId, direction)
+		cleaningIntent:FireServer(jobId, aimDirection, aimOrigin)
 	end
 end
 

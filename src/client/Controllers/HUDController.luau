@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
@@ -66,27 +67,28 @@ local function buildGui()
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Left middle: cash, income, hose
+	-- Bottom left, big: cash, income, hose. On phones it sits above the thumbstick.
+	local touchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local wallet = Instance.new("Frame")
-	wallet.AnchorPoint = Vector2.new(0, 0.5)
-	wallet.Position = UDim2.new(0, 16, 0.5, -70)
-	wallet.Size = UDim2.fromOffset(240, 110)
+	wallet.AnchorPoint = Vector2.new(0, 1)
+	wallet.Position = UDim2.new(0, 16, 1, if touchOnly then -190 else -16)
+	wallet.Size = UDim2.fromOffset(380, 150)
 	wallet.BackgroundTransparency = 1
 	wallet.Parent = gui
 	cashLabel = textLabel(wallet, {
-		Size = UDim2.new(1, 0, 0, 52),
+		Size = UDim2.new(1, 0, 0, 84),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "$0",
 	}, UIStyle.CashColor)
 	incomeLabel = textLabel(wallet, {
-		Position = UDim2.fromOffset(0, 52),
-		Size = UDim2.new(1, 0, 0, 26),
+		Position = UDim2.fromOffset(0, 84),
+		Size = UDim2.new(1, 0, 0, 36),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "+$0/s",
 	}, UIStyle.CashColor)
 	toolLabel = textLabel(wallet, {
-		Position = UDim2.fromOffset(0, 80),
-		Size = UDim2.new(1, 0, 0, 22),
+		Position = UDim2.fromOffset(0, 122),
+		Size = UDim2.new(1, 0, 0, 26),
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
 

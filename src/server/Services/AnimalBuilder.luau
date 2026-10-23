@@ -79,7 +79,8 @@ local function decoration(name: string, size: Vector3, cframe: CFrame, color: Co
 	return part
 end
 
--- White eye with a pupil looking slightly forward. Eyes are never tinted by grime or rarity.
+-- Plain black block eyes, a little taller than wide. Never tinted by grime or rarity.
+local EYE_BLACK = Color3.fromRGB(12, 12, 15)
 local function addEyes(head: BasePart, parent: Instance)
 	local s = head.Size
 	local eyeSize = math.clamp(s.Y * 0.22, 0.25, 0.55)
@@ -87,20 +88,12 @@ local function addEyes(head: BasePart, parent: Instance)
 		local offset = Vector3.new(side * s.X * 0.28, s.Y * 0.15, -s.Z / 2 - 0.03)
 		local eye = decoration(
 			"Eye",
-			Vector3.new(eyeSize * 0.9, eyeSize, 0.08),
+			Vector3.new(eyeSize * 0.6, eyeSize * 0.9, 0.08),
 			head.CFrame * CFrame.new(offset),
-			Color3.new(1, 1, 1),
+			EYE_BLACK,
 			parent
 		)
 		eye:SetAttribute("NoGrime", true)
-		local pupil = decoration(
-			"Pupil",
-			Vector3.new(eyeSize * 0.5, eyeSize * 0.55, 0.06),
-			eye.CFrame * CFrame.new(side * -eyeSize * 0.1, -eyeSize * 0.08, -0.05),
-			Color3.fromRGB(20, 20, 25),
-			parent
-		)
-		pupil:SetAttribute("NoGrime", true)
 	end
 end
 
@@ -341,7 +334,8 @@ type EyeStyle = {
 	Glow: boolean?, -- neon iris
 }
 
--- Big cartoon eyes on the head's front face: sclera, iris, pupil and a glinting highlight.
+-- Plain black block eyes on the head's front face, to match the placeholders. Only Size,
+-- Spread and Lift are used; the iris styles are kept so species tables stay unchanged.
 local function heroEyes(head: BasePart, parent: Instance, style: EyeStyle)
 	local s = head.Size
 	local size = style.Size
@@ -349,34 +343,14 @@ local function heroEyes(head: BasePart, parent: Instance, style: EyeStyle)
 	local lift = style.Lift or 0.15
 	for _, side in { -1, 1 } do
 		local face = head.CFrame * CFrame.new(side * s.X * spread, s.Y * lift, -s.Z / 2)
-		local parts = { disc("Eye", size, 0.1, face * CFrame.new(0, 0, -0.03), style.Sclera or WHITE, parent) }
-		local look = face * CFrame.new(-side * size * 0.06, -size * 0.04, 0) -- gaze slightly in and down
-		if style.Iris then
-			local iris = disc("Iris", size * 0.64, 0.1, look * CFrame.new(0, 0, -0.07), style.Iris, parent)
-			if style.Glow then
-				glow(iris)
-			end
-			table.insert(parts, iris)
-		end
-		table.insert(
-			parts,
-			if style.Slit
-				then decoration(
-					"Pupil",
-					Vector3.new(size * 0.13, size * 0.5, 0.1),
-					look * CFrame.new(0, 0, -0.11),
-					INK,
-					parent
-				)
-				else disc("Pupil", size * 0.34, 0.1, look * CFrame.new(0, 0, -0.11), INK, parent)
+		local eye = decoration(
+			"Eye",
+			Vector3.new(size * 0.55, size * 0.8, 0.1),
+			face * CFrame.new(0, 0, -0.04),
+			EYE_BLACK,
+			parent
 		)
-		table.insert(
-			parts,
-			glow(disc("Shine", size * 0.2, 0.1, look * CFrame.new(size * 0.15, size * 0.15, -0.15), WHITE, parent))
-		)
-		for _, part in parts do
-			part:SetAttribute("NoGrime", true)
-		end
+		eye:SetAttribute("NoGrime", true)
 	end
 end
 
@@ -476,6 +450,81 @@ local function claws(front: CFrame, count: number, spacing: number, size: Vector
 	end
 end
 
+local function tint(color: Color3, amount: number): Color3
+	return if amount >= 0 then color:Lerp(Color3.new(1, 1, 1), amount) else color:Lerp(Color3.new(0, 0, 0), -amount)
+end
+
+-- Hooves (or webbed bird feet) on every leg and a lighter belly under the body, so even the
+-- simplest farm animal reads as more than a couple of boxes. Nothing here touches a face
+-- that carries mud.
+local function addBasics(model: Model, body: BasePart, spec: Spec, opts: { Feet: Color3?, Belly: Color3? }?)
+	local o = opts or {}
+	local b = body.Size
+	local legColor = spec.LegColor or spec.HeadColor
+	for _, leg in legsOf(model) do
+		local l = leg.Size
+		if spec.LegCount == 2 then
+			decoration(
+				"Foot",
+				Vector3.new(l.X * 2.2, 0.12, l.Z * 2.4),
+				leg.CFrame * CFrame.new(0, -l.Y / 2 + 0.06, -l.Z * 0.5),
+				o.Feet or legColor,
+				model
+			)
+		else
+			local height = math.clamp(l.Y * 0.18, 0.12, 0.35)
+			decoration(
+				"Hoof",
+				Vector3.new(l.X * 1.12, height, l.Z * 1.18),
+				leg.CFrame * CFrame.new(0, -l.Y / 2 + height / 2, -l.Z * 0.05),
+				o.Feet or tint(legColor, -0.45),
+				model
+			)
+		end
+	end
+	decoration(
+		"Belly",
+		Vector3.new(b.X * 0.82, 0.14, b.Z * 0.8),
+		body.CFrame * CFrame.new(0, -b.Y / 2 - 0.06, 0),
+		o.Belly or tint(spec.BodyColor, 0.25),
+		model
+	)
+end
+
+-- Two thin pink plates in front of a pair of ears.
+local function innerEars(model: Model, color: Color3)
+	for _, ear in model:GetChildren() do
+		if ear.Name == "Ear" and ear:IsA("BasePart") then
+			local e = ear.Size
+			decoration(
+				"InnerEar",
+				Vector3.new(e.X * 0.55, e.Y * 0.7, 0.05),
+				ear.CFrame * CFrame.new(0, -e.Y * 0.05, -e.Z / 2 - 0.02),
+				color,
+				model
+			)
+		end
+	end
+end
+
+-- Thin whiskers fanning out from the cheeks.
+local function whiskers(model: Model, head: BasePart, color: Color3)
+	local h = head.Size
+	for _, side in { -1, 1 } do
+		for i, tilt in { -0.18, 0.18 } do
+			decoration(
+				"Whisker",
+				Vector3.new(0.9, 0.05, 0.05),
+				head.CFrame
+					* CFrame.new(side * (h.X / 2 + 0.25), -h.Y * 0.18 + (i - 1.5) * 0.12, -h.Z / 2 + 0.15)
+					* CFrame.Angles(0, side * 0.25, tilt * side),
+				color,
+				model
+			)
+		end
+	end
+end
+
 local SPECS: { [string]: Spec } = {
 	Chicken = {
 		BodySize = Vector3.new(1.6, 1.5, 2.0),
@@ -489,7 +538,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(250, 250, 245),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 0.75,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			decoration(
 				"Beak",
@@ -512,6 +561,25 @@ local SPECS: { [string]: Spec } = {
 				Color3.fromRGB(250, 250, 245),
 				model
 			)
+			addBasics(model, body, spec, { Feet = ORANGE })
+			decoration(
+				"Wattle",
+				Vector3.new(0.18, 0.35, 0.12),
+				head.CFrame * CFrame.new(0, -0.4, -h.Z / 2 - 0.12),
+				Color3.fromRGB(220, 40, 40),
+				model
+			)
+			for i, angle in { -0.35, 0, 0.35 } do
+				decoration(
+					"TailFeather",
+					Vector3.new(0.3, 1.0, 0.2),
+					body.CFrame
+						* CFrame.new((i - 2) * 0.32, body.Size.Y * 0.55, body.Size.Z / 2 + 0.05)
+						* CFrame.Angles(-0.5, 0, angle),
+					Color3.fromRGB(235, 235, 228),
+					model
+				)
+			end
 			addEyes(head, model)
 		end,
 	},
@@ -527,7 +595,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(40, 130, 70),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 0.75,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			decoration(
 				"Bill",
@@ -541,6 +609,21 @@ local SPECS: { [string]: Spec } = {
 				Vector3.new(0.8, 0.3, 0.4),
 				body.CFrame * CFrame.new(0, body.Size.Y * 0.35, body.Size.Z / 2 + 0.15) * CFrame.Angles(-0.5, 0, 0),
 				Color3.fromRGB(245, 245, 235),
+				model
+			)
+			addBasics(model, body, spec, { Feet = ORANGE })
+			decoration(
+				"NeckRing",
+				Vector3.new(h.X + 0.04, 0.16, h.Z + 0.04),
+				head.CFrame * CFrame.new(0, -h.Y / 2 + 0.08, 0),
+				Color3.new(1, 1, 1),
+				model
+			)
+			decoration(
+				"LowerBill",
+				Vector3.new(0.5, 0.1, 0.5),
+				head.CFrame * CFrame.new(0, -0.33, -h.Z / 2 - 0.2),
+				Color3.fromRGB(230, 130, 30),
 				model
 			)
 			addEyes(head, model)
@@ -573,6 +656,16 @@ local SPECS: { [string]: Spec } = {
 				PINK_DARK,
 				model
 			)
+			addBasics(model, body, spec, { Belly = Color3.fromRGB(245, 240, 235) })
+			innerEars(model, PINK)
+			decoration(
+				"Teeth",
+				Vector3.new(0.22, 0.2, 0.06),
+				head.CFrame * CFrame.new(0, -0.38, -head.Size.Z / 2 - 0.03),
+				WHITE,
+				model
+			)
+			whiskers(model, head, Color3.fromRGB(240, 240, 240))
 			addEyes(head, model)
 		end,
 	},
@@ -583,7 +676,7 @@ local SPECS: { [string]: Spec } = {
 		BodyColor = PINK,
 		HeadColor = PINK,
 		BodyMaterial = Enum.Material.SmoothPlastic,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			local snout = decoration(
 				"Snout",
@@ -618,6 +711,16 @@ local SPECS: { [string]: Spec } = {
 				PINK_DARK,
 				model
 			)
+			addBasics(model, body, spec)
+			for _, side in { -1, 1 } do
+				decoration(
+					"Cheek",
+					Vector3.new(0.45, 0.3, 0.05),
+					head.CFrame * CFrame.new(side * h.X * 0.33, -h.Y * 0.18, -h.Z / 2 - 0.02),
+					Color3.fromRGB(255, 140, 160),
+					model
+				)
+			end
 			addEyes(head, model)
 		end,
 	},
@@ -629,7 +732,7 @@ local SPECS: { [string]: Spec } = {
 		BodyColor = Color3.fromRGB(245, 245, 235),
 		HeadColor = Color3.fromRGB(70, 60, 60),
 		BodyMaterial = Enum.Material.Fabric,
-		Decorate = function(model, _body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			for _, side in { -1, 1 } do
 				decoration(
@@ -647,6 +750,29 @@ local SPECS: { [string]: Spec } = {
 				Color3.fromRGB(245, 245, 235),
 				model
 			)
+			addBasics(model, body, spec, { Belly = Color3.fromRGB(230, 230, 220) })
+			-- Woolly puffs along the back (too high for top patches, so nothing is hidden).
+			local b = body.Size
+			for i = -2, 2 do
+				for _, side in { -1, 1 } do
+					local puff = decoration(
+						"Wool",
+						Vector3.new(1.4, 1.4, 1.4),
+						body.CFrame * CFrame.new(side * b.X * 0.22, b.Y / 2 + 0.05, i * b.Z * 0.19),
+						Color3.fromRGB(250, 250, 242),
+						model
+					)
+					puff.Shape = Enum.PartType.Ball
+					puff.Material = Enum.Material.Fabric
+				end
+			end
+			decoration(
+				"Tail",
+				Vector3.new(0.7, 0.7, 0.5),
+				body.CFrame * CFrame.new(0, b.Y * 0.3, b.Z / 2 + 0.2),
+				Color3.fromRGB(250, 250, 242),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -660,7 +786,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(235, 230, 220),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 1.2,
-		Decorate = function(model, _body, head, spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			for _, side in { -1, 1 } do
 				decoration(
@@ -677,6 +803,21 @@ local SPECS: { [string]: Spec } = {
 				Vector3.new(0.35, 0.6, 0.2),
 				head.CFrame * CFrame.new(0, -h.Y / 2 - 0.2, -h.Z / 2 + 0.2),
 				Color3.fromRGB(200, 195, 185),
+				model
+			)
+			addBasics(model, body, spec)
+			decoration(
+				"Tail",
+				Vector3.new(0.3, 0.6, 0.25),
+				body.CFrame * CFrame.new(0, body.Size.Y * 0.4, body.Size.Z / 2 + 0.12) * CFrame.Angles(-0.6, 0, 0),
+				spec.BodyColor,
+				model
+			)
+			decoration(
+				"Nose",
+				Vector3.new(0.4, 0.2, 0.06),
+				head.CFrame * CFrame.new(0, -h.Y * 0.25, -h.Z / 2 - 0.03),
+				Color3.fromRGB(200, 150, 150),
 				model
 			)
 			addEyes(head, model)
@@ -709,6 +850,22 @@ local SPECS: { [string]: Spec } = {
 				Color3.fromRGB(60, 55, 55),
 				model
 			)
+			addBasics(model, body, spec)
+			-- Dark stripe down the spine (the back is too high for top patches).
+			decoration(
+				"Mane",
+				Vector3.new(0.35, 0.12, body.Size.Z * 0.9),
+				body.CFrame * CFrame.new(0, body.Size.Y / 2 + 0.06, 0),
+				Color3.fromRGB(60, 55, 55),
+				model
+			)
+			decoration(
+				"Forelock",
+				Vector3.new(0.4, 0.5, 0.5),
+				head.CFrame * CFrame.new(0, h.Y / 2 + 0.15, -h.Z * 0.2),
+				Color3.fromRGB(60, 55, 55),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -719,7 +876,7 @@ local SPECS: { [string]: Spec } = {
 		BodyColor = Color3.fromRGB(250, 250, 250),
 		HeadColor = Color3.fromRGB(250, 250, 250),
 		BodyMaterial = Enum.Material.SmoothPlastic,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			local b = body.Size
 			-- A few black spots, flush with the body so patches still sit on top.
@@ -753,6 +910,38 @@ local SPECS: { [string]: Spec } = {
 					model
 				)
 			end
+			addBasics(model, body, spec, { Feet = Color3.fromRGB(60, 50, 45) })
+			decoration(
+				"Udder",
+				Vector3.new(1.1, 0.5, 1.2),
+				body.CFrame * CFrame.new(0, -b.Y / 2 - 0.25, b.Z * 0.25),
+				Color3.fromRGB(245, 175, 185),
+				model
+			)
+			local tail = decoration(
+				"Tail",
+				Vector3.new(0.2, 2.0, 0.2),
+				body.CFrame * CFrame.new(0, -0.2, b.Z / 2 + 0.12) * CFrame.Angles(0.12, 0, 0),
+				Color3.fromRGB(250, 250, 250),
+				model
+			)
+			decoration(
+				"TailTuft",
+				Vector3.new(0.45, 0.5, 0.45),
+				tail.CFrame * CFrame.new(0, -1.05, 0),
+				Color3.fromRGB(30, 30, 30),
+				model
+			)
+			pairOfEars(head, Vector3.new(0.9, 0.35, 0.3), Color3.fromRGB(250, 250, 250), -0.6, -0.2, model)
+			for _, side in { -1, 1 } do
+				decoration(
+					"Nostril",
+					Vector3.new(0.22, 0.22, 0.06),
+					head.CFrame * CFrame.new(side * 0.4, -h.Y * 0.28, -h.Z / 2 - 0.47),
+					Color3.fromRGB(150, 80, 90),
+					model
+				)
+			end
 			addEyes(head, model)
 		end,
 	},
@@ -773,6 +962,40 @@ local SPECS: { [string]: Spec } = {
 				Vector3.new(0.5, 0.8, 0.4),
 				body.CFrame * CFrame.new(0, body.Size.Y * 0.3, body.Size.Z / 2 + 0.2),
 				spec.BodyColor,
+				model
+			)
+			addBasics(model, body, spec)
+			local b = body.Size
+			local h = head.Size
+			-- A colourful saddle blanket (the back is too high for top patches).
+			decoration(
+				"Blanket",
+				Vector3.new(b.X + 0.1, 0.15, b.Z * 0.4),
+				body.CFrame * CFrame.new(0, b.Y / 2 + 0.07, 0),
+				Color3.fromRGB(220, 60, 90),
+				model
+			)
+			for i, color in { Color3.fromRGB(255, 200, 60), Color3.fromRGB(60, 180, 200) } do
+				decoration(
+					"BlanketStripe",
+					Vector3.new(b.X + 0.12, 0.17, 0.25),
+					body.CFrame * CFrame.new(0, b.Y / 2 + 0.07, (i - 1.5) * b.Z * 0.25),
+					color,
+					model
+				)
+			end
+			decoration(
+				"Muzzle",
+				Vector3.new(h.X * 0.75, h.Y * 0.45, 0.4),
+				head.CFrame * CFrame.new(0, -h.Y * 0.22, -h.Z / 2 - 0.15),
+				Color3.fromRGB(225, 205, 170),
+				model
+			)
+			decoration(
+				"Tuft",
+				Vector3.new(h.X * 0.7, 0.4, h.Z * 0.5),
+				head.CFrame * CFrame.new(0, h.Y / 2 + 0.15, 0),
+				Color3.fromRGB(250, 240, 220),
 				model
 			)
 			addEyes(head, model)
@@ -808,6 +1031,21 @@ local SPECS: { [string]: Spec } = {
 				mane,
 				model
 			)
+			addBasics(model, body, spec, { Feet = Color3.fromRGB(40, 30, 25) })
+			decoration(
+				"Muzzle",
+				Vector3.new(head.Size.X * 0.85, head.Size.Y * 0.45, 0.4),
+				head.CFrame * CFrame.new(0, -head.Size.Y * 0.25, -head.Size.Z / 2 - 0.15),
+				Color3.fromRGB(110, 70, 40),
+				model
+			)
+			decoration(
+				"Blaze",
+				Vector3.new(0.35, head.Size.Y * 0.6, 0.05),
+				head.CFrame * CFrame.new(0, head.Size.Y * 0.1, -head.Size.Z / 2 - 0.02),
+				Color3.new(1, 1, 1),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -821,7 +1059,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(190, 140, 90),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 1.0,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			local dark = Color3.fromRGB(110, 75, 45)
 			for _, side in { -1, 1 } do
@@ -854,6 +1092,28 @@ local SPECS: { [string]: Spec } = {
 				dark,
 				model
 			)
+			addBasics(model, body, spec)
+			decoration(
+				"Collar",
+				Vector3.new(h.X + 0.1, 0.3, 0.35),
+				head.CFrame * CFrame.new(0, -h.Y * 0.32, h.Z / 2 - 0.1),
+				Color3.fromRGB(220, 40, 50),
+				model
+			)
+			decoration(
+				"Tag",
+				Vector3.new(0.25, 0.25, 0.06),
+				head.CFrame * CFrame.new(0, -h.Y * 0.5, h.Z / 2 - 0.3),
+				Color3.fromRGB(255, 210, 60),
+				model
+			)
+			decoration(
+				"Tongue",
+				Vector3.new(0.3, 0.08, 0.3),
+				head.CFrame * CFrame.new(0, -0.62, -h.Z / 2 - 0.35),
+				Color3.fromRGB(240, 110, 130),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -883,6 +1143,25 @@ local SPECS: { [string]: Spec } = {
 				PINK_DARK,
 				model
 			)
+			addBasics(model, body, spec, { Belly = Color3.fromRGB(255, 235, 210) })
+			innerEars(model, PINK)
+			whiskers(model, head, Color3.fromRGB(250, 250, 250))
+			decoration(
+				"Muzzle",
+				Vector3.new(0.7, 0.4, 0.05),
+				head.CFrame * CFrame.new(0, -0.32, -head.Size.Z / 2 - 0.02),
+				Color3.fromRGB(255, 235, 210),
+				model
+			)
+			for i = -1, 1 do
+				decoration(
+					"Stripe",
+					Vector3.new(0.18, 0.12, head.Size.Z * 0.6),
+					head.CFrame * CFrame.new(i * 0.3, head.Size.Y / 2 + 0.02, 0),
+					Color3.fromRGB(200, 110, 40),
+					model
+				)
+			end
 			addEyes(head, model)
 		end,
 	},
@@ -898,7 +1177,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(35, 35, 45),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 0.85,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local b = body.Size
 			-- White belly on the front, flush so it never blocks spray.
 			decoration(
@@ -915,6 +1194,26 @@ local SPECS: { [string]: Spec } = {
 				ORANGE,
 				model
 			)
+			addBasics(model, body, spec, { Feet = ORANGE, Belly = Color3.fromRGB(35, 35, 45) })
+			-- Flippers splay out from the shoulders so they never sit over mud on the sides.
+			for _, side in { -1, 1 } do
+				decoration(
+					"Flipper",
+					Vector3.new(0.18, 1.5, 0.6),
+					body.CFrame * CFrame.new(side * (b.X / 2 + 0.35), 0.2, 0) * CFrame.Angles(0, 0, side * 0.45),
+					Color3.fromRGB(35, 35, 45),
+					model
+				)
+			end
+			for _, side in { -1, 1 } do
+				decoration(
+					"Cheek",
+					Vector3.new(0.3, 0.2, 0.05),
+					head.CFrame * CFrame.new(side * head.Size.X * 0.32, -0.2, -head.Size.Z / 2 - 0.02),
+					Color3.fromRGB(255, 150, 170),
+					model
+				)
+			end
 			addEyes(head, model)
 		end,
 	},
@@ -951,6 +1250,22 @@ local SPECS: { [string]: Spec } = {
 				Vector3.new(0.82, 0.82, 0.5),
 				tail.CFrame * CFrame.new(0, 0, 0.85),
 				Color3.fromRGB(250, 245, 235),
+				model
+			)
+			addBasics(model, body, spec, { Feet = Color3.fromRGB(30, 22, 18) })
+			innerEars(model, Color3.fromRGB(40, 30, 25))
+			decoration(
+				"Chest",
+				Vector3.new(body.Size.X * 0.6, body.Size.Y * 0.6, 0.05),
+				body.CFrame * CFrame.new(0, -0.15, -body.Size.Z / 2 - 0.02),
+				Color3.fromRGB(250, 245, 235),
+				model
+			)
+			decoration(
+				"Nose",
+				Vector3.new(0.22, 0.18, 0.08),
+				head.CFrame * CFrame.new(0, -0.2, -h.Z / 2 - 0.66),
+				Color3.fromRGB(20, 20, 20),
 				model
 			)
 			addEyes(head, model)
@@ -991,6 +1306,28 @@ local SPECS: { [string]: Spec } = {
 				)
 			end
 			pairOfEars(head, Vector3.new(0.3, 0.7, 0.25), spec.HeadColor, 0.3, 0.1, model)
+			addBasics(model, body, spec, { Feet = Color3.fromRGB(25, 25, 25) })
+			local tail = decoration(
+				"Tail",
+				Vector3.new(0.22, 1.8, 0.22),
+				body.CFrame * CFrame.new(0, -0.1, b.Z / 2 + 0.15) * CFrame.Angles(0.25, 0, 0),
+				Color3.fromRGB(245, 245, 245),
+				model
+			)
+			decoration(
+				"TailTuft",
+				Vector3.new(0.4, 0.6, 0.4),
+				tail.CFrame * CFrame.new(0, -0.95, 0),
+				Color3.fromRGB(25, 25, 25),
+				model
+			)
+			decoration(
+				"Muzzle",
+				Vector3.new(head.Size.X * 0.85, head.Size.Y * 0.4, 0.4),
+				head.CFrame * CFrame.new(0, -head.Size.Y * 0.28, -head.Size.Z / 2 - 0.15),
+				Color3.fromRGB(40, 40, 40),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -1005,7 +1342,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(245, 245, 245),
 		BodyMaterial = Enum.Material.Fabric,
 		PatchCell = 1.1,
-		Decorate = function(model, _body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			local black = Color3.fromRGB(25, 25, 30)
 			for _, side in { -1, 1 } do
@@ -1026,6 +1363,28 @@ local SPECS: { [string]: Spec } = {
 				)
 				patch:SetAttribute("NoGrime", true)
 			end
+			addBasics(model, body, spec, { Feet = Color3.fromRGB(25, 25, 30) })
+			decoration(
+				"Muzzle",
+				Vector3.new(0.9, 0.6, 0.3),
+				head.CFrame * CFrame.new(0, -h.Y * 0.25, -h.Z / 2 - 0.12),
+				Color3.fromRGB(250, 250, 250),
+				model
+			)
+			decoration(
+				"Nose",
+				Vector3.new(0.35, 0.22, 0.08),
+				head.CFrame * CFrame.new(0, -h.Y * 0.17, -h.Z / 2 - 0.3),
+				black,
+				model
+			)
+			decoration(
+				"Shoulders",
+				Vector3.new(body.Size.X + 0.06, body.Size.Y * 0.45, 1.0),
+				body.CFrame * CFrame.new(0, body.Size.Y * 0.1, -body.Size.Z / 2 + 0.55),
+				black,
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -1039,7 +1398,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(225, 175, 95),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 1.3,
-		Decorate = function(model, body, head, _spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			local mane = Color3.fromRGB(150, 85, 35)
 			decoration(
@@ -1064,6 +1423,15 @@ local SPECS: { [string]: Spec } = {
 				model
 			)
 			decoration("TailTuft", Vector3.new(0.6, 0.6, 0.6), tail.CFrame * CFrame.new(0, -1.0, 0), mane, model)
+			addBasics(model, body, spec)
+			pairOfEars(head, Vector3.new(0.45, 0.45, 0.2), Color3.fromRGB(225, 175, 95), 0.1, 0, model)
+			decoration(
+				"Nose",
+				Vector3.new(0.35, 0.25, 0.08),
+				head.CFrame * CFrame.new(0, -0.3, -h.Z / 2 - 0.46),
+				Color3.fromRGB(120, 70, 60),
+				model
+			)
 			addEyes(head, model)
 		end,
 	},
@@ -1077,7 +1445,7 @@ local SPECS: { [string]: Spec } = {
 		HeadColor = Color3.fromRGB(150, 130, 165),
 		BodyMaterial = Enum.Material.SmoothPlastic,
 		PatchCell = 1.6,
-		Decorate = function(model, _body, head, spec)
+		Decorate = function(model, body, head, spec)
 			local h = head.Size
 			pairOfEars(head, Vector3.new(0.5, 0.5, 0.3), spec.HeadColor, 0.15, 0, model)
 			decoration(
@@ -1093,6 +1461,16 @@ local SPECS: { [string]: Spec } = {
 					Vector3.new(0.3, 0.3, 0.08),
 					head.CFrame * CFrame.new(side * 0.6, 0.0, -h.Z / 2 - 0.58),
 					Color3.fromRGB(70, 50, 80),
+					model
+				)
+			end
+			addBasics(model, body, spec)
+			for _, side in { -1, 1 } do
+				decoration(
+					"Tusk",
+					Vector3.new(0.25, 0.4, 0.2),
+					head.CFrame * CFrame.new(side * h.X * 0.32, -h.Y * 0.05, -h.Z / 2 - 0.5),
+					Color3.fromRGB(250, 245, 230),
 					model
 				)
 			end

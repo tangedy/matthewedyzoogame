@@ -20,6 +20,11 @@ local GameConfig = {
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart
 	RequestRateHz = 15, -- client cleaning request cadence
 	MinRequestInterval = 0.04, -- server drops requests arriving faster than this
+	-- Spraying aims along the camera ray, so any side visible on screen can be washed from
+	-- wherever the player stands. The hit must still be within the hose's Range (+ slack)
+	-- of the player, and the camera within this distance of them.
+	AimReachSlack = 4,
+	MaxAimCameraDistance = 160,
 	MaxAcceptedStep = 0.1, -- max seconds of cleaning credited per request
 	SprayRadius = 1.6, -- aim assist: a patch counts as reachable if the ray lands this close
 
