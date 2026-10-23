@@ -190,19 +190,30 @@ end
 
 local function bindStand(player: Player, bay: Model)
 	local stand = ensureStand(bay)
-	if not stand then
-		return
+	if stand then
+		standByPlayer[player] = stand
+		local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
+		local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
+		if timed then
+			bindPrompt(timed, player, "AutoCollect2h")
+		end
+		if forever then
+			bindPrompt(forever, player, "AutoCollectForever")
+		end
+		refreshStand(player)
 	end
-	standByPlayer[player] = stand
-	local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
-	local forever = promptOn(stand, "ForeverCounter", "ForeverPrompt")
-	if timed then
-		bindPrompt(timed, player, "AutoCollect2h")
+	local zoo = bay:FindFirstChild("Zoo")
+	if zoo then
+		for _, child in zoo:GetChildren() do
+			if child:GetAttribute("FlexSide") == "Right" then
+				local post = child:FindFirstChild("GatePost")
+				local unlock = post and post:FindFirstChild("UnlockPrompt")
+				if unlock and unlock:IsA("ProximityPrompt") then
+					bindPrompt(unlock, player, "SidePasture")
+				end
+			end
+		end
 	end
-	if forever then
-		bindPrompt(forever, player, "AutoCollectForever")
-	end
-	refreshStand(player)
 end
 
 -- Receipts ------------------------------------------------------------------------------
@@ -249,7 +260,12 @@ local function processPurchase(
 	while #saved.Receipts > MonetizationConfig.ReceiptsKept do
 		table.remove(saved.Receipts, 1)
 	end
+	local pasture = MonetizationState.unlockPasture(player)
 	PlayerDataService.saveNow(player)
+	if pasture then
+		local extra = "Medium and large pasture unlocked forever, plus the left twin pen!"
+		message = if message then `{message} {extra}` else extra
+	end
 	if message then
 		MonetizationState.notify(player, if simulated then `[TEST] {message}` else message, true)
 	end
@@ -321,6 +337,10 @@ local function buyProduct(player: Player, product: Product)
 		end
 		truck.Bought = { Species = offer.Species, Mutation = offer.Mutation }
 		PlayerDataService.markDirty(player)
+	end
+	if product.Kind == "SidePasture" and MonetizationState.sidePastureOpen(player) then
+		MonetizationState.notify(player, "You already own the right pasture.", false)
+		return
 	end
 	if product.Kind == "Limited" then
 		if not (product.Species and AnimalConfig.Animals[product.Species]) then
@@ -577,6 +597,10 @@ local function connectHooks()
 					end)
 					if ok and owns and player.Parent then
 						MonetizationGrants.applyPass(player, pass.Key)
+						if MonetizationState.unlockPasture(player) then
+							PlayerDataService.saveNow(player)
+							MonetizationState.notify(player, "Medium and large pasture unlocked forever, plus the left twin pen!", true)
+						end
 						MonetizationState.push(player)
 					elseif not ok then
 						warn(`[Monetization] Game pass check failed for {player.Name}: {owns}`)

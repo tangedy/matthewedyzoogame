@@ -74,6 +74,47 @@ local function penOf(zoo: Zoo, index: number): Model?
 	return if pen and pen:IsA("Model") then pen else nil
 end
 
+local function isPasturePen(index: number): boolean
+	return index > GameConfig.Zoo.MaxPens and index <= GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens
+end
+
+local FLEX_LEFT = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + 1
+local FLEX_RIGHT = FLEX_LEFT + 1
+
+local function flexSide(index: number): string?
+	if index == FLEX_LEFT then
+		return "Left"
+	elseif index == FLEX_RIGHT then
+		return "Right"
+	end
+	return nil
+end
+
+local function pastureUnlocked(data: PlayerDataService.SavedData): boolean
+	local mon = data.Extra.Monetization
+	return typeof(mon) == "table" and mon.PastureUnlocked == true
+end
+
+local function sidePastureUnlocked(data: PlayerDataService.SavedData): boolean
+	local mon = data.Extra.Monetization
+	return typeof(mon) == "table" and mon.SidePastureUnlocked == true
+end
+
+local function penOpen(data: PlayerDataService.SavedData, index: number): boolean
+	if index >= 1 and index <= data.ZooSize then
+		return true
+	end
+	if isPasturePen(index) or flexSide(index) == "Left" then
+		return pastureUnlocked(data)
+	end
+	if flexSide(index) == "Right" then
+		return sidePastureUnlocked(data)
+	end
+	return false
+end
+
+local LAST_PEN = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + GameConfig.Zoo.FlexPasturePens
+
 local function cacheSlot(zoo: Zoo, index: number): BasePart?
 	local folder = zoo.Bay:FindFirstChild("Cache")
 	local slot = folder and folder:FindFirstChild("Slot" .. index)
@@ -124,6 +165,26 @@ local function animalInPen(data: PlayerDataService.SavedData, pen: number): (Own
 		end
 	end
 	return nil, nil
+end
+
+local function animalsInPen(data: PlayerDataService.SavedData, pen: number): { OwnedAnimal }
+	local list = {}
+	for _, animal in data.Animals do
+		if animal.Pen == pen then
+			table.insert(list, animal)
+		end
+	end
+	return list
+end
+
+local function flexUsed(data: PlayerDataService.SavedData, pen: number): number
+	local used = 0
+	for _, animal in data.Animals do
+		if animal.Pen == pen then
+			used += AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) or 0
+		end
+	end
+	return used
 end
 
 local function totalIncome(data: PlayerDataService.SavedData): number
@@ -199,61 +260,101 @@ local function refreshPens(player: Player)
 		return
 	end
 	local carried = carriedRecord(player)
-	for i = 1, GameConfig.Zoo.MaxPens do
+	for i = 1, LAST_PEN do
 		local pen = penOf(zoo, i)
 		if not pen then
 			continue
 		end
-		local unlocked = i <= data.ZooSize
-		WorldBuilder.setShown(pen, unlocked)
-		if not unlocked then
+		local unlocked = penOpen(data, i)
+		local flex = flexSide(i)
+		WorldBuilder.setShown(pen, if flex then true else unlocked)
+		local lock = pen:FindFirstChild("FlexLock")
+		if lock then
+			WorldBuilder.setShown(lock, flex ~= nil and not unlocked)
+		end
+		if not unlocked and not flex then
 			continue
 		end
-		local animal = animalInPen(data, i)
+		local occupants = animalsInPen(data, i)
+		local animal = occupants[1]
 		local floor = pen:FindFirstChild("Floor") :: BasePart
 		floor.Color = Color3.fromRGB(120, 170, 80)
 		local status = floor:FindFirstChild("Status")
 		local text = status and status:FindFirstChild("Label") :: TextLabel?
 		if text then
-			text.Text = if animal then "" else "EMPTY"
+			if not unlocked then
+				text.Text = ""
+			elseif flex and #occupants == 1 and AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) == 1 then
+				text.Text = "1/2"
+			else
+				text.Text = if animal then "" else "EMPTY"
+			end
 		end
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
 			pad.Transparency = 0
+			local cash, rate = 0, 0
+			for _, occupant in occupants do
+				cash += occupant.Pending
+				rate += ZooService.income(occupant.Species, occupant.Mutation)
+			end
 			-- The client renders the counter (count-up, bounce, money pop) from these.
-			pad:SetAttribute("Cash", if animal then math.floor(animal.Pending) else nil)
-			pad:SetAttribute("Rate", if animal then ZooService.income(animal.Species, animal.Mutation) else nil)
+			pad:SetAttribute("Cash", if #occupants > 0 then math.floor(cash) else nil)
+			pad:SetAttribute("Rate", if #occupants > 0 then rate else nil)
 		end
 
 		local post = pen:FindFirstChild("GatePost")
 		local prompt = post and post:FindFirstChild("PenPrompt") :: ProximityPrompt?
+		local prompt2 = post and post:FindFirstChild("PenPrompt2") :: ProximityPrompt?
+		local unlockPrompt = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
+		if unlockPrompt then
+			unlockPrompt.Enabled = flex == "Right" and not unlocked
+		end
+		if prompt2 then
+			prompt2.Enabled = false
+		end
 		if not prompt then
+			continue
+		end
+		if not unlocked then
+			prompt.Enabled = false
 			continue
 		end
 		local penClassAttr = pen:GetAttribute("PenClass")
 		local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
+		local function armSell(target: ProximityPrompt, occupant: OwnedAnimal)
+			target.Enabled = true
+			target.ObjectText = ZooService.label(occupant.Species, occupant.Mutation)
+			target.ActionText = `Sell ({UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))})`
+			target.HoldDuration = 1
+		end
 		if not carried and not animal then
 			prompt.Enabled = false
 		elseif carried then
 			local bodyClass = AnimalConfig.Animals[carried.Species].BodyClass
 			prompt.Enabled = true
 			prompt.ObjectText = ZooService.label(carried.Species, carried.Mutation)
+			local flexFull = flex ~= nil
+				and (flexUsed(data, i) + (AnimalConfig.flexSlots(bodyClass) or 0)) > AnimalConfig.flexCapacity()
 			if not AnimalConfig.fits(bodyClass, penClass) then
-				prompt.ActionText = `Needs a {AnimalConfig.penNeeded(bodyClass)} pen`
+				prompt.ActionText = AnimalConfig.placementHint(bodyClass, penClass)
 				prompt.HoldDuration = 0
-			elseif animal then
+			elseif flex and flexFull then
+				prompt.ActionText = "Two mediums or one large"
+				prompt.HoldDuration = 0
+			elseif flex or not animal then
+				prompt.ActionText = "Place"
+				prompt.HoldDuration = 0
+			else
 				local value = UIStyle.formatMoney(ZooService.sellValue(animal.Species, animal.Mutation))
 				prompt.ActionText = `Swap (sell {ZooService.label(animal.Species, animal.Mutation)} {value})`
 				prompt.HoldDuration = 0.5
-			else
-				prompt.ActionText = "Place"
-				prompt.HoldDuration = 0
 			end
 		elseif animal then
-			prompt.Enabled = true
-			prompt.ObjectText = ZooService.label(animal.Species, animal.Mutation)
-			prompt.ActionText = `Sell ({UIStyle.formatMoney(ZooService.sellValue(animal.Species, animal.Mutation))})`
-			prompt.HoldDuration = 1 -- a hold, so animals aren't sold by accident
+			armSell(prompt, animal)
+			if prompt2 and occupants[2] then
+				armSell(prompt2, occupants[2])
+			end
 		end
 	end
 
@@ -274,6 +375,11 @@ local function refreshPens(player: Player)
 	showBarn("BarnMedium", tier >= 2)
 	showBarn("BarnLarge", tier >= 3)
 	showBarn("BarnGargantuan", tier >= 4)
+
+	local gate = zooFolder and zooFolder:FindFirstChild("PastureGate")
+	if gate then
+		WorldBuilder.setShown(gate, not pastureUnlocked(data))
+	end
 
 	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter")
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
@@ -330,9 +436,50 @@ local function refreshAll(player: Player)
 	sendCarry(player)
 end
 
-local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model)
+function ZooService.refresh(player: Player)
+	refreshAll(player)
+end
+
+local function slotFor(pen: Model, data: PlayerDataService.SavedData, animal: OwnedAnimal): BasePart?
+	local slot = pen:FindFirstChild("Slot") :: BasePart?
+	if pen:GetAttribute("PenClass") ~= "PastureFlex" then
+		return slot
+	end
+	if AnimalConfig.Animals[animal.Species].BodyClass ~= "Large" then
+		return slot
+	end
+	local ids = {}
+	for _, other in data.Animals do
+		if other.Pen == animal.Pen and AnimalConfig.Animals[other.Species].BodyClass == "Large" then
+			table.insert(ids, other.Id)
+		end
+	end
+	table.sort(ids)
+	local index = table.find(ids, animal.Id) or 1
+	local named = pen:FindFirstChild(if index == 1 then "SlotMedium1" else "SlotMedium2")
+	return if named and named:IsA("BasePart") then named else slot
+end
+
+local function seatPen(zoo: Zoo, data: PlayerDataService.SavedData, penIndex: number)
+	local pen = penOf(zoo, penIndex)
+	if not pen then
+		return
+	end
+	for _, animal in data.Animals do
+		if animal.Pen ~= penIndex then
+			continue
+		end
+		local model = zoo.PenModels[animal.Id]
+		local slot = slotFor(pen, data, animal)
+		if model and slot then
+			model:PivotTo(slot.CFrame)
+		end
+	end
+end
+
+local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model, data: PlayerDataService.SavedData?)
 	local pen = penOf(zoo, animal.Pen)
-	local slot = pen and pen:FindFirstChild("Slot") :: BasePart?
+	local slot = if pen and data then slotFor(pen, data, animal) else pen and pen:FindFirstChild("Slot") :: BasePart?
 	model.Name = "ZooAnimal"
 	model:SetAttribute("AnimalId", animal.Id)
 	if slot then
@@ -340,6 +487,9 @@ local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model)
 	end
 	model.Parent = pen or zoo.Bay
 	zoo.PenModels[animal.Id] = model
+	if data and pen then
+		seatPen(zoo, data, animal.Pen)
+	end
 end
 
 local function buildCacheModel(zoo: Zoo, record: CachedAnimal)
@@ -466,7 +616,16 @@ local function placeCarried(player: Player, penIndex: number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = carriedRecord(player)
-	if not zoo or not data or not record or penIndex > data.ZooSize then
+	if not zoo or not data or not record then
+		return
+	end
+	if not penOpen(data, penIndex) then
+		local side = flexSide(penIndex)
+		if isPasturePen(penIndex) or side == "Left" then
+			purchaseResult:FireClient(player, false, "Spend any Robux to unlock this pasture.")
+		elseif side == "Right" then
+			purchaseResult:FireClient(player, false, "Unlock this pasture for 99 Robux, or with the Axolotl.")
+		end
 		return
 	end
 	local penModel = penOf(zoo, penIndex)
@@ -474,22 +633,26 @@ local function placeCarried(player: Player, penIndex: number)
 	local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
 	local bodyClass = AnimalConfig.Animals[record.Species].BodyClass
 	if not AnimalConfig.fits(bodyClass, penClass) then
-		purchaseResult:FireClient(
-			player,
-			false,
-			`{ZooService.label(record.Species, record.Mutation)} needs a {AnimalConfig.penNeeded(bodyClass)} pen.`
-		)
+		purchaseResult:FireClient(player, false, `{AnimalConfig.placementHint(bodyClass, penClass)}.`)
 		return
 	end
-	local old, oldIndex = animalInPen(data, penIndex)
-	if old and oldIndex then
-		table.remove(data.Animals, oldIndex)
-		EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
-		Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
-		local oldModel = zoo.PenModels[old.Id]
-		if oldModel then
-			zoo.PenModels[old.Id] = nil
-			AnimalService.poof(oldModel)
+	if flexSide(penIndex) then
+		local need = AnimalConfig.flexSlots(bodyClass) or 0
+		if flexUsed(data, penIndex) + need > AnimalConfig.flexCapacity() then
+			purchaseResult:FireClient(player, false, "This pasture holds two mediums or one large.")
+			return
+		end
+	else
+		local old, oldIndex = animalInPen(data, penIndex)
+		if old and oldIndex then
+			table.remove(data.Animals, oldIndex)
+			EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
+			Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
+			local oldModel = zoo.PenModels[old.Id]
+			if oldModel then
+				zoo.PenModels[old.Id] = nil
+				AnimalService.poof(oldModel)
+			end
 		end
 	end
 	local _, cacheIndex = findCached(data, record.Id)
@@ -505,7 +668,7 @@ local function placeCarried(player: Player, penIndex: number)
 	}
 	table.insert(data.Animals, animal)
 	dropCarry(player)
-	placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation))
+	placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation), data)
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
 	Hooks.fire("AnimalPlaced", player, animal)
@@ -548,14 +711,19 @@ local function putDownCarried(player: Player)
 	returnCarryToCache(player)
 end
 
-local function sellFromPen(player: Player, penIndex: number)
+local function sellFromPen(player: Player, penIndex: number, which: number?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	if not zoo or not data then
 		return
 	end
-	local animal, index = animalInPen(data, penIndex)
-	if not animal or not index then
+	local occupants = animalsInPen(data, penIndex)
+	local animal = occupants[which or 1]
+	if not animal then
+		return
+	end
+	local index = table.find(data.Animals, animal)
+	if not index then
 		return
 	end
 	table.remove(data.Animals, index)
@@ -572,6 +740,7 @@ local function sellFromPen(player: Player, penIndex: number)
 		zoo.PenModels[animal.Id] = nil
 		AnimalService.poof(model)
 	end
+	seatPen(zoo, data, penIndex)
 	PlayerDataService.markDirty(player)
 	refreshAll(player)
 end
@@ -612,12 +781,17 @@ local function collect(player: Player, penIndex: number)
 		return
 	end
 	zoo.PadDebounce[penIndex] = now + 0.5
-	local animal = animalInPen(data, penIndex)
-	if not animal or animal.Pending < 1 then
+	local amount = 0
+	for _, animal in animalsInPen(data, penIndex) do
+		local take = math.floor(animal.Pending)
+		if take >= 1 then
+			animal.Pending -= take
+			amount += take
+		end
+	end
+	if amount < 1 then
 		return
 	end
-	local amount = math.floor(animal.Pending)
-	animal.Pending -= amount
 	EconomyService.addCoins(player, amount)
 	local pen = penOf(zoo, penIndex)
 	local pad = pen and pen:FindFirstChild("CollectPad") :: BasePart?
@@ -633,8 +807,10 @@ function ZooService.collectAll(player: Player)
 	if not data then
 		return
 	end
-	for i = 1, math.min(data.ZooSize, GameConfig.Zoo.MaxPens) do
-		collect(player, i)
+	for i = 1, LAST_PEN do
+		if penOpen(data, i) then
+			collect(player, i)
+		end
 	end
 end
 
@@ -816,7 +992,7 @@ function ZooService.attach(player: Player, bay: Model)
 	local data = PlayerDataService.get(player)
 	if data then
 		for _, animal in data.Animals do
-			placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation))
+			placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation), data)
 		end
 		for _, record in data.Cache do
 			buildCacheModel(zoo, record)
@@ -834,7 +1010,7 @@ function ZooService.attach(player: Player, bay: Model)
 	local function connect(signal: RBXScriptSignal, fn: (...any) -> ())
 		table.insert(zoo.Connections, signal:Connect(fn))
 	end
-	for i = 1, GameConfig.Zoo.MaxPens do
+	for i = 1, LAST_PEN do
 		local pen = penOf(zoo, i)
 		local post = pen and pen:FindFirstChild("GatePost")
 		local prompt = post and post:FindFirstChild("PenPrompt") :: ProximityPrompt?
@@ -846,7 +1022,15 @@ function ZooService.attach(player: Player, bay: Model)
 				if zoo.CarriedId then
 					placeCarried(player, i)
 				else
-					sellFromPen(player, i)
+					sellFromPen(player, i, 1)
+				end
+			end)
+		end
+		local prompt2 = post and post:FindFirstChild("PenPrompt2") :: ProximityPrompt?
+		if prompt2 then
+			connect(prompt2.Triggered, function(who: Player)
+				if who == player and not zoo.CarriedId then
+					sellFromPen(player, i, 2)
 				end
 			end)
 		end

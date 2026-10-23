@@ -141,6 +141,95 @@ local function isValidZooSize(size: number): boolean
 	return false
 end
 
+-- True when this profile has already spent Robux, so pasture pens (past MaxPens) are real.
+-- Kept in step with MonetizationState's PastureUnlocked inference.
+local function spentRobux(extra: any): boolean
+	if typeof(extra) ~= "table" then
+		return false
+	end
+	local mon = extra.Monetization
+	if typeof(mon) ~= "table" then
+		return false
+	end
+	if mon.PastureUnlocked == true then
+		return true
+	end
+	if typeof(mon.Receipts) == "table" and #mon.Receipts > 0 then
+		return true
+	end
+	if typeof(mon.PendingAnimals) == "table" and #mon.PendingAnimals > 0 then
+		return true
+	end
+	local function flagged(value: any): boolean
+		if typeof(value) ~= "table" then
+			return false
+		end
+		for _, on in value do
+			if on == true then
+				return true
+			end
+		end
+		return false
+	end
+	if flagged(mon.Passes) or flagged(mon.Once) then
+		return true
+	end
+	local function positive(value: any): boolean
+		return typeof(value) == "number" and value > 0
+	end
+	return positive(mon.SuperSoapLeft) or positive(mon.AutoCollectLeft) or positive(mon.LuckyLeft)
+end
+
+local function isPasturePen(index: number): boolean
+	return index > GameConfig.Zoo.MaxPens and index <= GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens
+end
+
+local FLEX_LEFT = GameConfig.Zoo.MaxPens + GameConfig.Zoo.PasturePens + 1
+local FLEX_RIGHT = FLEX_LEFT + 1
+
+-- The right twin pasture stays if it was bought, or if this profile has an Axolotl.
+local function sidePastureOpen(raw: any): boolean
+	local extra = raw.Extra
+	local mon = if typeof(extra) == "table" then extra.Monetization else nil
+	if typeof(mon) == "table" then
+		if mon.SidePastureUnlocked == true then
+			return true
+		end
+		if typeof(mon.Once) == "table" and mon.Once.SidePasture == true then
+			return true
+		end
+		if typeof(mon.PendingAnimals) == "table" then
+			for _, entry in mon.PendingAnimals do
+				if typeof(entry) == "table" and entry.Species == "Axolotl" then
+					return true
+				end
+			end
+		end
+	end
+	local function hasAxolotl(list: any): boolean
+		if typeof(list) ~= "table" then
+			return false
+		end
+		for _, animal in list do
+			if typeof(animal) == "table" and animal.Species == "Axolotl" then
+				return true
+			end
+		end
+		return false
+	end
+	if hasAxolotl(raw.Animals) or hasAxolotl(raw.Cache) then
+		return true
+	end
+	if typeof(raw.Index) == "table" then
+		for key, discovered in raw.Index do
+			if discovered == true and typeof(key) == "string" and string.match(key, "^Axolotl:") then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Copies plain data (strings, numbers, booleans, tables of those), dropping anything else.
 local function plainCopy(value: any, depth: number): any
 	local kind = typeof(value)
@@ -191,6 +280,10 @@ local function sanitize(raw: any): SavedData
 	local version = cleanCount(raw.SchemaVersion)
 	-- v4 replaced the 4/6/8 pen row with face stalls (6) and a small barn (10).
 	local zooSize = cleanCount(raw.ZooSize)
+	-- The gargantuan yard used to stop at 19. It now includes the three medium barns.
+	if zooSize == 19 then
+		zooSize = 22
+	end
 	if version < 4 then
 		if zooSize == 4 then
 			zooSize = 6
@@ -230,24 +323,40 @@ local function sanitize(raw: any): SavedData
 	end
 
 	if typeof(raw.Animals) == "table" then
-		local usedPens: { [number]: boolean } = {}
+		local usedSlots: { [number]: number } = {}
+		local spent = spentRobux(raw.Extra)
+		local sideOpen = sidePastureOpen(raw)
 		for _, animal in raw.Animals do
 			local pen = if typeof(animal) == "table" then cleanCount(animal.Pen) else 0
-			if pen < 1 or pen > data.ZooSize or usedPens[pen] then
+			local inZoo = pen >= 1 and pen <= data.ZooSize
+			local inPasture = spent and isPasturePen(pen)
+			local inLeft = spent and pen == FLEX_LEFT
+			local inRight = sideOpen and pen == FLEX_RIGHT
+			if not inZoo and not inPasture and not inLeft and not inRight then
 				continue
 			end
 			local species, mutation = validAnimal(animal)
-			if species and mutation then
-				usedPens[pen] = true
-				table.insert(data.Animals, {
-					Id = animal.Id,
-					Species = species,
-					Mutation = mutation,
-					Pen = pen,
-					Pending = cleanCount(animal.Pending),
-				})
-				data.Index[PlayerDataService.indexKey(species, mutation)] = true
+			if not species or not mutation then
+				continue
 			end
+			local slots = 1
+			if pen == FLEX_LEFT or pen == FLEX_RIGHT then
+				slots = AnimalConfig.flexSlots(AnimalConfig.Animals[species].BodyClass) or 0
+				if slots == 0 or (usedSlots[pen] or 0) + slots > AnimalConfig.flexCapacity() then
+					continue
+				end
+			elseif usedSlots[pen] then
+				continue
+			end
+			usedSlots[pen] = (usedSlots[pen] or 0) + slots
+			table.insert(data.Animals, {
+				Id = animal.Id,
+				Species = species,
+				Mutation = mutation,
+				Pen = pen,
+				Pending = cleanCount(animal.Pending),
+			})
+			data.Index[PlayerDataService.indexKey(species, mutation)] = true
 		end
 	end
 

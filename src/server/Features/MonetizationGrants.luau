@@ -157,10 +157,12 @@ local function grantLimited(
 	table.insert(saved.PendingAnimals, { Species = species, Mutation = mutation })
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
+	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false
+	local bonus = if side then " Right pasture unlocked forever!" else ""
 	if MonetizationGrants.deliverPending(player) > 0 then
-		return true, `You got a Limited {name}!`
+		return true, `You got a Limited {name}!{bonus}`
 	end
-	return true, `You got a Limited {name}! It joins your cache when a slot is free.`
+	return true, `You got a Limited {name}! It joins your cache when a slot is free.{bonus}`
 end
 
 -- The delivery truck's animal: the offer recorded when the purchase was prompted
@@ -259,6 +261,9 @@ function MonetizationGrants.product(
 			return true, "Cleaned! That animal is spotless."
 		end
 		return true, "Clean Now is saved for the next animal this price covers."
+	elseif kind == "SidePasture" then
+		MonetizationState.unlockSidePasture(player)
+		return true, "Right pasture unlocked forever!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -325,13 +330,19 @@ end
 -- pass on a live server only lasts the session, so it never outlives the switch to real ids.
 function MonetizationGrants.grantPass(player: Player, key: string, simulated: boolean)
 	local saved = MonetizationState.saved(player)
+	local pasture = false
 	if saved and (not simulated or RunService:IsStudio()) then
 		saved.Passes[key] = true
+		pasture = MonetizationState.unlockPasture(player)
 		PlayerDataService.saveNow(player)
 	end
 	MonetizationGrants.applyPass(player, key)
 	local pass = MonetizationConfig.PassesByKey[key]
-	MonetizationState.notify(player, `{pass.DisplayName} unlocked!`, true)
+	local text = `{pass.DisplayName} unlocked!`
+	if pasture then
+		text ..= " Medium and large pasture unlocked forever, plus the left twin pen!"
+	end
+	MonetizationState.notify(player, text, true)
 	MonetizationState.push(player)
 end
 
