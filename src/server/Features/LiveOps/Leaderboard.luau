@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local LiveOpsConfig = require(ReplicatedStorage.Shared.FeatureConfig.LiveOpsConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Stars = require(script.Parent.Stars)
 local Services = script.Parent.Parent.Parent.Services
@@ -16,7 +17,7 @@ local ZooService = require(Services.ZooService)
 
 local Config = LiveOpsConfig.Board
 
-type Row = { Rank: TextLabel, Name: TextLabel, Income: TextLabel, Stars: TextLabel, Frame: Frame }
+type Row = { Rank: TextLabel, Vip: Frame, Name: TextLabel, Income: TextLabel, Stars: TextLabel, Frame: Frame }
 
 local Leaderboard = {}
 
@@ -56,10 +57,12 @@ local function setupLeaderstats(player: Player)
 	local stars = value(parent, "IntValue", "Stars") :: IntValue
 	local cash = value(parent, "StringValue", "Cash") :: StringValue
 	local income = value(parent, "StringValue", "Income") :: StringValue
+	local title = value(parent, "StringValue", "Title") :: StringValue
 	if cash.Value == "" then
 		cash.Value = "$0"
 		income.Value = "$0/s"
 		stars.Value = 1
+		title.Value = ""
 	end
 end
 
@@ -72,6 +75,7 @@ local function updateLeaderstats(player: Player)
 	local cash = folder:FindFirstChild("Cash")
 	local income = folder:FindFirstChild("Income")
 	local stars = folder:FindFirstChild("Stars")
+	local title = folder:FindFirstChild("Title")
 	if cash and cash:IsA("StringValue") then
 		cash.Value = UIStyle.formatMoney(data.Coins)
 	end
@@ -80,6 +84,9 @@ local function updateLeaderstats(player: Player)
 	end
 	if stars and stars:IsA("IntValue") then
 		stars.Value = Stars.get(player)
+	end
+	if title and title:IsA("StringValue") then
+		title.Value = if player:GetAttribute("Vip") == true then MonetizationConfig.VIP.TagText else ""
 	end
 end
 
@@ -188,6 +195,22 @@ local function buildBoard()
 			elseif i == 2 then Color3.fromRGB(220, 225, 235)
 			elseif i == 3 then Color3.fromRGB(230, 150, 80)
 			else Color3.new(1, 1, 1)
+		local vip = Instance.new("Frame")
+		vip.Name = "Vip"
+		vip.Position = UDim2.fromScale(0.11, 0.16)
+		vip.Size = UDim2.fromScale(0.13, 0.68)
+		vip.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+		vip.BorderSizePixel = 0
+		vip.Visible = false
+		vip.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.35, 0)
+		corner.Parent = vip
+		local vipText = label(vip, {
+			Size = UDim2.fromScale(1, 1),
+			Text = MonetizationConfig.VIP.TagText,
+		}, Color3.new(1, 1, 1), 2)
+		UIStyle.rainbow(vipText)
 		table.insert(rows, {
 			Frame = frame,
 			Rank = label(frame, {
@@ -195,6 +218,7 @@ local function buildBoard()
 				Size = UDim2.fromScale(0.09, 0.8),
 				Text = `#{i}`,
 			}, rankColor, 4),
+			Vip = vip,
 			Name = label(frame, {
 				Position = UDim2.fromScale(0.11, 0.12),
 				Size = UDim2.fromScale(0.44, 0.76),
@@ -235,6 +259,10 @@ local function updateBoard()
 		local entry = entries[i]
 		row.Frame.Visible = entry ~= nil
 		if entry then
+			local vip = entry.Player:GetAttribute("Vip") == true
+			row.Vip.Visible = vip
+			row.Name.Position = if vip then UDim2.fromScale(0.25, 0.12) else UDim2.fromScale(0.11, 0.12)
+			row.Name.Size = if vip then UDim2.fromScale(0.3, 0.76) else UDim2.fromScale(0.44, 0.76)
 			row.Name.Text = entry.Player.DisplayName
 			row.Income.Text = UIStyle.formatMoney(entry.Income) .. "/s"
 			row.Stars.Text = Stars.richText(Stars.get(entry.Player))

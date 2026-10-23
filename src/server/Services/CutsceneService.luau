@@ -17,7 +17,8 @@ local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local CutsceneService = {}
 
-local readyAt: { [Player]: number } = {}
+local skipAt: { [Player]: number } = {}
+local endsAt: { [Player]: number } = {}
 local janitor = Janitor.new()
 
 local ORIGIN = CFrame.new(0, 3, 1800)
@@ -182,28 +183,32 @@ function CutsceneService.init()
 
 	janitor:Add(Remotes.event("CutsceneFinished").OnServerEvent:Connect(function(player: Player)
 		local data = PlayerDataService.get(player)
-		local at = readyAt[player]
-		if not data or data.CutsceneSeen or at == nil or os.clock() + 0.25 < at then
+		local skip = skipAt[player]
+		-- E is ignored until SkipAfter. After that the hose has to work immediately.
+		if not data or data.CutsceneSeen or skip == nil or os.clock() < skip then
 			return
 		end
 		data.CutsceneSeen = true
 		PlayerDataService.markDirty(player)
 		PlayerDataService.saveNow(player)
+		skipAt[player] = nil
+		endsAt[player] = nil
 		player:SetAttribute("InCutscene", false)
 	end))
 	janitor:Add(Players.PlayerRemoving:Connect(function(player)
-		readyAt[player] = nil
+		skipAt[player] = nil
+		endsAt[player] = nil
 	end))
 end
 
--- True only while the opening shot is still inside its timer. A missed clear used to leave
--- the hose locked after the camera had already come back.
+-- True only while the opening shot is still running. A skip or the timer clears it,
+-- so the hose is not left locked after the camera comes back.
 function CutsceneService.blocksCleaning(player: Player): boolean
 	if player:GetAttribute("InCutscene") ~= true then
 		return false
 	end
-	local at = readyAt[player]
-	if at == nil or os.clock() >= at then
+	local ends = endsAt[player]
+	if ends == nil or os.clock() >= ends then
 		player:SetAttribute("InCutscene", false)
 		return false
 	end
@@ -216,10 +221,16 @@ function CutsceneService.begin(player: Player)
 		player:SetAttribute("InCutscene", false)
 		return
 	end
+	local now = os.clock()
+	local skipAfter = GameConfig.Cutscene.SkipAfter
+	if typeof(skipAfter) ~= "number" then
+		skipAfter = 5
+	end
 	player:SetAttribute("InCutscene", true)
-	readyAt[player] = os.clock() + GameConfig.Cutscene.Duration
+	skipAt[player] = now + skipAfter
+	endsAt[player] = now + GameConfig.Cutscene.Duration
 	task.delay(GameConfig.Cutscene.Duration, function()
-		if player.Parent then
+		if player.Parent and player:GetAttribute("InCutscene") == true then
 			player:SetAttribute("InCutscene", false)
 		end
 	end)

@@ -128,7 +128,7 @@ local function ensureStand(bay: Model): Model?
 	kiosk(
 		"TimedCounter",
 		"TimedPrompt",
-		"2 HOURS",
+		"10 MIN",
 		`{product.Robux} ROBUX`,
 		Color3.fromRGB(70, 190, 90),
 		Vector3.zero
@@ -155,10 +155,15 @@ local function refreshStand(player: Player)
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	if timed then
 		timed.Enabled = true
-		timed.ObjectText = "2 HOURS"
+		timed.ObjectText = "10 MIN"
+		local sign = timed.Parent and timed.Parent:FindFirstChild("Sign")
+		local title = sign and sign:FindFirstChild("Title")
+		if title and title:IsA("TextLabel") then
+			title.Text = `10 MIN\n{product.Robux} ROBUX`
+		end
 		local left = MonetizationGrants.autoCollectLeft(player)
 		timed.ActionText = if left > 0
-			then `Add 2 hours ({product.Robux} ROBUX) {clock(left)} left`
+			then `Add 10 minutes ({product.Robux} ROBUX) {clock(left)} left`
 			else `Buy ({product.Robux} ROBUX)`
 	end
 end

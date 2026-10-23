@@ -51,7 +51,7 @@ export type Pass = {
 export type ShopState = {
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow() when Super Soap runs out; 0 when inactive
 	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
-	SpeedEndsAt: number, -- same clock; 0 when the 8x speed buff is off
+	SpeedEndsAt: number, -- same clock; 0 when the 2x speed buff is off
 	LuckEndsAt: number, -- same clock; 0 when Incredible Luck is off
 	LuckyLeft: number, -- walk-ins left on Lucky Soap
 	Passes: { [string]: boolean }, -- owned game passes
@@ -125,20 +125,20 @@ local products: { Product } = {
 		Key = "AutoCollect2h",
 		Id = 0,
 		Robux = 49,
-		DisplayName = "Auto-Collect: 2 Hours",
-		Description = "Pens pay themselves for 2 hours while you play. Buying again adds another 2 hours, up to 8.",
+		DisplayName = "Auto-Collect: 10 Minutes",
+		Description = "Pens pay themselves for 10 minutes while you play. Buying again adds another 10 minutes, up to 40.",
 		Tab = "Boosts",
 		Order = 4,
 		Kind = "AutoCollect",
 		Color = GREEN,
-		Seconds = 2 * 3600,
+		Seconds = 10 * 60,
 	},
 	{
 		Key = "SpeedBoost",
 		Id = 0,
 		Robux = 39,
-		DisplayName = "8x Speed",
-		Description = "Walk 8x faster for 10 minutes. Buying again adds time, up to 4 hours.",
+		DisplayName = "2x Speed",
+		Description = "Walk 2x faster for 10 minutes. Buying again adds time, up to 4 hours.",
 		Tab = "Boosts",
 		Order = 5,
 		Kind = "SpeedBoost",
@@ -276,7 +276,7 @@ local passes: { Pass } = {
 		Id = 0,
 		Robux = 399,
 		DisplayName = "VIP Keeper",
-		Description = "+25% zoo income forever, a gold VIP tag over your head, and a VIP title in chat.",
+		Description = "+25% zoo income forever, and a rainbow VIP title in chat and on the leaderboards.",
 		Order = 1,
 		Color = GOLD,
 	},
@@ -388,10 +388,9 @@ return {
 	VIP = {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",
-		TagColor = GOLD,
 	},
 	Speed = {
-		Multiplier = 8, -- WalkSpeed while the consumable is active
+		Multiplier = 2, -- WalkSpeed while the consumable is active
 		Seconds = 600, -- per purchase; purchases stack
 		MaxSeconds = 4 * 3600,
 	},
@@ -402,7 +401,7 @@ return {
 		SpawnWeightMultiplier = 5,
 	},
 	AutoCollect = {
-		MaxSeconds = 8 * 3600, -- stacked 2-hour purchases stop here
+		MaxSeconds = 40 * 60, -- stacked 10-minute purchases stop here
 	},
 	-- Sold out between the stock check and the receipt: cash instead (the Robux can't be refunded).
 	-- max(Floor, min(120 min of income, the full next hose)): never less than Floor at any tier.

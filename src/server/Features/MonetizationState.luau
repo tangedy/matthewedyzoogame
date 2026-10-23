@@ -25,7 +25,7 @@ export type Saved = {
 	AutoCollectLeft: number, -- seconds; only counts down while the player is online
 	LuckyLeft: number, -- walk-ins
 	-- Absolute os.time() expiries. 0 means the buff is off. They keep counting while offline.
-	SpeedEndsAt: number, -- 8x walk speed
+	SpeedEndsAt: number, -- 2x walk speed
 	LuckEndsAt: number, -- Incredible Luck (rare-animal drop weights)
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought

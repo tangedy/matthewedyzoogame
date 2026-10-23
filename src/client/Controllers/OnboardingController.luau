@@ -210,14 +210,29 @@ local function truckTarget(): BasePart?
 	return nil
 end
 
+local function cutscenePlaying(): boolean
+	if player:GetAttribute("InCutscene") == true then
+		return true
+	end
+	local gui = player:FindFirstChild("PlayerGui")
+	return gui ~= nil and gui:FindFirstChild("SpawnCutscene") ~= nil
+end
+
 -- Where the trail leads right now, and the instruction shown at the top of the screen.
 local function guideTarget(): (BasePart?, string?)
+	if cutscenePlaying() then
+		return nil, nil
+	end
 	local bay = bayModel()
 	if not bay then
 		return nil, nil
 	end
-	if firstPigLesson() or guideStep == "Wash" then
-		return washTarget(bay), "WASH THE ANIMAL!"
+	if firstPigLesson() then
+		-- Rainbow arrows and the prompt lead to the first pig. Both go away once spraying starts.
+		if progress > 0 then
+			return nil, nil
+		end
+		return washTarget(bay), "CLEAN THE PIG"
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or an affordable hose.
 	local truck = truckTarget()
@@ -331,12 +346,26 @@ local function applyGuide(step: string)
 end
 
 local function refreshAnimalMarker()
-	local bay = bayModel()
-	local animal = bay and bay:FindFirstChild("Animal")
-	local head = animal and animal:GetAttribute("JobId") == jobId and animal:FindFirstChild("Head")
-	local show = not tutorialCompleted and washing and progress < 0.15 and head ~= nil
-	animalMarker.Adornee = if show then head :: BasePart else nil :: any
-	animalMarker.Enabled = show
+	local show = firstPigLesson() and progress <= 0 and not cutscenePlaying()
+	local head: BasePart? = nil
+	if show then
+		local bay = bayModel()
+		local animal = bay and bay:FindFirstChild("Animal")
+		if not (animal and animal:IsA("Model")) and bay then
+			for _, child in bay:GetChildren() do
+				if child:GetAttribute("ScriptedIntro") == true and child:IsA("Model") then
+					animal = child
+					break
+				end
+			end
+		end
+		local found = animal and animal:FindFirstChild("Head")
+		if found and found:IsA("BasePart") then
+			head = found
+		end
+	end
+	animalMarker.Adornee = head
+	animalMarker.Enabled = head ~= nil
 end
 
 local function bobMarker(marker: BillboardGui, offset: Vector3)
@@ -419,7 +448,7 @@ local function buildGui()
 		})
 	end
 
-	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
+	animalMarker = makeMarker("Clean the pig!", Color3.fromRGB(150, 230, 255))
 	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
 end
 
@@ -476,6 +505,7 @@ function OnboardingController.init(initial: Types.InitialState)
 		if note.Visible and os.clock() >= noteUntil then
 			note.Visible = false
 		end
+		refreshAnimalMarker()
 		bobMarker(animalMarker, Vector3.new(0, 4, 0))
 		refreshStationMarker()
 		bobMarker(stationMarker, Vector3.new(0, 6, 0))

@@ -1,12 +1,17 @@
--- Puts a gold VIP title in front of chat messages for anyone who has spent Robux.
--- The server sets the Vip attribute; the overhead tag is built there too.
+-- Puts a black-stroked rainbow VIP title in front of chat messages for anyone
+-- the server marked with the Vip attribute. It is not drawn over the avatar.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextChatService = game:GetService("TextChatService")
+
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
 local Social = {}
 
 function Social.init(_initial: any)
+	local title = UIStyle.vipChatTitle(MonetizationConfig.VIP.TagText)
 	TextChatService.OnIncomingMessage = function(message: TextChatMessage): TextChatMessageProperties?
 		local source = message.TextSource
 		if not source then
@@ -17,7 +22,7 @@ function Social.init(_initial: any)
 			return nil
 		end
 		local props = Instance.new("TextChatMessageProperties")
-		props.PrefixText = `<font color="#FFD24A">[VIP]</font> {message.PrefixText}`
+		props.PrefixText = `{title} {message.PrefixText}`
 		return props
 	end
 end

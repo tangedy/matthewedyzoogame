@@ -566,39 +566,54 @@ local function sendSoldHome(zoo: Zoo, model: Model?)
 	end)
 end
 
--- Pushes the oldest waiting animal out of the cache so a bought animal fits. Washes never
--- call this: an uncollected animal stays put when the next wash finishes.
+-- Sells the oldest unpaid animal waiting in the cache and returns its model, still standing
+-- in the slot. The caller walks it out, then walks whoever is left into the open slot.
+local function takeOldestUnpaid(player: Player): Model?
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
+		return nil
+	end
+	for _, record in waitingRecords(zoo, data) do
+		if record.Paid then
+			continue
+		end
+		removeCached(data, record.Id)
+		local model = zoo.CacheModels[record.Id]
+		if model then
+			zoo.CacheModels[record.Id] = nil
+		end
+		EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
+		Hooks.fire(
+			"AnimalSold",
+			player,
+			record.Species,
+			record.Mutation,
+			ZooService.sellValue(record.Species, record.Mutation)
+		)
+		PlayerDataService.markDirty(player)
+		return model
+	end
+	return nil
+end
+
+-- Pushes the oldest unpaid animal out so a bought animal fits. A full wash cache sells
+-- the same way before the new animal is allowed in.
 local function makeCacheRoom(player: Player): boolean
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	if not zoo or not data then
 		return false
 	end
-	local list = waitingRecords(zoo, data)
-	if #list < GameConfig.Cache.Slots then
+	if #waitingRecords(zoo, data) < GameConfig.Cache.Slots then
 		return true
 	end
-	for _, record in list do
-		if not record.Paid then
-			removeCached(data, record.Id)
-			local model = zoo.CacheModels[record.Id]
-			if model then
-				zoo.CacheModels[record.Id] = nil
-			end
-			EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
-			Hooks.fire(
-				"AnimalSold",
-				player,
-				record.Species,
-				record.Mutation,
-				ZooService.sellValue(record.Species, record.Mutation)
-			)
-			PlayerDataService.markDirty(player)
-			sendSoldHome(zoo, model)
-			return true
-		end
+	local model = takeOldestUnpaid(player)
+	if not model then
+		return false
 	end
-	return false
+	sendSoldHome(zoo, model)
+	return true
 end
 
 local fireOverflow: (player: Player) -> ()
@@ -1077,8 +1092,9 @@ function ZooService.noteIntroWash(player: Player)
 	yardRevealed:FireClient(player)
 end
 
--- The washed model has finished celebrating. Intro animals are sold on the spot.
--- Otherwise the cache takes it, or it waits beside the cache until Keep or Auto-Sell.
+-- The washed model has finished celebrating. Intro animals are sold on the spot and never
+-- enter the cache. Once the yard is open, two animals can wait; a third sells the oldest
+-- and the one behind walks up into that slot.
 function ZooService.receiveWashed(player: Player, model: Model, species: string, mutation: string)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -1098,6 +1114,39 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 		end
 		AnimalService.destroy(model)
 		return
+	end
+	if #waitingRecords(zoo, data) >= GameConfig.Cache.Slots then
+		local soldModel = takeOldestUnpaid(player)
+		if soldModel then
+			local soldSpot = zoo.Bay:FindFirstChild("SoldSpot")
+			if soldSpot and soldSpot:IsA("BasePart") and soldModel.Parent then
+				AnimalService.walkCorners(soldModel, { soldSpot.CFrame }, 0.55)
+			end
+			local leaving = soldModel
+			task.spawn(function()
+				if leaving.Parent then
+					AnimalService.sold(leaving)
+				end
+				local road = zoo.Bay:FindFirstChild("RoadReturn")
+				if road and road:IsA("BasePart") and leaving.Parent then
+					AnimalService.walkCorners(leaving, { road.CFrame }, 0.7, 0.55)
+				end
+				if leaving.Parent then
+					leaving:Destroy()
+				end
+			end)
+			local current = PlayerDataService.get(player)
+			if current and zoos[player] == zoo then
+				for index, waiting in waitingRecords(zoo, current) do
+					local cached = zoo.CacheModels[waiting.Id]
+					local slotPart = cacheSlot(zoo, index)
+					if cached and slotPart and cached.Parent then
+						AnimalService.walkCorners(cached, { slotPart.CFrame }, 0.6)
+					end
+				end
+				refreshCache(player)
+			end
+		end
 	end
 	local record, slot = ZooService.addToCache(player, species, mutation)
 	if record and slot then
@@ -1141,8 +1190,8 @@ end
 
 -- Adds an animal to the cache. Returns the record and the slot it should walk to.
 -- `options.Evict` is for a Robux animal that has to fit: it sells the oldest unpaid animal
--- already waiting. A wash never sets it. Washes that don't fit become an overflow instead,
--- so the animal already in the cache stays.
+-- already waiting. A wash that finds both slots full sells that animal first, then the
+-- animal behind it steps forward. Paid animals are left for the keep-or-sell prompt.
 -- `options.Paid`: Robux animals, which are never pushed out themselves.
 function ZooService.addToCache(
 	player: Player,

@@ -75,10 +75,9 @@ local GameConfig = {
 	Zoo = {
 		MaxPens = 24,
 		StartPens = 6,
-		-- Four separate cages on the road edge, in front of the stalls. From the outside
-		-- of the plot inward: large square, medium square, the path, medium square,
-		-- large square. Any Robux spend opens both medium cages. The Axolotl opens
-		-- the first large cage. The last large cage is cash.
+		-- Two large cages on the road, with a medium cage behind each one so the
+		-- driveway between the larges stays open. Any Robux spend opens both medium
+		-- cages. The Axolotl opens the left large cage. The right large cage is cash.
 		RoadCages = {
 			{ Side = "Left", Class = "PastureLarge", Unlock = "Axolotl", Label = "LARGE", Lock = "AXOLOTL" },
 			{ Side = "Left", Class = "PastureMedium", Unlock = "AnyRobux", Label = "MEDIUM", Lock = "SPEND ANY ROBUX" },
@@ -119,7 +118,7 @@ local GameConfig = {
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
 	-- (carries to a pen) or auto-sells.
 	Cache = {
-		Slots = 1,
+		Slots = 2,
 		SlotSpacing = 7,
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
 	},
@@ -134,10 +133,11 @@ local GameConfig = {
 		PayoutIncome = 3,
 	},
 
-	-- Unskippable spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator;
-	-- the avatar is loaded at runtime and a stand-in is used if that load fails.
+	-- Spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator; the avatar is
+	-- loaded at runtime and a stand-in is used if that load fails. E skips it after SkipAfter.
 	Cutscene = {
 		Duration = 12,
+		SkipAfter = 5,
 		AvatarUserId = 140258990,
 		Species = "TRex",
 		Scale = 1.35,

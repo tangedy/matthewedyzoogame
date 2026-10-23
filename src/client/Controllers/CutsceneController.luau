@@ -1,11 +1,11 @@
--- Unskippable spawn cutscene. The camera visits the showcase bay for Cutscene.Duration
--- seconds. There is no skip control. A single caption sits at the bottom. Janitor restores
--- the camera and the character when the shot ends.
+-- Spawn cutscene. The camera visits the showcase bay for Cutscene.Duration seconds.
+-- After SkipAfter seconds, E ends it. Janitor restores the camera and the character.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
@@ -61,7 +61,7 @@ function CutsceneController.init(initial: Types.InitialState)
 	local caption = Instance.new("TextLabel")
 	caption.BackgroundTransparency = 1
 	caption.AnchorPoint = Vector2.new(0.5, 1)
-	caption.Position = UDim2.new(0.5, 0, 1, -28)
+	caption.Position = UDim2.new(0.5, 0, 1, -52)
 	caption.Size = UDim2.new(0.6, 0, 0, 22)
 	caption.Text = "This is the zoo you're building"
 	caption.TextScaled = false
@@ -70,6 +70,21 @@ function CutsceneController.init(initial: Types.InitialState)
 	UIStyle.text(caption, Color3.fromRGB(240, 240, 240), Color3.fromRGB(20, 20, 20), 1.5)
 	caption.TextScaled = false
 	caption.TextSize = 16
+
+	local skip = Instance.new("TextLabel")
+	skip.Name = "Skip"
+	skip.BackgroundTransparency = 1
+	skip.AnchorPoint = Vector2.new(0.5, 1)
+	skip.Position = UDim2.new(0.5, 0, 1, -24)
+	skip.Size = UDim2.new(0.4, 0, 0, 20)
+	skip.Text = "Press E to skip"
+	skip.Visible = false
+	skip.TextScaled = false
+	skip.TextSize = 16
+	skip.Parent = gui
+	UIStyle.text(skip, Color3.fromRGB(255, 220, 120), Color3.fromRGB(20, 20, 20), 1.5)
+	skip.TextScaled = false
+	skip.TextSize = 16
 
 	local function thaw(humanoid: Humanoid?)
 		if not humanoid then
@@ -112,6 +127,31 @@ function CutsceneController.init(initial: Types.InitialState)
 	end
 	janitor:Add(release)
 
+	local started = os.clock()
+	local duration = GameConfig.Cutscene.Duration
+	local skipAfter = GameConfig.Cutscene.SkipAfter
+	if typeof(skipAfter) ~= "number" then
+		skipAfter = 5
+	end
+	local ended = false
+	local function finish()
+		if ended or not gui.Parent then
+			return
+		end
+		ended = true
+		janitor:Cleanup()
+	end
+	-- E is live for the whole shot. Presses before SkipAfter do nothing.
+	janitor:Add(UserInputService.InputBegan:Connect(function(input: InputObject, _processed: boolean)
+		if input.KeyCode ~= Enum.KeyCode.E then
+			return
+		end
+		if os.clock() - started < skipAfter then
+			return
+		end
+		finish()
+	end))
+
 	task.spawn(function()
 		local folder = Workspace:WaitForChild("CutsceneShowcase", 8)
 		local shots = {}
@@ -123,16 +163,19 @@ function CutsceneController.init(initial: Types.InitialState)
 				end
 			end
 		end
-		-- The server owns the lock, so a late-joining client still ends with everyone else
-		-- and cannot skip by firing early.
-		local waited = os.clock()
-		while player:GetAttribute("InCutscene") ~= true and os.clock() - waited < 2 do
-			task.wait()
-		end
-		local started = os.clock()
-		local duration = GameConfig.Cutscene.Duration
 		local shotIndex = 0
-		while player:GetAttribute("InCutscene") == true and os.clock() - started < duration + 2 do
+		local sawLock = player:GetAttribute("InCutscene") == true
+		-- A false attribute before the lock replicates used to end the shot on the first frame.
+		while gui.Parent and os.clock() - started < duration do
+			local locked = player:GetAttribute("InCutscene") == true
+			if locked then
+				sawLock = true
+			elseif sawLock then
+				break
+			end
+			if not skip.Visible and os.clock() - started >= skipAfter then
+				skip.Visible = true
+			end
 			if #shots > 0 then
 				local index = math.clamp(math.floor((os.clock() - started) / duration * #shots) + 1, 1, #shots)
 				if index ~= shotIndex then
@@ -151,9 +194,7 @@ function CutsceneController.init(initial: Types.InitialState)
 			end
 			task.wait()
 		end
-		if gui.Parent then
-			janitor:Cleanup()
-		end
+		finish()
 	end)
 
 	-- Keep the scriptable camera if something else tries to take it during the shot.
