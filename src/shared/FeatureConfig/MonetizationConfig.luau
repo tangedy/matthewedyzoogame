@@ -22,7 +22,7 @@ export type Product = {
 	ToolTier: number?, -- HoseTier: the single next hose this product grants. Never a skip.
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
-	Seconds: number?, -- AutoCollect: play-time added per purchase
+	Seconds: number?, -- AutoCollect and Super Soap: play-time added per purchase (Super Soap defaults to SuperSoap.Seconds)
 	Color: Color3,
 	OncePerPlayer: boolean?, -- can only be bought once (an intro price)
 	IntroKey: string?, -- the shop shows this cheaper once-only product instead, until it's used
@@ -101,24 +101,36 @@ local products: { Product } = {
 		IntroKey = "SuperSoapStarter",
 	},
 	{
+		Key = "SuperSoapLarge",
+		Id = 0,
+		Robux = 25,
+		DisplayName = "Super Soap x3",
+		Description = "2x clean power for 30 min. Stacks.",
+		Tab = "Boosts",
+		Order = 2,
+		Kind = "SuperSoap",
+		Color = BLUE,
+		Seconds = 30 * 60,
+	},
+	{
 		Key = "CalmTreat",
 		Id = 0,
 		Robux = 15,
 		DisplayName = "Calm Treat",
 		Description = "Freeze patience for 60s.",
 		Tab = "Boosts",
-		Order = 2,
+		Order = 3,
 		Kind = "CalmTreat",
 		Color = GREEN,
 	},
 	{
 		Key = "LuckySoap",
 		Id = 0,
-		Robux = 49,
+		Robux = 29,
 		DisplayName = "Lucky Soap",
 		Description = "Next 5 walk-ins: rarer, more mutations.",
 		Tab = "Boosts",
-		Order = 3,
+		Order = 4,
 		Kind = "LuckySoap",
 		Color = GOLD,
 	},
@@ -127,32 +139,32 @@ local products: { Product } = {
 		Id = 0,
 		Robux = 49,
 		DisplayName = "Auto-Collect",
-		Description = "Pens pay you for 10 min. Stacks.",
+		Description = "Pens pay you for 30 min. Stacks.",
 		Tab = "Boosts",
-		Order = 4,
+		Order = 5,
 		Kind = "AutoCollect",
 		Color = GREEN,
-		Seconds = 10 * 60,
+		Seconds = 30 * 60,
 	},
 	{
 		Key = "SpeedBoost",
 		Id = 0,
-		Robux = 39,
+		Robux = 19,
 		DisplayName = "2x Speed",
 		Description = "Run 2x faster for 10 min. Stacks.",
 		Tab = "Boosts",
-		Order = 5,
+		Order = 6,
 		Kind = "SpeedBoost",
 		Color = ORANGE,
 	},
 	{
 		Key = "IncredibleLuck",
 		Id = 0,
-		Robux = 49,
+		Robux = 79,
 		DisplayName = "Incredible Luck",
 		Description = "Rare+ walk-ins far likelier for 10 min.",
 		Tab = "Boosts",
-		Order = 6,
+		Order = 7,
 		Kind = "IncredibleLuck",
 		Color = PURPLE,
 	},
@@ -169,35 +181,35 @@ local products: { Product } = {
 		Color = GREEN,
 		Minutes = 5,
 		Floor = 100,
-		CapFraction = 0.15,
+		CapFraction = 0.1,
 	},
 	{
 		Key = "CashMedium",
 		Id = 0,
 		Robux = 75,
 		DisplayName = "Bag of Cash",
-		Description = "15 min of farm income.",
+		Description = "20 min of farm income.",
 		Tab = "Cash",
 		Order = 2,
 		Kind = "Cash",
 		Color = GREEN,
-		Minutes = 15,
+		Minutes = 20,
 		Floor = 250,
-		CapFraction = 0.3,
+		CapFraction = 0.35,
 	},
 	{
 		Key = "CashLarge",
 		Id = 0,
-		Robux = 199,
+		Robux = 149,
 		DisplayName = "Vault of Cash",
-		Description = "45 min of farm income.",
+		Description = "60 min of farm income.",
 		Tab = "Cash",
 		Order = 3,
 		Kind = "Cash",
 		Color = GREEN,
-		Minutes = 45,
+		Minutes = 60,
 		Floor = 500,
-		CapFraction = 0.5,
+		CapFraction = 0.75,
 	},
 	-- Offered on an animal the hose can't wash. Not a shop card.
 	{
@@ -216,7 +228,7 @@ local products: { Product } = {
 	{
 		Key = "TruckAnimal",
 		Id = 0,
-		Robux = 200,
+		Robux = 199,
 		DisplayName = "Delivery Truck Animal",
 		Description = "The animal on your truck.",
 		Tab = "Boosts",
@@ -245,7 +257,7 @@ local products: { Product } = {
 	{
 		Key = "SidePasture",
 		Id = 0,
-		Robux = 99,
+		Robux = 149,
 		DisplayName = "Large Cage",
 		Description = "Opens the road cages.",
 		Tab = "Boosts",
@@ -259,7 +271,7 @@ local products: { Product } = {
 	{
 		Key = "OfflineDouble",
 		Id = 0,
-		Robux = 19,
+		Robux = 25,
 		DisplayName = "2x Offline",
 		Description = "Double your away earnings.",
 		Tab = "Boosts",
@@ -287,18 +299,12 @@ local passes: { Pass } = {
 -- One hidden product per step above the cheapest unwashable rarity. Roblox charges a
 -- fixed catalog price, so each step is its own developer product. Ids stay 0 until published.
 -- Epic through Secret is at most 4 steps above the next animal a hose cannot wash.
-local cleanNowBase = 39
-for _, product in products do
-	if product.Key == "CleanNow" then
-		cleanNowBase = product.Robux
-		break
-	end
-end
-for steps = 1, 4 do
+local CLEAN_NOW_ROBUX = { 79, 149, 249, 399 } -- steps 1..4; step 0 is the CleanNow product above
+for steps, robux in CLEAN_NOW_ROBUX do
 	table.insert(products, {
 		Key = `CleanNow{steps}`,
 		Id = 0,
-		Robux = cleanNowBase + 100 * steps,
+		Robux = robux,
 		DisplayName = "Clean Now",
 		Description = "Wash a too-dirty animal now.",
 		Tab = "Boosts",
@@ -314,10 +320,10 @@ end
 -- Each receipt grants exactly that tier, and only when it is the next one, so Robux
 -- cannot skip the ladder. The Fire-Hose Rig stays a $1,000,000 cash upgrade.
 local HOSE_ROBUX: { [number]: number } = {
-	[2] = 15,
-	[3] = 35,
-	[4] = 75,
-	[5] = 149,
+	[2] = 19,
+	[3] = 29,
+	[4] = 99,
+	[5] = 249, -- above Vault of Cash (149, at most 75% of a hose), so the packs still pay
 }
 for tier, robux in HOSE_ROBUX do
 	local tool = ToolConfig[tier]
@@ -411,7 +417,7 @@ return {
 		SpawnWeightMultiplier = 5,
 	},
 	AutoCollect = {
-		MaxSeconds = 40 * 60, -- stacked 10-minute purchases stop here
+		MaxSeconds = 2 * 3600, -- stacked 30-minute purchases stop here
 	},
 	-- Sold out between the stock check and the receipt: cash instead (the Robux can't be refunded).
 	-- max(Floor, min(120 min of income, the full next hose)): never less than Floor at any tier.

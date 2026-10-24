@@ -9,6 +9,8 @@ Usage (from the repo root):
   -DryRun     list what would be created, change nothing.
 
 Safe to run again: products that already exist (same name) are reused, not duplicated.
+Their price is NOT changed on a re-run; change an existing product's price on the Creator
+Dashboard (Monetization > Developer Products).
 Names, prices and descriptions below must match MonetizationConfig.luau; prices there are
 display-only, Roblox charges what is set here.
 
@@ -30,27 +32,28 @@ if (-not $apiKey) {
 $products = @(
 	@{ Key = "SuperSoapStarter"; Name = "Super Soap (Starter)"; Price = 5; Description = "2x clean power for 10 min." },
 	@{ Key = "SuperSoap"; Name = "Super Soap"; Price = 9; Description = "2x clean power for 10 min. Stacks." },
+	@{ Key = "SuperSoapLarge"; Name = "Super Soap x3"; Price = 25; Description = "2x clean power for 30 min. Stacks." },
 	@{ Key = "CalmTreat"; Name = "Calm Treat"; Price = 15; Description = "Freeze patience for 60s." },
-	@{ Key = "LuckySoap"; Name = "Lucky Soap"; Price = 49; Description = "Next 5 walk-ins: rarer, more mutations." },
-	@{ Key = "AutoCollect2h"; Name = "Auto-Collect"; Price = 49; Description = "Pens pay you for 10 min. Stacks." },
-	@{ Key = "SpeedBoost"; Name = "2x Speed"; Price = 39; Description = "Run 2x faster for 10 min. Stacks." },
-	@{ Key = "IncredibleLuck"; Name = "Incredible Luck"; Price = 49; Description = "Rare+ walk-ins far likelier for 10 min." },
+	@{ Key = "LuckySoap"; Name = "Lucky Soap"; Price = 29; Description = "Next 5 walk-ins: rarer, more mutations." },
+	@{ Key = "AutoCollect2h"; Name = "Auto-Collect"; Price = 49; Description = "Pens pay you for 30 min. Stacks." },
+	@{ Key = "SpeedBoost"; Name = "2x Speed"; Price = 19; Description = "Run 2x faster for 10 min. Stacks." },
+	@{ Key = "IncredibleLuck"; Name = "Incredible Luck"; Price = 79; Description = "Rare+ walk-ins far likelier for 10 min." },
 	@{ Key = "CashSmall"; Name = "Pile of Cash"; Price = 25; Description = "5 min of farm income." },
-	@{ Key = "CashMedium"; Name = "Bag of Cash"; Price = 75; Description = "15 min of farm income." },
-	@{ Key = "CashLarge"; Name = "Vault of Cash"; Price = 199; Description = "45 min of farm income." },
+	@{ Key = "CashMedium"; Name = "Bag of Cash"; Price = 75; Description = "20 min of farm income." },
+	@{ Key = "CashLarge"; Name = "Vault of Cash"; Price = 149; Description = "60 min of farm income." },
 	@{ Key = "CleanNow"; Name = "Clean Now"; Price = 39; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow1"; Name = "Clean Now +1"; Price = 139; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow2"; Name = "Clean Now +2"; Price = 239; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow3"; Name = "Clean Now +3"; Price = 339; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow4"; Name = "Clean Now +4"; Price = 439; Description = "Wash a too-dirty animal now." },
-	@{ Key = "TruckAnimal"; Name = "Delivery Truck Animal"; Price = 200; Description = "The animal on your truck." },
+	@{ Key = "CleanNow1"; Name = "Clean Now +1"; Price = 79; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow2"; Name = "Clean Now +2"; Price = 149; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow3"; Name = "Clean Now +3"; Price = 249; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow4"; Name = "Clean Now +4"; Price = 399; Description = "Wash a too-dirty animal now." },
+	@{ Key = "TruckAnimal"; Name = "Delivery Truck Animal"; Price = 199; Description = "The animal on your truck." },
 	@{ Key = "LimitedAxolotl"; Name = "Limited Axolotl"; Price = 1000; Description = "Limited Mythic. Only 1,000 ever." },
-	@{ Key = "SidePasture"; Name = "Large Cage"; Price = 99; Description = "Opens the road cages." },
-	@{ Key = "OfflineDouble"; Name = "2x Offline"; Price = 19; Description = "Double your away earnings." },
-	@{ Key = "HoseTier2"; Name = "Scrub Brush"; Price = 15; Description = "Your next hose." },
-	@{ Key = "HoseTier3"; Name = "Garden Hose"; Price = 35; Description = "Your next hose." },
-	@{ Key = "HoseTier4"; Name = "Power Washer"; Price = 75; Description = "Your next hose." },
-	@{ Key = "HoseTier5"; Name = "Foam Cannon"; Price = 149; Description = "Your next hose." }
+	@{ Key = "SidePasture"; Name = "Large Cage"; Price = 149; Description = "Opens the road cages." },
+	@{ Key = "OfflineDouble"; Name = "2x Offline"; Price = 25; Description = "Double your away earnings." },
+	@{ Key = "HoseTier2"; Name = "Scrub Brush"; Price = 19; Description = "Your next hose." },
+	@{ Key = "HoseTier3"; Name = "Garden Hose"; Price = 29; Description = "Your next hose." },
+	@{ Key = "HoseTier4"; Name = "Power Washer"; Price = 99; Description = "Your next hose." },
+	@{ Key = "HoseTier5"; Name = "Foam Cannon"; Price = 249; Description = "Your next hose." }
 )
 
 $base = "https://apis.roblox.com/developer-products/v2/universes/$UniverseId/developer-products"

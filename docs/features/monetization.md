@@ -28,9 +28,9 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id> -DryRun
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id>
    ```
-   It creates the 23 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
+   It creates the 24 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
 3. Make the VIP Keeper game pass (399) by hand under Monetization > Passes and paste its id into `MonetizationIds.Passes.VIPKeeper`.
-4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number.
+4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number. A re-run of the script never changes the price of a product that already exists: change it on the Creator Dashboard.
 5. Game Settings > Security: **Enable Studio Access to API Services** must be on (receipts save through DataStores).
 
 `MonetizationConfig` reads the ids from `MonetizationIds`; nothing else needs editing.
@@ -41,14 +41,20 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | --- | --- | --- | --- |
 | `SuperSoapStarter` | Product, once per player | 5 | Same as Super Soap. The shop shows it in place of Super Soap until it has been used. While one intro prompt is open (or its receipt is still due) a second one is refused, so it can't be bought twice at the intro price. |
 | `SuperSoap` | Product | 9 | 2x cleaning power for 10 minutes (Hooks `CleaningPower`). Time stacks up to 4 hours, counts down only while online, and is saved. |
+| `SuperSoapLarge` | Product | 25 | Super Soap for 30 minutes (`Seconds` on the product). Same stacking cap. |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
-| `AutoCollect2h` | Product | 49 | Pens collect themselves for 2 hours of play. Time stacks up to 8 hours. Sold at the blue ROBUX SHOP booth on the plaza (opposite the gear shop), which also opens the full shop panel. |
-| `AutoCollectForever` | Game pass | 399 | Pens collect themselves forever. Its own gold kiosk beside the 2-hour one, labeled FOREVER. |
-| `LuckySoap` | Product | 49 | The next 5 walk-ins: Legendary+ `SpawnWeight` x4, non-Normal `MutationWeight` x3. Stacks up to 50. A charge is used only by a walk-in that was actually rolled with the boost (counted on `WashStarted`). The fixed first animal of a session doesn't use one, and neither does a walk-in replaced by another feature's `NextAnimal` override (e.g. LiveOps' daily or Mud Storm animal). The Legendary+ part only matters once the hose can wash a Legendary species; the card says so. |
-| `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 199 | `max(Floor, income/s * 60 * Minutes)`, capped at `CapFraction` (15% / 30% / 50%) of the next hose's price, so a pack can never skip a tool tier. The shop shows the current amount. |
+| `LuckySoap` | Product | 29 | The next 5 walk-ins: Legendary+ `SpawnWeight` x4, non-Normal `MutationWeight` x3. Stacks up to 50. A charge is used only by a walk-in that was actually rolled with the boost (counted on `WashStarted`). The fixed first animal of a session doesn't use one, and neither does a walk-in replaced by another feature's `NextAnimal` override (e.g. LiveOps' daily or Mud Storm animal). |
+| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Sold at the blue ROBUX SHOP booth on the plaza. |
+| `SpeedBoost` | Product | 19 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
+| `IncredibleLuck` | Product | 79 | Rare+ walk-ins x5 `SpawnWeight` for 10 minutes. Stacks up to 4 hours. |
+| `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 5 / 20 / 60, capped at `CapFraction` (10% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
+| `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 39 / 79 / 149 / 249 / 399 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
+| `HoseTier2`–`HoseTier5` | Product, hidden | 19 / 29 / 99 / 249 | Exactly the next hose (Scrub Brush, Garden Hose, Power Washer, Foam Cannon). Never a skip. The Foam Cannon costs more than Vault of Cash so the cash packs stay worth buying. |
+| `TruckAnimal` | Product, hidden | 199 | The animal on the Delivery Truck (DeliveryTruck feature). |
+| `OfflineDouble` | Product, hidden | 25 | Welcome-back only: doubles the offline payout already on the pads. |
+| `SidePasture` | Product, hidden, once | 149 | Legacy: opens the road cages. Nothing in the world prompts it any more. |
 | `LimitedAxolotl` | Product, limited | 1000 | One Axolotl (`Species`/`Mutation` in config) into the cache. Global stock of 1000, never restocked. Shown as COMING SOON until `AnimalConfig.Animals.Axolotl` exists. |
 | `VIPKeeper` | Game pass | 399 | Income x1.25 (Hooks `IncomeMultiplier`) and a gold "VIP" tag over the head. |
-| `FireHoseRig` | Game pass | 1499 | Sets `data.ToolTier` to the top tier, then `EconomyService.sendTool` and `CleaningService.refreshHose`. |
 
 ## How purchases work
 

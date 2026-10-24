@@ -235,7 +235,7 @@ function MonetizationGrants.product(
 	end
 	if kind == "SuperSoap" then
 		local cfg = MonetizationConfig.SuperSoap
-		local left = math.min(MonetizationGrants.soapLeft(player) + cfg.Seconds, cfg.MaxSeconds)
+		local left = math.min(MonetizationGrants.soapLeft(player) + (product.Seconds or cfg.Seconds), cfg.MaxSeconds)
 		saved.SuperSoapLeft = left
 		local session = MonetizationState.peek(player)
 		if session then

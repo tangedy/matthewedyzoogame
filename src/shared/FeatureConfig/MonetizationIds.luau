@@ -10,6 +10,7 @@ return {
 	Products = {
 		SuperSoapStarter = 0,
 		SuperSoap = 0,
+		SuperSoapLarge = 0,
 		CalmTreat = 0,
 		LuckySoap = 0,
 		AutoCollect2h = 0,
