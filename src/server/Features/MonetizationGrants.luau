@@ -118,7 +118,7 @@ function MonetizationGrants.deliverPending(player: Player): number
 		table.remove(saved.PendingAnimals, 1)
 		delivered += 1
 		local def = AnimalConfig.Animals[entry.Species]
-		MonetizationState.notify(player, `Your {def.DisplayName} is waiting in your cache!`, true)
+		MonetizationState.notify(player, `{def.DisplayName} is in your cache!`, true)
 	end
 	if delivered > 0 then
 		PlayerDataService.saveNow(player)
@@ -134,7 +134,7 @@ local function compensate(player: Player, reason: string): (boolean, string?)
 	if not EconomyService.addCoins(player, amount) then
 		return false, nil
 	end
-	return true, `{reason} You got {UIStyle.formatMoney(amount)} instead.`
+	return true, `{reason} +{UIStyle.formatMoney(amount)} instead.`
 end
 
 -- Yields (global stock). Returns false to leave the receipt unprocessed; claiming is idempotent
@@ -162,7 +162,7 @@ local function grantLimited(
 		return false, nil -- left while claiming
 	end
 	if result == "SoldOut" then
-		return compensate(player, `{product.DisplayName} sold out just before your purchase!`)
+		return compensate(player, "Sold out!")
 	end
 	table.insert(saved.PendingAnimals, { Species = species, Mutation = mutation })
 	if product.OncePerPlayer then
@@ -170,12 +170,10 @@ local function grantLimited(
 	end
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
-	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false
-	local bonus = if side then " Large cage unlocked!" else ""
 	if MonetizationGrants.deliverPending(player) > 0 then
-		return true, `You got a Limited {name}!{bonus}`
+		return true, `Limited {name}!`
 	end
-	return true, `You got a Limited {name}! It joins your cache when a slot is free.{bonus}`
+	return true, `Limited {name}! Joins your cache when free.`
 end
 
 -- The delivery truck's animal: the offer recorded when the purchase was prompted
@@ -186,7 +184,7 @@ local function grantTruck(player: Player): (boolean, string?)
 	local truck = data and data.Extra.Truck
 	local bought = if typeof(truck) == "table" then truck.Bought else nil
 	if typeof(bought) ~= "table" or typeof(bought.Species) ~= "string" or not AnimalConfig.Animals[bought.Species] then
-		return compensate(player, "That truck animal isn't available any more.")
+		return compensate(player, "Truck animal gone.")
 	end
 	local saved = MonetizationState.saved(player)
 	if not saved then
@@ -201,7 +199,7 @@ local function grantTruck(player: Player): (boolean, string?)
 		ZooService.discover(player, bought.Species, mutation)
 		PlayerDataService.saveNow(player)
 		Hooks.fire("TruckPurchased", player)
-		return true, `You got the {name}! Take it to a pen.`
+		return true, `{name}! Take it to a pen.`
 	end
 	table.insert(saved.PendingAnimals, { Species = bought.Species, Mutation = mutation })
 	PlayerDataService.markDirty(player)
@@ -209,7 +207,7 @@ local function grantTruck(player: Player): (boolean, string?)
 	if MonetizationGrants.deliverPending(player) > 0 then
 		return true, nil -- deliverPending already told them it's in the cache
 	end
-	return true, `You got the {name}! It joins your cache once you've moved the animal there.`
+	return true, `{name}! Joins your cache when free.`
 end
 
 -- Products ------------------------------------------------------------------------------
@@ -243,14 +241,14 @@ function MonetizationGrants.product(
 		if session then
 			session.SoapEndsAt = Workspace:GetServerTimeNow() + left
 		end
-		return true, `Super Soap! {cfg.PowerMultiplier}x cleaning for {clock(left)}`
+		return true, `Super Soap · {clock(left)}`
 	elseif kind == "CalmTreat" then
 		Hooks.fire("CalmTreat", player, MonetizationConfig.CalmTreatSeconds)
-		return true, `Calm Treat! Patience frozen for {MonetizationConfig.CalmTreatSeconds}s`
+		return true, `Patience frozen · {MonetizationConfig.CalmTreatSeconds}s`
 	elseif kind == "LuckySoap" then
 		local cfg = MonetizationConfig.LuckySoap
 		saved.LuckyLeft = math.min(saved.LuckyLeft + cfg.WalkIns, cfg.MaxWalkIns)
-		return true, `Lucky Soap! Next {saved.LuckyLeft} walk-ins are luckier`
+		return true, `Lucky Soap · {saved.LuckyLeft} walk-ins`
 	elseif kind == "Cash" then
 		local amount = MonetizationState.cashAmount(player, product)
 		if not EconomyService.addCoins(player, amount) then
@@ -261,11 +259,11 @@ function MonetizationGrants.product(
 		local cfg = MonetizationConfig.Speed
 		saved.SpeedEndsAt = extendUnix(saved.SpeedEndsAt, cfg.Seconds, cfg.MaxSeconds)
 		MonetizationGrants.watchSpeed(player)
-		return true, `{cfg.Multiplier}x Speed for {clock(saved.SpeedEndsAt - os.time())}!`
+		return true, `{cfg.Multiplier}x Speed · {clock(saved.SpeedEndsAt - os.time())}`
 	elseif kind == "IncredibleLuck" then
 		local cfg = MonetizationConfig.IncredibleLuck
 		saved.LuckEndsAt = extendUnix(saved.LuckEndsAt, cfg.Seconds, cfg.MaxSeconds)
-		return true, `Incredible Luck for {clock(saved.LuckEndsAt - os.time())}! Rare animals show up more.`
+		return true, `Incredible Luck · {clock(saved.LuckEndsAt - os.time())}`
 	elseif kind == "OfflineDouble" then
 		local data = PlayerDataService.get(player)
 		if not data or #data.Animals == 0 then
@@ -283,7 +281,7 @@ function MonetizationGrants.product(
 		if Offline.onEarned then
 			Offline.onEarned(player, amount)
 		end
-		return true, `Offline earnings doubled! +{UIStyle.formatMoney(amount)}`
+		return true, `Doubled! +{UIStyle.formatMoney(amount)}`
 	elseif kind == "HoseTier" then
 		local tier = product.ToolTier
 		if not tier or not EconomyService.grantToolTier(player, tier) then
@@ -301,16 +299,17 @@ function MonetizationGrants.product(
 			session.AutoCollectEndsAt = Workspace:GetServerTimeNow() + left
 		end
 		ZooService.collectAll(player)
-		return true, `Auto-Collect for {clock(left)}! Your pens pay themselves.`
+		return true, `Auto-Collect · {clock(left)}`
 	elseif kind == "CleanNow" then
 		local paidSteps = product.CleanSteps or 0
 		if CleaningService.grantCleanNow(player, paidSteps) then
-			return true, "Cleaned! That animal is spotless."
+			return true, "Cleaned!"
 		end
-		return true, "Clean Now is saved for the next animal this price covers."
+		return true, "Saved for your next too-dirty animal."
 	elseif kind == "SidePasture" then
 		MonetizationState.unlockSidePasture(player)
-		return true, "Large cage unlocked!"
+		ZooService.openRoadCages(player)
+		return true, "Road cages unlocked!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -472,18 +471,14 @@ end
 -- pass on a live server only lasts the session, so it never outlives the switch to real ids.
 function MonetizationGrants.grantPass(player: Player, key: string, simulated: boolean)
 	local saved = MonetizationState.saved(player)
-	local pasture = false
 	if saved and (not simulated or RunService:IsStudio()) then
 		saved.Passes[key] = true
-		pasture = MonetizationState.unlockPasture(player)
+		MonetizationState.unlockPasture(player)
 		PlayerDataService.saveNow(player)
 	end
 	MonetizationGrants.applyPass(player, key)
 	local pass = MonetizationConfig.PassesByKey[key]
 	local text = `{pass.DisplayName} unlocked!`
-	if pasture then
-		text ..= " Medium cages unlocked!"
-	end
 	MonetizationState.notify(player, text, true)
 	MonetizationState.push(player)
 end

@@ -27,8 +27,8 @@ local player = Players.LocalPlayer
 
 local MonetizationController = {}
 
-local OK_COLOR = Color3.fromRGB(130, 255, 140)
-local ERROR_COLOR = Color3.fromRGB(255, 130, 120)
+local OK_COLOR = UIStyle.CashColor
+local ERROR_COLOR = UIStyle.Colors.ErrorText
 
 local startedAt = os.clock()
 local state: ShopState = {
@@ -190,7 +190,7 @@ local function refreshTimers()
 		1,
 		Color3.fromRGB(60, 160, 255),
 		state.SoapEndsAt,
-		if soapLeft > 0 then `SOAP 2X {clock(soapLeft)}` else ""
+		if soapLeft > 0 then `2X SOAP {clock(soapLeft)}` else ""
 	)
 	local speedEnds = state.SpeedEndsAt or 0
 	local speedLeft = speedEnds - now
@@ -199,7 +199,7 @@ local function refreshTimers()
 		2,
 		Color3.fromRGB(255, 140, 40),
 		speedEnds,
-		if speedLeft > 0 then `SPEED {MonetizationConfig.Speed.Multiplier}X {clock(speedLeft)}` else ""
+		if speedLeft > 0 then `{MonetizationConfig.Speed.Multiplier}X SPEED {clock(speedLeft)}` else ""
 	)
 	local luckEnds = state.LuckEndsAt or 0
 	local luckLeft = luckEnds - now
@@ -213,9 +213,9 @@ local function refreshTimers()
 		0,
 		Color3.fromRGB(60, 190, 90),
 		newEnds,
-		if newLeft > 0 then `NEW PLAYER LUCK {clock(newLeft)}` else ""
+		if newLeft > 0 then `BOOST {clock(newLeft)}` else ""
 	)
-	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY: {state.LuckyLeft} LEFT` else nil)
+	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY x{state.LuckyLeft}` else nil)
 end
 
 -- Notices and offers ------------------------------------------------------------------------
@@ -252,8 +252,8 @@ local function hideOffer()
 end
 
 local OFFER_TITLES = {
-	CalmTreat = "It's about to shake!",
-	SuperSoap = "Big job? Wash 2x faster!",
+	CalmTreat = "About to shake!",
+	SuperSoap = "Wash 2x faster?",
 }
 
 local function showOffer(kind: string, key: string)
@@ -265,8 +265,8 @@ local function showOffer(kind: string, key: string)
 	offerToken += 1
 	local token = offerToken
 	offerTitle.Text = OFFER_TITLES[kind] or product.DisplayName
-	offerText.Text = `{product.DisplayName}: {product.Description}`
-	offerBuy.Text = `BUY {product.Robux} ROBUX`
+	offerText.Text = product.Description
+	offerBuy.Text = `BUY R$ {product.Robux}`
 	offerFrame.Visible = true
 	offerFrame.Position = UDim2.new(1, 300, 0.5, -70)
 	TweenService:Create(
@@ -443,7 +443,7 @@ local function buildGui()
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -8, 0, 8)
 	close.Size = UDim2.fromOffset(40, 40)
-	close.BackgroundColor3 = Color3.fromRGB(230, 70, 70)
+	close.BackgroundColor3 = UIStyle.Colors.Close
 	close.Parent = offerFrame
 	UIStyle.text(close)
 	UIStyle.border(close, 3)
@@ -454,7 +454,7 @@ local function buildGui()
 	offerBuy.AnchorPoint = Vector2.new(0.5, 1)
 	offerBuy.Position = UDim2.new(0.5, 0, 1, -8)
 	offerBuy.Size = UDim2.new(1, -20, 0, 44)
-	offerBuy.BackgroundColor3 = Color3.fromRGB(70, 210, 90)
+	offerBuy.BackgroundColor3 = UIStyle.Colors.Robux
 	offerBuy.Parent = offerFrame
 	UIStyle.text(offerBuy)
 	UIStyle.border(offerBuy, 3)

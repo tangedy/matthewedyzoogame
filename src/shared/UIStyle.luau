@@ -13,6 +13,21 @@ local UIStyle = {}
 UIStyle.Font = Enum.Font.LuckiestGuy
 UIStyle.CashColor = Color3.fromRGB(90, 255, 90)
 UIStyle.PanelColor = Color3.fromRGB(30, 30, 40)
+UIStyle.RobuxTextColor = Color3.fromRGB(255, 205, 80) -- Robux prices in text
+
+-- Button colours by what the button does, used everywhere so each one always means the same:
+UIStyle.Colors = {
+	Cash = Color3.fromRGB(56, 170, 90), -- earn or spend in-game cash: buy, sell, collect, claim
+	Robux = Color3.fromRGB(226, 160, 40), -- anything that spends Robux
+	Action = Color3.fromRGB(58, 118, 196), -- move, place, open, tabs
+	Pet = Color3.fromRGB(132, 104, 196),
+	Muted = Color3.fromRGB(74, 80, 96), -- the other choice: keep, cancel, let it go
+	Disabled = Color3.fromRGB(110, 112, 124),
+	Close = Color3.fromRGB(200, 70, 70),
+	Panel = Color3.fromRGB(26, 30, 40),
+	Edge = Color3.fromRGB(14, 16, 22),
+	ErrorText = Color3.fromRGB(255, 120, 110),
+}
 UIStyle.RainbowTag = "RainbowGradient" -- the client animates every gradient with this tag
 UIStyle.RainbowRingTag = "RainbowAuraRing" -- Farm God aura rings; clients cycle their hue
 

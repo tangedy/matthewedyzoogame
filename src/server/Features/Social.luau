@@ -5,7 +5,6 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local WashTool = require(ReplicatedStorage.Shared.WashTool)
@@ -72,9 +71,6 @@ type SocialData = {
 
 local followers: { [Player]: { Model } } = {}
 local followerKey: { [Player]: string } = {}
--- Pet footprints for the follow step, which runs every frame. A pet's size only changes if
--- it is rescaled, so measure once per scale instead of every frame.
-local petSizes: { [Model]: { Scale: number, Size: Vector3 } } = setmetatable({}, { __mode = "k" }) :: any
 local sessionStart: { [Player]: number } = {}
 local folder: Folder
 
@@ -293,6 +289,13 @@ local function rebuild(player: Player)
 		if plate and plate:IsA("BillboardGui") then
 			plate.MaxDistance = 160
 		end
+		-- Clients walk the pet after its owner (client/Features/PetFollow). Moving it here
+		-- every frame replicated every part's CFrame to every player, 60 times a second.
+		model:SetAttribute("PetOwner", player.UserId)
+		model:SetAttribute("PetIndex", #list + 1)
+		model:SetAttribute("PetCount", #ids)
+		-- It never moves on the server, so streaming must not drop it where it was parked.
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then
 			model:PivotTo(root.CFrame * CFrame.new((#list - 1) * 4, 0, 8))
@@ -336,47 +339,6 @@ function Social.togglePet(player: Player, animalId: string)
 	table.insert(state.Pets, animalId)
 	PlayerDataService.saveNow(player)
 	rebuild(player)
-end
-
-local function step(dt: number)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	for player, list in followers do
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not character or not root or not root:IsA("BasePart") then
-			continue
-		end
-		params.FilterDescendantsInstances = { character }
-		local count = #list
-		for index, model in list do
-			if not model.Parent then
-				continue
-			end
-			local scale = model:GetScale()
-			local measured = petSizes[model]
-			if not measured or measured.Scale ~= scale then
-				local _, extents = model:GetBoundingBox()
-				measured = { Scale = scale, Size = extents }
-				petSizes[model] = measured
-			end
-			local size = measured.Size
-			local lateral = (index - (count + 1) / 2) * math.max(4.5, size.X * 0.55)
-			local back = math.max(6, size.Z * 0.5 + 3)
-			local goal = (root.CFrame * CFrame.new(lateral, 0, back)).Position
-			local hit =
-				Workspace:Raycast(Vector3.new(goal.X, root.Position.Y + 6, goal.Z), Vector3.new(0, -40, 0), params)
-			local y = if hit then hit.Position.Y else root.Position.Y - 3
-			local desired = Vector3.new(goal.X, y, goal.Z)
-			local nextPos = model:GetPivot().Position:Lerp(desired, math.clamp(dt * 6, 0, 1))
-			local look = Vector3.new(root.Position.X - nextPos.X, 0, root.Position.Z - nextPos.Z)
-			if look.Magnitude < 0.2 then
-				local flat = root.CFrame.LookVector * Vector3.new(1, 0, 1)
-				look = if flat.Magnitude > 0.05 then flat.Unit else Vector3.zAxis
-			end
-			model:PivotTo(CFrame.lookAt(nextPos, nextPos + look))
-		end
-	end
 end
 
 local function accrue(player: Player, seconds: number)
@@ -462,7 +424,6 @@ function Social.init()
 			end
 		end
 	end)
-	RunService.Heartbeat:Connect(step)
 end
 
 return Social

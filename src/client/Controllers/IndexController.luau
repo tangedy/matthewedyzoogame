@@ -105,7 +105,7 @@ local function buildGui()
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -12, 0, 10)
 	close.Size = UDim2.fromOffset(40, 40)
-	close.BackgroundColor3 = Color3.fromRGB(230, 70, 70)
+	close.BackgroundColor3 = UIStyle.Colors.Close
 	close.Parent = panel
 	UIStyle.text(close)
 	UIStyle.border(close, 3)

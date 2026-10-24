@@ -63,7 +63,7 @@ local function build()
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.new(0.9, 0, 0, 170)
-	panel.BackgroundColor3 = Color3.fromRGB(34, 38, 50)
+	panel.BackgroundColor3 = UIStyle.Colors.Panel
 	panel.Visible = false
 	panel.ZIndex = 5
 	panel.Parent = gui
@@ -75,7 +75,7 @@ local function build()
 	local title = Instance.new("TextLabel")
 	title.Position = UDim2.fromOffset(14, 10)
 	title.Size = UDim2.new(1, -28, 0, 30)
-	title.Text = "Robux animal"
+	title.Text = "Bought with Robux"
 	title.ZIndex = 6
 	title.Parent = panel
 	UIStyle.text(title, Color3.fromRGB(255, 220, 140), Color3.fromRGB(20, 22, 30), 1.5)
@@ -90,9 +90,9 @@ local function build()
 	message.TextScaled = false
 	message.TextSize = 18
 
-	local keep = button("KEEP IT", Color3.fromRGB(74, 80, 96), 0.25)
+	local keep = button("KEEP", UIStyle.Colors.Muted, 0.25)
 	keep.Position = UDim2.new(0.25, 4, 1, -12)
-	local sell = button("SELL", Color3.fromRGB(70, 190, 90), 0.75)
+	local sell = button("SELL", UIStyle.Colors.Cash, 0.75)
 	sell.Position = UDim2.new(0.75, -4, 1, -12)
 	keep.Activated:Connect(function()
 		answer(false)

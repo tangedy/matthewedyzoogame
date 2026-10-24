@@ -107,7 +107,7 @@ local function grantAnimal(player: Player, species: string, mutation: string): s
 	local label = if mutation == MutationConfig.Default then name else `{mutation} {name}`
 	if ZooService.giveToCarry(player, species, mutation) then
 		ZooService.discover(player, species, mutation)
-		return `You got a {label}! Take it to a pen.`
+		return `{label}! Take it to a pen.`
 	end
 	local MonetizationState = require(Features.MonetizationState) :: any
 	local MonetizationGrants = require(Features.MonetizationGrants) :: any
@@ -116,7 +116,7 @@ local function grantAnimal(player: Player, species: string, mutation: string): s
 		table.insert(saved.PendingAnimals, { Species = species, Mutation = mutation })
 		MonetizationGrants.deliverPending(player)
 	end
-	return `You got a {label}! It joins your cache when a slot is free.`
+	return `{label}! Joins your cache when free.`
 end
 
 local function grant(player: Player, reward: LiveOpsConfig.CheckInReward): string
@@ -135,11 +135,11 @@ local function grant(player: Player, reward: LiveOpsConfig.CheckInReward): strin
 		return grantAnimal(player, species, mutation)
 	elseif reward.Kind == "EarningsBuff" and state then
 		state.EarningsBuff = true
-		return `Your zoo now earns {reward.Multiplier}x forever!`
+		return `{reward.Multiplier}x income forever!`
 	elseif reward.Kind == "Title" and state then
 		state.ProWasher = true
 		applyFlags(player)
-		return `You earned the {reward.Text} chat title!`
+		return `{reward.Text} title unlocked!`
 	end
 	return "Reward claimed!"
 end

@@ -75,11 +75,16 @@ local function makePart(name: string, size: Vector3, cframe: CFrame, color: Colo
 	return part
 end
 
--- Decorations never block spray or collide.
+-- Decorations never block spray or collide. Tiny ones (eyes, nostrils, claws) cast no
+-- shadow: invisible at that size, and every shadow caster costs a draw on each client.
+local SHADOWLESS_SIZE = 0.6
 local function decoration(name: string, size: Vector3, cframe: CFrame, color: Color3, parent: Instance): Part
 	local part = makePart(name, size, cframe, color, parent)
 	part.CanCollide = false
 	part.CanQuery = false
+	if math.max(size.X, size.Y, size.Z) < SHADOWLESS_SIZE then
+		part.CastShadow = false
+	end
 	return part
 end
 
@@ -3870,6 +3875,7 @@ local function addFacePatches(
 			patch.CanCollide = false
 			patch.CanTouch = false
 			patch.CanQuery = true
+			patch.CastShadow = false -- flat on the body: no visible shadow, dozens per animal
 			patch.Size = Vector3.new(PATCH_THICKNESS, diameter, diameter)
 			patch.CFrame = CFrame.fromMatrix(worldPos, worldNormal, worldUp)
 				* CFrame.Angles(rng:NextNumber(0, math.pi * 2), 0, 0)
@@ -3894,6 +3900,7 @@ local function addFacePatches(
 				splat.CanCollide = false
 				splat.CanTouch = false
 				splat.CanQuery = false
+				splat.CastShadow = false
 				splat.Size = Vector3.new(PATCH_THICKNESS * 0.8, size, size)
 				splat.CFrame = patch.CFrame * CFrame.new(-0.01, math.cos(angle) * reach, math.sin(angle) * reach)
 				splat.Color = patch.Color
@@ -3950,6 +3957,39 @@ local function centreFootprint(model: Model)
 	end
 end
 
+-- Dirt patches over a placeholder's body, neck sides and head. Runs on a fresh build or on a
+-- clone of a cached clean one: the patches only read the body, neck and head as built.
+local function addPlaceholderPatches(model: Model, spec: Spec, rng: Random, patches: { PatchInfo })
+	local body = model:FindFirstChild("Body") :: BasePart
+	local head = model:FindFirstChild("Head") :: BasePart
+	local neck = model:FindFirstChild("Neck") :: BasePart?
+	local patchFolder = model:FindFirstChild("DirtPatches") :: Instance
+	local b, leg, h = spec.BodySize, spec.LegHeight, spec.HeadSize
+	local cell = spec.PatchCell or DEFAULT_PATCH_CELL
+	local X, Y, Z = Vector3.xAxis, Vector3.yAxis, Vector3.zAxis
+	-- Body: both sides, top, rump
+	addFacePatches(body, X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
+	addFacePatches(body, -X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
+	if leg + b.Y <= MAX_TOP_PATCH_HEIGHT then
+		addFacePatches(body, Y, Z, b.Z, X, b.X, cell, rng, patches, patchFolder)
+	end
+	if not spec.SkipRump then
+		addFacePatches(body, Z, Y, b.Y, X, b.X, cell, rng, patches, patchFolder)
+	end
+	-- Neck sides (vertical faces are reachable at any height)
+	if neck then
+		local n = neck.Size
+		addFacePatches(neck, X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
+		addFacePatches(neck, -X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
+	end
+	-- Head: both sides, and the top when it's low enough
+	addFacePatches(head, X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
+	addFacePatches(head, -X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
+	if head.Position.Y + h.Y / 2 <= MAX_TOP_PATCH_HEIGHT then
+		addFacePatches(head, Y, Z, h.Z, X, h.X, cell, rng, patches, patchFolder)
+	end
+end
+
 local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model, { PatchInfo })
 	local model = Instance.new("Model")
 	model.Name = "Animal"
@@ -3964,7 +4004,6 @@ local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model
 	local body = makePart("Body", b, CFrame.new(0, leg + b.Y / 2, 0), spec.BodyColor, model)
 	body.Material = spec.BodyMaterial
 
-	local neck: Part? = nil
 	local headCFrame: CFrame
 	if spec.Neck then
 		-- Neck rises from the front of the body; the head sits on top, poking forward.
@@ -3973,7 +4012,6 @@ local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model
 		local base = CFrame.new(0, leg + b.Y - 0.6, -(b.Z / 2 - n.Z / 2)) * CFrame.Angles(-(spec.NeckTilt or 0), 0, 0)
 		local neckPart = makePart("Neck", n, base * CFrame.new(0, n.Y / 2, 0), spec.BodyColor, model)
 		neckPart.Material = spec.BodyMaterial
-		neck = neckPart
 		local tip = (base * CFrame.new(0, n.Y, 0)).Position
 		headCFrame = CFrame.new(tip) * CFrame.new(0, h.Y / 2 - 0.4, -h.Z / 2 + n.Z / 2 + 0.1)
 	else
@@ -4016,29 +4054,7 @@ local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model
 
 	local patches: { PatchInfo } = {}
 	if not clean then
-		local cell = spec.PatchCell or DEFAULT_PATCH_CELL
-		local X, Y, Z = Vector3.xAxis, Vector3.yAxis, Vector3.zAxis
-		-- Body: both sides, top, rump
-		addFacePatches(body, X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
-		addFacePatches(body, -X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
-		if leg + b.Y <= MAX_TOP_PATCH_HEIGHT then
-			addFacePatches(body, Y, Z, b.Z, X, b.X, cell, rng, patches, patchFolder)
-		end
-		if not spec.SkipRump then
-			addFacePatches(body, Z, Y, b.Y, X, b.X, cell, rng, patches, patchFolder)
-		end
-		-- Neck sides (vertical faces are reachable at any height)
-		if neck then
-			local n = neck.Size
-			addFacePatches(neck, X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
-			addFacePatches(neck, -X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
-		end
-		-- Head: both sides, and the top when it's low enough
-		addFacePatches(head, X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
-		addFacePatches(head, -X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
-		if head.Position.Y + h.Y / 2 <= MAX_TOP_PATCH_HEIGHT then
-			addFacePatches(head, Y, Z, h.Z, X, h.X, cell, rng, patches, patchFolder)
-		end
+		addPlaceholderPatches(model, spec, rng, patches)
 	end
 
 	return model, patches
@@ -4503,21 +4519,57 @@ function AnimalBuilder.has(templateName: string): boolean
 	return SPECS[templateName] ~= nil
 end
 
+-- Clean builds are deterministic, and building one sets every property of up to ~150
+-- parts from Lua. Each look (template, mutation, rarity) is built once, kept unparented,
+-- and cloned after that. Pens, the cache, pets and the showcase all take clean builds.
+local cleanPrototypes: { [string]: Model } = {}
+
+local function cleanBuild(templateName: string, mutation: string, rarity: string): Model
+	local key = `{templateName}|{mutation}|{rarity}`
+	local prototype = cleanPrototypes[key]
+	if not prototype then
+		local model = buildFromTemplate(templateName, true)
+		if not model then
+			local spec = SPECS[templateName]
+			assert(spec, "Unknown animal template: " .. templateName)
+			model = buildPlaceholder(spec, Random.new(), true)
+		end
+		prototype = model :: Model
+		applyMutation(prototype, mutation)
+		applyTierAura(prototype, rarity)
+		cleanPrototypes[key] = prototype
+	end
+	return prototype:Clone()
+end
+
 -- Returns the model (pivoted at the origin) and its dirt patches (empty when Clean).
 -- Part colours are left at their clean values; DirtRenderer.setGrime applies grime/mutation colour.
 function AnimalBuilder.build(templateName: string, options: BuildOptions?): (Model, { PatchInfo })
 	local opts: BuildOptions = options or {}
 	local clean = opts.Clean == true
+	local mutation = opts.Mutation or MutationConfig.Default
+	local rarity = opts.Rarity or "Common"
+	if clean then
+		return cleanBuild(templateName, mutation, rarity), {}
+	end
+	local spec = SPECS[templateName]
+	local templates = ServerStorage:FindFirstChild("AnimalTemplates")
+	if spec and not (templates and templates:FindFirstChild(templateName)) then
+		-- A dirty placeholder is the clean one plus patches; only the patches are random.
+		local model = cleanBuild(templateName, mutation, rarity)
+		local patches: { PatchInfo } = {}
+		addPlaceholderPatches(model, spec, if opts.Seed then Random.new(opts.Seed) else Random.new(), patches)
+		return model, patches
+	end
 	local model, patches = buildFromTemplate(templateName, clean)
 	if not model then
-		local spec = SPECS[templateName]
 		assert(spec, "Unknown animal template: " .. templateName)
 		local rng = if opts.Seed then Random.new(opts.Seed) else Random.new()
 		model, patches = buildPlaceholder(spec, rng, clean)
 	end
 	local built = model :: Model
-	applyMutation(built, opts.Mutation or MutationConfig.Default)
-	applyTierAura(built, opts.Rarity or "Common")
+	applyMutation(built, mutation)
+	applyTierAura(built, rarity)
 	return built, patches
 end
 

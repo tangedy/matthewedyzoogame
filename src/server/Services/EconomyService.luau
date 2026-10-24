@@ -115,20 +115,16 @@ end
 local function purchaseToolUpgrade(player: Player)
 	local data = PlayerDataService.get(player)
 	if not data then
-		purchaseResult:FireClient(player, false, "Still loading your data. Try again in a moment.")
+		purchaseResult:FireClient(player, false, "Still loading. Try again.")
 		return
 	end
 	local step = GearLadder.next(data.ToolTier, data.ToolUpgrade)
 	if not step then
-		purchaseResult:FireClient(player, false, "Your gear is already fully upgraded!")
+		purchaseResult:FireClient(player, false, "Max gear!")
 		return
 	end
 	if data.Coins < step.Price then
-		purchaseResult:FireClient(
-			player,
-			false,
-			`Not enough cash. You need {UIStyle.formatMoney(step.Price - data.Coins)} more.`
-		)
+		purchaseResult:FireClient(player, false, `Need {UIStyle.formatMoney(step.Price - data.Coins)} more.`)
 		return
 	end
 

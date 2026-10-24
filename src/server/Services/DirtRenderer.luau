@@ -107,10 +107,21 @@ function DirtRenderer.restore(patch: BasePart)
 	DirtRenderer.setAmount(patch, 1)
 end
 
+-- Grime moves in GRIME_STEPS steps. Spraying calls setGrime up to 15 times a second per
+-- sprayer, and every call rewrote (and replicated) the colour of every body part; a step
+-- this small is not visible, so unchanged steps are skipped.
+local GRIME_STEPS = 40
+local appliedStep: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
 -- Tints the whole animal from muddy (progress 0) to its true colours (progress 1), so the
 -- dirty-to-clean transformation is obvious at a glance. Patches stay the spatial source of truth.
 function DirtRenderer.setGrime(model: Model, progress: number)
-	local grime = GRIME * (1 - math.clamp(progress, 0, 1))
+	local step = math.round(math.clamp(progress, 0, 1) * GRIME_STEPS)
+	if appliedStep[model] == step then
+		return
+	end
+	appliedStep[model] = step
+	local grime = GRIME * (1 - step / GRIME_STEPS)
 	for _, part in model:GetChildren() do
 		local clean = part:GetAttribute("CleanColor")
 		if part:IsA("BasePart") and typeof(clean) == "Color3" then

@@ -24,9 +24,9 @@ local CleanGateController = {}
 
 local NEAR_DISTANCE = 14 -- studs; the offer shows within this or the hose's range, whichever is more
 -- The same muted palette as the world prompt cards (PromptController).
-local PANEL_COLOR = Color3.fromRGB(26, 30, 40)
-local LEAVE_COLOR = Color3.fromRGB(70, 76, 92)
-local WASH_COLOR = Color3.fromRGB(56, 158, 92)
+local PANEL_COLOR = UIStyle.Colors.Panel
+local LEAVE_COLOR = UIStyle.Colors.Muted
+local WASH_COLOR = UIStyle.Colors.Robux
 
 local tier = 1
 local soapEndsAt = 0

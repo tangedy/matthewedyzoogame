@@ -30,11 +30,11 @@ local Rewards = LiveOpsConfig.CheckIn.Rewards
 
 local CheckIn = {}
 
-local CLAIMED_COLOR = Color3.fromRGB(60, 160, 80)
+local CLAIMED_COLOR = UIStyle.Colors.Cash
 local TODAY_COLOR = Color3.fromRGB(255, 190, 40)
-local LATER_COLOR = Color3.fromRGB(70, 70, 95)
-local BUTTON_COLOR = Color3.fromRGB(70, 210, 90)
-local WAIT_COLOR = Color3.fromRGB(120, 120, 130)
+local LATER_COLOR = UIStyle.Colors.Muted
+local BUTTON_COLOR = UIStyle.Colors.Cash
+local WAIT_COLOR = UIStyle.Colors.Disabled
 
 local panel: Frame
 local panelScale: UIScale
@@ -109,7 +109,7 @@ local function render()
 		claimButton.BackgroundColor3 = BUTTON_COLOR
 		claimButton.Active = true
 	else
-		claimButton.Text = `COME BACK TOMORROW · {clock(left)}`
+		claimButton.Text = `TOMORROW · {clock(left)}`
 		claimButton.BackgroundColor3 = WAIT_COLOR
 		claimButton.Active = false
 	end
@@ -187,7 +187,7 @@ local function buildGui()
 	dailyButton.Position = UDim2.new(0, 16, 0.5, SHOP_Y)
 	dailyButton.Visible = false
 	dailyButton.Size = UDim2.fromOffset(170, 40)
-	dailyButton.BackgroundColor3 = Color3.fromRGB(80, 200, 255)
+	dailyButton.BackgroundColor3 = UIStyle.Colors.Action
 	dailyButton.ZIndex = 10
 	dailyButton.Text = "DAILY"
 	dailyButton.Parent = gui
@@ -251,7 +251,7 @@ local function buildGui()
 	closeButton.AnchorPoint = Vector2.new(1, 0)
 	closeButton.Position = UDim2.new(1, -10, 0, 10)
 	closeButton.Size = UDim2.fromOffset(40, 40)
-	closeButton.BackgroundColor3 = Color3.fromRGB(230, 70, 70)
+	closeButton.BackgroundColor3 = UIStyle.Colors.Close
 	closeButton.Text = "X"
 	closeButton.ZIndex = 6
 	closeButton.Parent = panel
@@ -279,7 +279,7 @@ local function buildGui()
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -66),
 		Size = UDim2.new(1, -24, 0, 24),
-		Text = "Come back every day! Missing a day never resets your chart.",
+		Text = "Missing a day never resets.",
 	}, Color3.fromRGB(220, 235, 255), 1.5)
 	message.ZIndex = 6
 

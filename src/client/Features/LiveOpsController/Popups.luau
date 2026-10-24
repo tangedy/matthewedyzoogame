@@ -106,7 +106,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	textLabel(panel, {
 		Position = UDim2.fromOffset(16, 64),
 		Size = UDim2.new(1, -32, 0, 24),
-		Text = `Your farm earned while you were away ({formatAway(away)}):`,
+		Text = `Earned while away ({formatAway(away)})`,
 	})
 	local cash = textLabel(panel, {
 		Position = UDim2.fromOffset(16, 88),
@@ -117,7 +117,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	textLabel(panel, {
 		Position = UDim2.fromOffset(16, 140),
 		Size = UDim2.new(1, -32, 0, 36),
-		Text = "It's waiting on your pen pads.",
+		Text = "On your pen pads.",
 		TextWrapped = true,
 	}, Color3.fromRGB(220, 235, 255), 2)
 
@@ -126,7 +126,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	button.AnchorPoint = Vector2.new(0, 1)
 	button.Position = UDim2.new(0, 16, 1, -14)
 	button.Size = UDim2.new(0.46, -8, 0, 50)
-	button.BackgroundColor3 = Color3.fromRGB(80, 220, 90)
+	button.BackgroundColor3 = UIStyle.Colors.Cash
 	button.Text = "COLLECT"
 	button.Parent = panel
 	UIStyle.text(button, Color3.new(1, 1, 1), nil, 3)
@@ -138,8 +138,8 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	doubleButton.AnchorPoint = Vector2.new(1, 1)
 	doubleButton.Position = UDim2.new(1, -16, 1, -14)
 	doubleButton.Size = UDim2.new(0.46, -8, 0, 50)
-	doubleButton.BackgroundColor3 = Color3.fromRGB(255, 170, 40)
-	doubleButton.Text = if product then `2X FOR {product.Robux} R$` else "2X"
+	doubleButton.BackgroundColor3 = UIStyle.Colors.Robux
+	doubleButton.Text = if product then `2X · R$ {product.Robux}` else "2X"
 	doubleButton.Parent = panel
 	UIStyle.text(doubleButton, Color3.new(1, 1, 1), nil, 3)
 	UIStyle.border(doubleButton, 4)
@@ -213,7 +213,7 @@ function Popups.offlineDoubled(total: any)
 		welcomeDouble.Text = "DOUBLED"
 		welcomeDouble.Active = false
 		welcomeDouble.AutoButtonColor = false
-		welcomeDouble.BackgroundColor3 = Color3.fromRGB(120, 120, 130)
+		welcomeDouble.BackgroundColor3 = UIStyle.Colors.Disabled
 	end
 end
 
@@ -257,8 +257,8 @@ local function showDaily(name: any, rarity: any, mutation: any, rewardMultiplier
 		textLabel(frame, { Position = UDim2.new(0.5, -100, 0, 80), Size = UDim2.fromOffset(200, 20), Text = "" })
 	UIStyle.rarity(rarityLabel, rarity)
 	local bonus = if typeof(rewardMultiplier) == "number" and rewardMultiplier > 1
-		then `EXTRA MUDDY  -  {rewardMultiplier}x WASH REWARD`
-		else "EXTRA MUDDY"
+		then `{rewardMultiplier}x WASH REWARD`
+		else "Extra muddy"
 	textLabel(frame, {
 		Position = UDim2.fromOffset(0, 100),
 		Size = UDim2.new(1, 0, 0, 18),

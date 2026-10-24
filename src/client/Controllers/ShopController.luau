@@ -25,13 +25,13 @@ local player = Players.LocalPlayer
 local ShopController = {}
 
 local FONT = UIStyle.Font
-local PANEL_COLOR = Color3.fromRGB(25, 30, 45)
+local PANEL_COLOR = UIStyle.Colors.Panel
 local PANEL_HEIGHT = 464
-local BUY_COLOR = Color3.fromRGB(80, 200, 110)
-local ROBUX_COLOR = Color3.fromRGB(255, 170, 40)
-local DISABLED_COLOR = Color3.fromRGB(110, 110, 120)
-local ERROR_COLOR = Color3.fromRGB(255, 120, 110)
-local OK_COLOR = Color3.fromRGB(130, 240, 140)
+local BUY_COLOR = UIStyle.Colors.Cash
+local ROBUX_COLOR = UIStyle.Colors.Robux
+local DISABLED_COLOR = UIStyle.Colors.Disabled
+local ERROR_COLOR = UIStyle.Colors.ErrorText
+local OK_COLOR = UIStyle.CashColor
 
 local purchaseRemote = Remotes.event("PurchaseToolUpgrade")
 
@@ -76,7 +76,7 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- Rarities this gear can wash that the previous one could not, with the animals in them.
+-- Rarities this gear can wash that the previous one could not.
 local function unlocksText(toolTier: number): string
 	local tool = ToolConfig[toolTier]
 	local prev = ToolConfig[toolTier - 1]
@@ -88,19 +88,15 @@ local function unlocksText(toolTier: number): string
 	for _, rarity in RarityConfig.List do
 		local need = rarity.RequiredCleaningPower
 		if need > prevPower + 1e-4 and CleanPower.canClean(tool.CleaningPower, rarity.Key) then
-			local animals = {}
 			for _, def in AnimalConfig.Animals do
 				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
-					table.insert(animals, def.DisplayName)
+					table.insert(groups, rarity.DisplayName)
+					break
 				end
-			end
-			if #animals > 0 then
-				table.sort(animals)
-				table.insert(groups, `{rarity.DisplayName} ({table.concat(animals, ", ")})`)
 			end
 		end
 	end
-	return if #groups > 0 then `\nUnlocks {table.concat(groups, " & ")}` else ""
+	return if #groups > 0 then `\nUnlocks {table.concat(groups, ", ")}` else ""
 end
 
 -- The panel ends just under its last button; the Robux button only shows when cash is short.
@@ -140,19 +136,17 @@ local function refresh()
 	local current = GearLadder.get(tier, level)
 	local nextStep = GearLadder.next(tier, level)
 	showPreview(if nextStep then nextStep.Tier else current.Tier)
-	currentLabel.Text = `Current: {current.Label} — {CleanPower.format(current.Speed)}x wash speed`
+	currentLabel.Text = `Now: {current.Label} · {CleanPower.format(current.Speed)}x`
 	if nextStep then
 		local gain = math.floor((nextStep.Speed / current.Speed - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextStep.Label}`
-		local reach = if nextStep.Range > current.Range
-			then `, reach {current.Range} → {nextStep.Range} studs`
-			else ""
+		local reach = if nextStep.Range > current.Range then ` · Reach {nextStep.Range}` else ""
 		local perk = if nextStep.Perk then `\n{nextStep.Perk}` else ""
 		-- Only a new hose raises clean power, so only a new hose unlocks rarer animals.
 		local unlocks = if nextStep.Level == 0 then unlocksText(nextStep.Tier) else ""
-		gainLabel.Text = `Wash speed {CleanPower.format(nextStep.Speed)}x (+{gain}%){reach}{perk}{unlocks}`
+		gainLabel.Text = `{CleanPower.format(nextStep.Speed)}x speed (+{gain}%){reach}{perk}{unlocks}`
 		buyButton.Visible = true
-		buyButton.Text = `Buy for {UIStyle.formatMoney(nextStep.Price)}`
+		buyButton.Text = `BUY {UIStyle.formatMoney(nextStep.Price)}`
 		local affordable = coins >= nextStep.Price
 		buyButton.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
 		-- Robux buys exactly the next hose, never a sub-tier. The Fire Hose has no product, so it
@@ -161,10 +155,10 @@ local function refresh()
 		local showRobux = robux ~= nil and not affordable
 		robuxButton.Visible = showRobux
 		if robux and showRobux then
-			robuxButton.Text = `Buy with Robux ({robux.Robux})`
+			robuxButton.Text = `BUY R$ {robux.Robux}`
 		end
 	else
-		nextLabel.Text = "Your gear is fully upgraded!"
+		nextLabel.Text = "Max gear!"
 		gainLabel.Text = ""
 		buyButton.Visible = false
 		robuxButton.Visible = false
@@ -235,7 +229,7 @@ local function buildGui()
 	closeButton.AnchorPoint = Vector2.new(1, 0)
 	closeButton.Position = UDim2.new(1, -12, 0, 12)
 	closeButton.Size = UDim2.fromOffset(36, 36)
-	closeButton.BackgroundColor3 = Color3.fromRGB(200, 70, 70)
+	closeButton.BackgroundColor3 = UIStyle.Colors.Close
 	closeButton.Text = "X"
 	closeButton.Font = FONT
 	closeButton.TextScaled = true
@@ -299,7 +293,7 @@ local function buildGui()
 	robuxButton.TextScaled = true
 	robuxButton.TextColor3 = Color3.new(1, 1, 1)
 	robuxButton.Visible = false
-	robuxButton.Text = "Buy with Robux"
+	robuxButton.Text = "BUY R$"
 	robuxButton.Parent = panel
 	round(robuxButton, 10)
 	local robuxPad = Instance.new("UIPadding")

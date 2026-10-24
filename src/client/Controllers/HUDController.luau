@@ -256,7 +256,7 @@ local function refreshToast()
 		if not tutorialCompleted and currentProgress < 0.1 then
 			showToast(
 				if inputMode == "Touch"
-					then "Hold SPRAY to wash. Wash off all the mud!"
+					then "Hold SPRAY to wash off the mud!"
 					else "Hold to spray. Wash off all the mud!"
 			)
 		elseif hintShowing then
@@ -407,8 +407,8 @@ local function showDataWarning(status: Types.DataStatus)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = if status == "Locked"
-			then "Your save is open on another server. Progress this session won't save."
-			else "Couldn't load your save. Progress this session won't save.",
+			then "Save open elsewhere. Progress won't save."
+			else "Save failed to load. Progress won't save.",
 	}, Color3.fromRGB(255, 110, 100))
 	warning.TextScaled = false
 	warning.TextSize = 16
@@ -447,7 +447,7 @@ function HUDController.init(initial: Types.InitialState)
 	end)
 	task.delay(4, function()
 		if not gotBay then
-			showToast("Every zoo slot is taken right now. You'll get one as soon as a player leaves!")
+			showToast("Server full. You'll get a zoo soon!")
 		end
 	end)
 

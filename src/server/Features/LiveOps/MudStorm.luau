@@ -55,7 +55,7 @@ local function scheduled(now: number): (number?, number?)
 end
 
 local function announceStart(minutes: number)
-	Common.announce(`MUD STORM! Rare animals and mutations x3 for {minutes} min!`, Config.MinBoostedRarity)
+	Common.announce(`MUD STORM! 3x rares for {minutes} min!`, Config.MinBoostedRarity)
 end
 
 local function evaluate()
@@ -91,7 +91,7 @@ local function evaluate()
 	if started then
 		announceStart(math.max(1, math.ceil((endsAt - now) / 60)))
 	elseif stopped then
-		Common.announce("The Mud Storm has passed. Keep washing!", "Rare")
+		Common.announce("The Mud Storm has passed.", "Rare")
 	end
 end
 

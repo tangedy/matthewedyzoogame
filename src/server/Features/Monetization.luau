@@ -112,12 +112,9 @@ local function processPurchase(
 	while #saved.Receipts > MonetizationConfig.ReceiptsKept do
 		table.remove(saved.Receipts, 1)
 	end
-	local pasture = MonetizationState.unlockPasture(player)
+	-- Still recorded (Robux spenders get VIP perks from it); the road cages are a barn upgrade now.
+	MonetizationState.unlockPasture(player)
 	PlayerDataService.saveNow(player)
-	if pasture then
-		local extra = "Medium cages unlocked!"
-		message = if message then `{message} {extra}` else extra
-	end
 	if message then
 		MonetizationState.notify(player, if simulated then `[TEST] {message}` else message, true)
 	end
@@ -143,7 +140,7 @@ end
 local function buyProduct(player: Player, product: Product)
 	local saved = MonetizationState.saved(player)
 	if not saved then
-		MonetizationState.notify(player, "Still loading your data. Try again in a moment.", false)
+		MonetizationState.notify(player, "Still loading. Try again.", false)
 		return
 	end
 	local session = MonetizationState.peek(player)
@@ -151,9 +148,7 @@ local function buyProduct(player: Player, product: Product)
 		return
 	end
 	if product.OncePerPlayer and saved.Once[product.Key] then
-		local text = if product.Kind == "Limited"
-			then `You already own the {product.DisplayName}. It's one per player.`
-			else "You already used that offer."
+		local text = if product.Kind == "Limited" then "Already owned. One per player." else "Offer already used."
 		MonetizationState.notify(player, text, false)
 		return
 	end
@@ -164,7 +159,7 @@ local function buyProduct(player: Player, product: Product)
 	end
 	-- Without a wash in progress the treat would do nothing.
 	if product.Kind == "CalmTreat" and not CleaningService.getActiveJob(player) then
-		MonetizationState.notify(player, "Start washing an animal first!", false)
+		MonetizationState.notify(player, "Wash an animal first.", false)
 		return
 	end
 	-- The price is the animal in the bay. A cheaper product cannot clean a rarer one.
@@ -172,14 +167,14 @@ local function buyProduct(player: Player, product: Product)
 		local steps = CleaningService.blockedSteps(player)
 		local expected = if steps ~= nil then MonetizationConfig.productForCleanSteps(steps) else nil
 		if not expected or expected.Key ~= product.Key then
-			MonetizationState.notify(player, "That price doesn't match the animal in your bay.", false)
+			MonetizationState.notify(player, "Price changed. Try again.", false)
 			return
 		end
 	end
 	if product.Kind == "HoseTier" then
 		local data = PlayerDataService.get(player)
 		if not data or data.ToolTier + 1 ~= product.ToolTier then
-			MonetizationState.notify(player, "That hose isn't your next upgrade.", false)
+			MonetizationState.notify(player, "Not your next hose.", false)
 			return
 		end
 	end
@@ -189,7 +184,7 @@ local function buyProduct(player: Player, product: Product)
 			return
 		end
 		if Offline.peekDouble(player) < 1 then
-			MonetizationState.notify(player, "Nothing to double right now.", false)
+			MonetizationState.notify(player, "Nothing to double.", false)
 			return
 		end
 		session.PendingOffline = true
@@ -201,14 +196,14 @@ local function buyProduct(player: Player, product: Product)
 		local truck = data and data.Extra.Truck
 		local offer = if typeof(truck) == "table" then truck.Offer else nil
 		if typeof(offer) ~= "table" or (tonumber(offer.Expires) or 0) < os.time() then
-			MonetizationState.notify(player, "The delivery truck has already left!", false)
+			MonetizationState.notify(player, "The truck left.", false)
 			return
 		end
 		truck.Bought = { Species = offer.Species, Mutation = offer.Mutation }
 		PlayerDataService.markDirty(player)
 	end
 	if product.Kind == "SidePasture" and MonetizationState.sidePastureOpen(player) then
-		MonetizationState.notify(player, "You already own that large cage.", false)
+		MonetizationState.notify(player, "Already owned.", false)
 		return
 	end
 	if product.Kind == "Limited" then
@@ -223,11 +218,11 @@ local function buyProduct(player: Player, product: Product)
 			left = MonetizationStock.refresh(product.Key, MonetizationConfig.StockRecheckSeconds)
 		end
 		if left == nil then
-			MonetizationState.notify(player, "Couldn't check the stock. Try again in a moment.", false)
+			MonetizationState.notify(player, "Stock check failed. Try again.", false)
 			return
 		end
 		if left <= 0 then
-			MonetizationState.notify(player, `{product.DisplayName} is SOLD OUT!`, false)
+			MonetizationState.notify(player, "Sold out!", false)
 			MonetizationState.push(player)
 			return
 		end
@@ -239,7 +234,7 @@ local function buyProduct(player: Player, product: Product)
 		local decision = processPurchase(player, product, "SIM-" .. HttpService:GenerateGUID(false), true)
 		if decision ~= Enum.ProductPurchaseDecision.PurchaseGranted then
 			session.PendingOffline = false
-			MonetizationState.notify(player, "[TEST] Purchase could not be granted right now.", false)
+			MonetizationState.notify(player, "[TEST] Couldn't grant that.", false)
 		end
 	elseif product.Id ~= 0 then
 		if product.OncePerPlayer then
@@ -248,13 +243,13 @@ local function buyProduct(player: Player, product: Product)
 		MarketplaceService:PromptProductPurchase(player, product.Id)
 	else
 		session.PendingOffline = false
-		MonetizationState.notify(player, "This item isn't on sale yet.", false)
+		MonetizationState.notify(player, "Not on sale yet.", false)
 	end
 end
 
 local function buyPass(player: Player, pass: Pass)
 	if MonetizationState.ownsPass(player, pass.Key) then
-		MonetizationState.notify(player, `You already own {pass.DisplayName}!`, false)
+		MonetizationState.notify(player, "Already owned.", false)
 		return
 	end
 	if MonetizationState.shouldSimulate(player, pass.Id) then
@@ -262,7 +257,7 @@ local function buyPass(player: Player, pass: Pass)
 	elseif pass.Id ~= 0 then
 		MarketplaceService:PromptGamePassPurchase(player, pass.Id)
 	else
-		MonetizationState.notify(player, "This pass isn't on sale yet.", false)
+		MonetizationState.notify(player, "Not on sale yet.", false)
 	end
 end
 
@@ -479,7 +474,6 @@ local function connectHooks()
 						MonetizationGrants.applyPass(player, pass.Key)
 						if MonetizationState.unlockPasture(player) then
 							PlayerDataService.saveNow(player)
-							MonetizationState.notify(player, "Medium cages unlocked!", true)
 						end
 						MonetizationState.push(player)
 					elseif not ok then

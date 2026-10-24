@@ -32,7 +32,9 @@ local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 -- (SpeedEndsAt, LuckEndsAt). Removed passes are dropped when that table is read,
 -- because they are no longer in the pass catalog.
 -- v8: the two flex road pastures became four cages (large, medium, medium, large).
-local SCHEMA_VERSION = 8
+-- v9: the four road cages open together as the Pasture barn upgrade (Extra.RoadCages.Open).
+--     A v8 save that had any of them open by Robux, the Axolotl or cash gets all four.
+local SCHEMA_VERSION = 9
 
 export type CachedAnimal = {
 	Id: string,
@@ -349,7 +351,8 @@ local function sanitize(raw: any): SavedData
 		local oldLeft = GameConfig.Zoo.MaxPens + 1
 		local oldRight = oldLeft + 1
 		local held = {}
-		local function ownsRoad(cage: any, offset: number): boolean
+		-- Before v9 each road cage opened on its own; any one of them open opens all four.
+		local function ownedBefore(cage: any, offset: number): boolean
 			local mon = raw.Extra
 			local savedMon = if typeof(mon) == "table" then mon.Monetization else nil
 			local bought = if typeof(savedMon) == "table" then savedMon.CashCages else nil
@@ -364,6 +367,18 @@ local function sanitize(raw: any): SavedData
 				return typeof(savedMon) == "table" and savedMon.CashPastureUnlocked == true
 			end
 			return false
+		end
+		if version < 9 then
+			for offset, cage in GameConfig.Zoo.RoadCages do
+				if ownedBefore(cage, offset) then
+					data.Extra.RoadCages = { Open = true }
+					break
+				end
+			end
+		end
+		local function ownsRoad(): boolean
+			local cages = data.Extra.RoadCages
+			return typeof(cages) == "table" and cages.Open == true
 		end
 		local function pushAnimal(animal: any, species: string, mutation: string, pen: number)
 			table.insert(data.Animals, {
@@ -398,10 +413,7 @@ local function sanitize(raw: any): SavedData
 			local cage = GameConfig.Zoo.RoadCages[pen - GameConfig.Zoo.MaxPens]
 			local inZoo = pen >= 1 and pen <= data.ZooSize
 			if cage then
-				if not ownsRoad(cage, pen - GameConfig.Zoo.MaxPens) or usedSlots[pen] then
-					continue
-				end
-				if not AnimalConfig.fits(AnimalConfig.Animals[species].BodyClass, cage.Class) then
+				if not ownsRoad() or usedSlots[pen] then
 					continue
 				end
 			elseif not inZoo or usedSlots[pen] then
@@ -440,6 +452,7 @@ local function sanitize(raw: any): SavedData
 					data.Extra.Monetization = {}
 				end
 				data.Extra.Monetization.CashPastureUnlocked = true
+				data.Extra.RoadCages = { Open = true }
 			end
 			local function parkSpare(entry)
 				data.Coins += entry.Pending
@@ -468,6 +481,44 @@ local function sanitize(raw: any): SavedData
 					pushAnimal(entry, entry.Species, entry.Mutation, cashPen)
 				else
 					parkSpare(entry)
+				end
+			end
+		end
+
+		-- The road cages were pastures for large animals before they became two stalls and two
+		-- medium pens. Anything that no longer fits moves to a free cage it fits, else overflow.
+		local misfits = {}
+		for i = #data.Animals, 1, -1 do
+			local animal = data.Animals[i]
+			local cage = GameConfig.Zoo.RoadCages[animal.Pen - GameConfig.Zoo.MaxPens]
+			if cage and not AnimalConfig.fits(AnimalConfig.Animals[animal.Species].BodyClass, cage.Class) then
+				table.remove(data.Animals, i)
+				usedSlots[animal.Pen] = nil
+				table.insert(misfits, animal)
+			end
+		end
+		for _, animal in misfits do
+			local body = AnimalConfig.Animals[animal.Species].BodyClass
+			local moved = false
+			for offset, cage in GameConfig.Zoo.RoadCages do
+				local pen = GameConfig.Zoo.MaxPens + offset
+				if not usedSlots[pen] and AnimalConfig.fits(body, cage.Class) then
+					usedSlots[pen] = 1
+					animal.Pen = pen
+					table.insert(data.Animals, animal)
+					moved = true
+					break
+				end
+			end
+			if not moved then
+				data.Coins += animal.Pending
+				if #data.Overflow < 8 then
+					table.insert(data.Overflow, {
+						Id = animal.Id,
+						Species = animal.Species,
+						Mutation = animal.Mutation,
+						Paid = animal.Paid,
+					})
 				end
 			end
 		end

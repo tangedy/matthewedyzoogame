@@ -118,55 +118,31 @@ local function penOf(zoo: Zoo, index: number): Model?
 	return if pen and pen:IsA("Model") then pen else nil
 end
 
-local function monetization(data: PlayerDataService.SavedData): any
-	local mon = data.Extra.Monetization
-	return if typeof(mon) == "table" then mon else nil
-end
-
 local function roadCage(index: number): any
 	return GameConfig.Zoo.RoadCages[index - GameConfig.Zoo.MaxPens]
 end
 
-local function pastureUnlocked(data: PlayerDataService.SavedData): boolean
-	local mon = monetization(data)
-	return mon ~= nil and mon.PastureUnlocked == true
+-- The four road cages open together with the Pasture barn upgrade. Saves from before that
+-- (cages opened by Robux, the Axolotl or cash) are migrated into the same flag on load.
+local function roadCagesOpen(data: PlayerDataService.SavedData): boolean
+	local cages = data.Extra.RoadCages
+	return typeof(cages) == "table" and cages.Open == true
 end
 
-local function sidePastureUnlocked(data: PlayerDataService.SavedData): boolean
-	local mon = monetization(data)
-	return mon ~= nil and mon.SidePastureUnlocked == true
-end
-
--- Bought at its gate. The old single cash cage flag still counts for the right large.
-local function cageBought(data: PlayerDataService.SavedData, index: number): boolean
-	local mon = monetization(data)
-	if not mon then
-		return false
+local function openRoadCages(data: PlayerDataService.SavedData)
+	local cages = data.Extra.RoadCages
+	if typeof(cages) ~= "table" then
+		cages = {}
+		data.Extra.RoadCages = cages
 	end
-	local offset = index - GameConfig.Zoo.MaxPens
-	if typeof(mon.CashCages) == "table" and mon.CashCages[tostring(offset)] == true then
-		return true
-	end
-	local cage = GameConfig.Zoo.RoadCages[offset]
-	return cage ~= nil and cage.Unlock == "Cash" and mon.CashPastureUnlocked == true
+	cages.Open = true
 end
 
 local function penOpen(data: PlayerDataService.SavedData, index: number): boolean
 	if index >= 1 and index <= data.ZooSize then
 		return true
 	end
-	local cage = roadCage(index)
-	if not cage then
-		return false
-	end
-	if cageBought(data, index) then
-		return true
-	elseif cage.Unlock == "AnyRobux" then
-		return pastureUnlocked(data)
-	elseif cage.Unlock == "Axolotl" then
-		return sidePastureUnlocked(data)
-	end
-	return false
+	return roadCage(index) ~= nil and roadCagesOpen(data)
 end
 
 local LAST_PEN = GameConfig.Zoo.MaxPens + #GameConfig.Zoo.RoadCages
@@ -177,9 +153,13 @@ local function cacheSlot(zoo: Zoo, index: number): BasePart?
 	return if slot and slot:IsA("BasePart") then slot else nil
 end
 
-local function nextExpansion(zooSize: number): { Pens: number, Price: number, Barn: string }?
+type Expansion = { Pens: number?, RoadCages: boolean?, Price: number, Barn: string }
+
+-- The first step along the walkway not bought yet.
+local function nextExpansion(data: PlayerDataService.SavedData): Expansion?
 	for _, step in GameConfig.Zoo.Expansions do
-		if step.Pens > zooSize then
+		local done = if step.RoadCages then roadCagesOpen(data) else (step.Pens or 0) <= data.ZooSize
+		if not done then
 			return step
 		end
 	end
@@ -273,7 +253,7 @@ function ZooService.getZooSummary(player: Player): Types.ZooSummary?
 	if not data then
 		return nil
 	end
-	local step = nextExpansion(data.ZooSize)
+	local step = nextExpansion(data)
 	return {
 		ZooSize = data.ZooSize,
 		MaxPens = GameConfig.Zoo.MaxPens,
@@ -337,28 +317,24 @@ local function refreshPens(player: Player)
 	end
 	local carried = carriedRecord(player)
 	-- The next unlock group shows as ghost pens: what the next barn buys, and where.
-	local upcoming = nextExpansion(data.ZooSize)
+	local upcoming = nextExpansion(data)
 	local ghostFrom = data.ZooSize
-	local ghostTo = if upcoming then upcoming.Pens else 0
+	local ghostTo = if upcoming and upcoming.Pens then upcoming.Pens else 0
 	for i = 1, LAST_PEN do
 		local pen = penOf(zoo, i)
 		if not pen then
 			continue
 		end
 		local unlocked = penOpen(data, i)
-		local cage = roadCage(i)
-		if cage or unlocked then
+		local nextCages = upcoming ~= nil and upcoming.RoadCages == true and roadCage(i) ~= nil
+		if unlocked then
 			WorldBuilder.setShown(pen, true)
-		elseif ghostFrom < i and i <= ghostTo then
+		elseif (ghostFrom < i and i <= ghostTo) or nextCages then
 			WorldBuilder.setGhost(pen)
 		else
 			WorldBuilder.setShown(pen, false)
 		end
-		local lock = pen:FindFirstChild("FlexLock")
-		if lock then
-			WorldBuilder.setShown(lock, cage ~= nil and not unlocked)
-		end
-		if not unlocked and not cage then
+		if not unlocked then
 			continue
 		end
 		local occupants = animalsInPen(data, i)
@@ -392,10 +368,6 @@ local function refreshPens(player: Player)
 		if sellPrompt then
 			sellPrompt.Enabled = false -- armed below for an unlocked pen with an animal
 		end
-		local unlockPrompt = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
-		if unlockPrompt then
-			unlockPrompt.Enabled = cage ~= nil and not unlocked
-		end
 		if prompt2 then
 			prompt2.Enabled = false
 		end
@@ -419,8 +391,7 @@ local function refreshPens(player: Player)
 		local function armSell(target: ProximityPrompt, occupant: OwnedAnimal)
 			target.Enabled = true
 			target.ObjectText = ZooService.label(occupant.Species, occupant.Mutation)
-			target.ActionText =
-				`Sell ({UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))})`
+			target.ActionText = `Sell {UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))}`
 			target.HoldDuration = 0 -- a tap sells; no hold
 		end
 		if not carried and not animal then
@@ -437,7 +408,7 @@ local function refreshPens(player: Player)
 				prompt.HoldDuration = 0
 			else
 				local value = UIStyle.formatMoney(ZooService.sellValue(animal.Species, animal.Mutation))
-				prompt.ActionText = `Swap (sell {ZooService.label(animal.Species, animal.Mutation)} {value})`
+				prompt.ActionText = `Swap (+{value})`
 				prompt.HoldDuration = 0.5
 			end
 		elseif animal then
@@ -483,7 +454,7 @@ local function refreshPens(player: Player)
 	local stand = zooFolder and zooFolder:FindFirstChild("ExpandStand")
 	local counter = stand and stand:FindFirstChild("ExpandCounter")
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
-	local step = nextExpansion(data.ZooSize)
+	local step = nextExpansion(data)
 	local stepIndex = 0
 	for index, candidate in GameConfig.Zoo.Expansions do
 		if candidate == step then
@@ -493,8 +464,13 @@ local function refreshPens(player: Player)
 	local spot = zooFolder and zooFolder:FindFirstChild("UnlockSpot" .. stepIndex)
 	if stand and stand:IsA("Model") then
 		WorldBuilder.setShown(stand, step ~= nil)
+		-- refreshPens runs every income tick; only move the stand (every part replicates) when
+		-- its spot changed.
 		if spot and spot:IsA("BasePart") then
-			stand:PivotTo(spot.CFrame)
+			local at = stand:GetPivot()
+			if (at.Position - spot.Position).Magnitude > 0.01 or at.LookVector:Dot(spot.CFrame.LookVector) < 0.9999 then
+				stand:PivotTo(spot.CFrame)
+			end
 		end
 		local label = counter and counter:FindFirstChild("NextLabel", true) :: TextLabel?
 		if label and step then
@@ -539,7 +515,7 @@ local function refreshCache(player: Player)
 			sell.Enabled = waiting
 			if record then
 				sell.ObjectText = ZooService.label(record.Species, record.Mutation)
-				sell.ActionText = `Sell ({UIStyle.formatMoney(ZooService.sellValue(record.Species, record.Mutation))})`
+				sell.ActionText = `Sell {UIStyle.formatMoney(ZooService.sellValue(record.Species, record.Mutation))}`
 			end
 		end
 		local model = record and zoo.CacheModels[record.Id]
@@ -603,6 +579,17 @@ local function refreshAll(player: Player)
 	refreshShowcase(player)
 	sendZoo(player)
 	sendCarry(player)
+end
+
+-- Opens the road cages without the barn upgrade (an old Robux receipt for a cage).
+function ZooService.openRoadCages(player: Player)
+	local data = PlayerDataService.get(player)
+	if not data or roadCagesOpen(data) then
+		return
+	end
+	openRoadCages(data)
+	PlayerDataService.markDirty(player)
+	ZooService.refresh(player)
 end
 
 function ZooService.refresh(player: Player)
@@ -858,8 +845,7 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 	if not penOpen(data, penIndex) then
 		local cage = roadCage(penIndex)
 		if cage then
-			local price = UIStyle.formatMoney(cage.Price or 0)
-			purchaseResult:FireClient(player, false, `Unlock this cage for {price} at its gate.`)
+			purchaseResult:FireClient(player, false, "Buy the Cage barn upgrade to open this pen.")
 		end
 		return
 	end
@@ -874,7 +860,7 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 	local old, oldIndex = animalInPen(data, penIndex)
 	if old and old.Paid and not confirmed then
 		local label = ZooService.label(old.Species, old.Mutation)
-		askPaid(player, `You bought the {label} with Robux. Swapping sells it. Sell it?`, function()
+		askPaid(player, `Swapping sells the {label}. Sell it?`, function()
 			local now = PlayerDataService.get(player)
 			local held = carriedRecord(player)
 			if now and held and held.Id == record.Id and animalInPen(now, penIndex) == old then
@@ -924,7 +910,7 @@ local function sellCarried(player: Player, confirmed: boolean?)
 	end
 	if record.Paid and not confirmed then
 		local label = ZooService.label(record.Species, record.Mutation)
-		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+		askPaid(player, `Sell the {label}?`, function()
 			local held = carriedRecord(player)
 			if held and held.Id == record.Id then
 				sellCarried(player, true)
@@ -964,7 +950,7 @@ local function sellFromPen(player: Player, penIndex: number, which: number?, con
 	end
 	if animal.Paid and not confirmed then
 		local label = ZooService.label(animal.Species, animal.Mutation)
-		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+		askPaid(player, `Sell the {label}?`, function()
 			local now = PlayerDataService.get(player)
 			if now and animalsInPen(now, penIndex)[which or 1] == animal then
 				sellFromPen(player, penIndex, which, true)
@@ -1004,7 +990,7 @@ local function sellFromCache(player: Player, slotIndex: number, confirmed: boole
 	end
 	if record.Paid and not confirmed then
 		local label = ZooService.label(record.Species, record.Mutation)
-		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+		askPaid(player, `Sell the {label}?`, function()
 			local nowZoo, now = zoos[player], PlayerDataService.get(player)
 			if nowZoo and now then
 				for index, waiting in waitingRecords(nowZoo, now) do
@@ -1085,44 +1071,23 @@ local function expand(player: Player)
 	if not data then
 		return
 	end
-	local step = nextExpansion(data.ZooSize)
+	local step = nextExpansion(data)
 	if not step then
 		return
 	end
 	if not EconomyService.spend(player, step.Price) then
-		purchaseResult:FireClient(player, false, `Expanding needs {UIStyle.formatMoney(step.Price)}.`)
+		purchaseResult:FireClient(player, false, `Need {UIStyle.formatMoney(step.Price)}.`)
 		return
 	end
-	data.ZooSize = step.Pens
+	if step.RoadCages then
+		openRoadCages(data)
+	else
+		data.ZooSize = step.Pens or data.ZooSize
+	end
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
-	Hooks.fire("ZooExpanded", player, step.Pens, step.Price, step.Barn)
+	Hooks.fire("ZooExpanded", player, data.ZooSize, step.Price, step.Barn)
 	purchaseResult:FireClient(player, true, `{step.Barn} barn unlocked!`)
-end
-
-local function buyCashCage(player: Player, index: number)
-	local data = PlayerDataService.get(player)
-	local cage = roadCage(index)
-	if not data or not cage or typeof(cage.Price) ~= "number" or penOpen(data, index) then
-		return
-	end
-	if not EconomyService.spend(player, cage.Price) then
-		purchaseResult:FireClient(player, false, `This cage costs {UIStyle.formatMoney(cage.Price)}.`)
-		return
-	end
-	local mon = data.Extra.Monetization
-	if typeof(mon) ~= "table" then
-		mon = {}
-		data.Extra.Monetization = mon
-	end
-	if typeof(mon.CashCages) ~= "table" then
-		mon.CashCages = {}
-	end
-	mon.CashCages[tostring(index - GameConfig.Zoo.MaxPens)] = true
-	PlayerDataService.saveNow(player)
-	refreshAll(player)
-	local kind = if cage.Class == "PastureLarge" then "Large" else "Medium"
-	purchaseResult:FireClient(player, true, `{kind} cage unlocked!`)
 end
 
 -- Washed animals ------------------------------------------------------------------------
@@ -1245,7 +1210,7 @@ local function keepOverflow(player: Player)
 		return
 	end
 	if zoo.CarriedId then
-		purchaseResult:FireClient(player, false, "Place the animal you're holding, then keep this one.")
+		purchaseResult:FireClient(player, false, "Place your animal first.")
 		return
 	end
 	local character = player.Character
@@ -1278,7 +1243,7 @@ local function sellOverflow(player: Player, confirmed: boolean?)
 	end
 	if record.Paid and not confirmed then
 		local label = ZooService.label(record.Species, record.Mutation)
-		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+		askPaid(player, `Sell the {label}?`, function()
 			local now = PlayerDataService.get(player)
 			if now and now.Overflow[1] == record then
 				sellOverflow(player, true)
@@ -1670,14 +1635,6 @@ function ZooService.attach(player: Player, bay: Model)
 				local character = player.Character
 				if character and hit:IsDescendantOf(character) then
 					collect(player, i)
-				end
-			end)
-		end
-		local unlock = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
-		if unlock then
-			connect(unlock.Triggered, function(who: Player)
-				if who == player then
-					buyCashCage(player, i)
 				end
 			end)
 		end

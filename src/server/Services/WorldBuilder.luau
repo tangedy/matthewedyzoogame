@@ -32,11 +32,9 @@ local folder: Folder
 
 local FLOOR_Y = 0.5
 local WOOD = Color3.fromRGB(150, 110, 70)
--- The drive animals walk in on, and the darker dirt of the cache arm where washed ones wait.
+-- The dirt drive animals walk in on, out to the wash and back past the cache.
 local PATH_DIRT = Color3.fromRGB(176, 132, 86)
 local PATH_EDGE = Color3.fromRGB(140, 102, 66)
-local CACHE_DIRT = Color3.fromRGB(118, 84, 54)
-local CACHE_EDGE = Color3.fromRGB(92, 64, 40)
 
 -- Depths measured from the road edge, away from the street.
 -- A U driveway: the left arm is the wash queue, the right arm is the cache, and a
@@ -69,12 +67,12 @@ local MEDIUM = Vector2.new(12, 10.5)
 local GIANT = Vector2.new(24, 21)
 local YARD = Vector2.new(48, 38) -- gargantuan yards, three abreast across the back
 local YARD_GAP = 4
-local PASTURE_SIZE = { PastureMedium = 16, PastureLarge = 24 }
 
--- Which pens unlock together (GameConfig.Zoo.Expansions, in order), and which side of the
--- walkway each goes on (+1 left walking in, -1 right). Tier 0 is the six starting stalls; the
--- Robux pastures (GameConfig.Zoo.RoadCages) come straight after them. Pen numbers and classes
--- are the save format, so they never change; only where the pens stand.
+-- Which pens unlock together, and which side of the walkway each goes on (+1 left walking in,
+-- -1 right). Tier is the step's index in GameConfig.Zoo.Expansions (0 is the six starting
+-- stalls). The road cages (GameConfig.Zoo.RoadCages) are step ROAD_CAGE_TIER and stand right
+-- after the small barn. Pen numbers and classes are the save format, so they never change;
+-- only where the pens stand.
 type PenSpec = { Index: number, Class: string }
 local PEN_GROUPS: { { Tier: number, Left: { PenSpec }, Right: { PenSpec } } } = {
 	{
@@ -96,27 +94,29 @@ local PEN_GROUPS: { { Tier: number, Left: { PenSpec }, Right: { PenSpec } } } = 
 		Right = { { Index = 8, Class = "Standard" }, { Index = 10, Class = "Standard" } },
 	},
 	{
-		Tier = 2,
+		Tier = 3,
 		Left = { { Index = 11, Class = "Medium" }, { Index = 13, Class = "Medium" } },
 		Right = { { Index = 12, Class = "Medium" }, { Index = 14, Class = "Medium" } },
 	},
 	{
-		Tier = 3,
+		Tier = 4,
 		Left = { { Index = 15, Class = "Giant" } },
 		Right = { { Index = 16, Class = "Large" }, { Index = 17, Class = "Large" } },
 	},
 	{
-		Tier = 4,
+		Tier = 5,
 		Left = { { Index = 18, Class = "Giant" }, { Index = 22, Class = "Medium" } },
 		Right = { { Index = 20, Class = "Medium" }, { Index = 21, Class = "Medium" } },
 	},
 }
 -- The back row, left to right walking in: a mega yard, the gargantuan yard, a mega yard.
 local BACK_ROW = {
-	{ Index = 23, Tier = 5, Lateral = YARD.Y + YARD_GAP },
-	{ Index = 19, Tier = 4, Lateral = 0 },
-	{ Index = 24, Tier = 5, Lateral = -(YARD.Y + YARD_GAP) },
+	{ Index = 23, Tier = 6, Lateral = YARD.Y + YARD_GAP },
+	{ Index = 19, Tier = 5, Lateral = 0 },
+	{ Index = 24, Tier = 6, Lateral = -(YARD.Y + YARD_GAP) },
 }
+local ROAD_CAGE_TIER = 2
+local BACK_ROW_TIER = 6
 
 local function penSize(class: string): Vector2
 	if class == "Giant" then
@@ -203,16 +203,6 @@ local function billboardLabel(
 	UIStyle.text(label, color)
 	label.Text = text
 	return label
-end
-
--- Road cages and the hose stand use the newer labels. Keep those smaller than the barn signs.
-local function compactBillboards(root: Instance, scale: number)
-	for _, gui in root:GetDescendants() do
-		if gui:IsA("BillboardGui") then
-			gui.Size = UDim2.fromOffset(math.floor(gui.Size.X.Offset * scale), math.floor(gui.Size.Y.Offset * scale))
-			gui.MaxDistance = math.min(gui.MaxDistance, 42)
-		end
-	end
 end
 
 -- The stamped parts and decor under a root, in GetDescendants order. Pens are refreshed
@@ -379,6 +369,129 @@ local ROBUX_BOOTH: BoothSpec = {
 	Keeper = "Robux Shop",
 }
 
+-- Shopkeeper look: warm skin, a cream shirt (the arms are sleeves; hands get skin below) and
+-- brown trousers. Built from colours alone, so no catalog asset can fail to load.
+local MERCHANT_SKIN = Color3.fromRGB(234, 184, 146)
+local MERCHANT_SHIRT = Color3.fromRGB(240, 228, 200)
+local MERCHANT_TROUSERS = Color3.fromRGB(95, 66, 44)
+local MERCHANT_HAIR = Color3.fromRGB(70, 45, 30)
+
+local function merchantLook(): HumanoidDescription
+	local look = Instance.new("HumanoidDescription")
+	look.HeadColor = MERCHANT_SKIN
+	look.TorsoColor = MERCHANT_SHIRT
+	look.LeftArmColor = MERCHANT_SHIRT
+	look.RightArmColor = MERCHANT_SHIRT
+	look.LeftLegColor = MERCHANT_TROUSERS
+	look.RightLegColor = MERCHANT_TROUSERS
+	return look
+end
+
+-- Dresses an anchored R15 shopkeeper: an apron in the booth's colour with a neck strap and a
+-- pocket, a flat cap, a moustache, skin-coloured hands and dark shoes. Every piece is
+-- anchored in place on the posed rig (the keeper never moves).
+local function dressMerchant(keeper: Model, apron: Color3)
+	local function piece(name: string, size: Vector3, cframe: CFrame, color: Color3): Part
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Size = size
+		p.CFrame = cframe
+		p.Color = color
+		p.Material = Enum.Material.SmoothPlastic
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Parent = keeper
+		return p
+	end
+	local function part(name: string): BasePart?
+		local found = keeper:FindFirstChild(name)
+		return if found and found:IsA("BasePart") then found else nil
+	end
+	for _, name in { "LeftHand", "RightHand" } do
+		local hand = part(name)
+		if hand then
+			hand.Color = MERCHANT_SKIN
+		end
+	end
+	for _, name in { "LeftFoot", "RightFoot" } do
+		local foot = part(name)
+		if foot then
+			foot.Color = Color3.fromRGB(40, 30, 25)
+		end
+	end
+
+	-- R15 faces -Z, so the apron hangs on each torso piece's front face.
+	local pocket = apron:Lerp(Color3.new(0, 0, 0), 0.25)
+	local upper = part("UpperTorso")
+	if upper then
+		local s = upper.Size
+		piece(
+			"ApronBib",
+			Vector3.new(s.X * 0.62, s.Y * 0.7, 0.06),
+			upper.CFrame * CFrame.new(0, -s.Y * 0.12, -s.Z / 2 - 0.03),
+			apron
+		)
+		piece(
+			"ApronStrap",
+			Vector3.new(s.X * 0.62, 0.12, s.Z + 0.1),
+			upper.CFrame * CFrame.new(0, s.Y * 0.38, 0),
+			apron
+		)
+	end
+	local lower = part("LowerTorso")
+	if lower then
+		local s = lower.Size
+		-- Down past the hips to mid-thigh.
+		local skirt = s.Y + 1.1
+		piece(
+			"ApronSkirt",
+			Vector3.new(s.X * 0.9, skirt, 0.06),
+			lower.CFrame * CFrame.new(0, s.Y / 2 - skirt / 2, -s.Z / 2 - 0.08),
+			apron
+		)
+		piece(
+			"ApronPocket",
+			Vector3.new(s.X * 0.5, 0.35, 0.04),
+			lower.CFrame * CFrame.new(0, -s.Y * 0.6, -s.Z / 2 - 0.12),
+			pocket
+		)
+		piece("ApronTie", Vector3.new(s.X + 0.1, 0.14, s.Z + 0.1), lower.CFrame * CFrame.new(0, s.Y * 0.35, 0), apron)
+	end
+
+	local head = part("Head")
+	if head then
+		local s = head.Size
+		local top = head.CFrame * CFrame.new(0, s.Y / 2, 0)
+		-- Flat cap: a crown with a short peak out front, and a band in the apron colour.
+		piece("CapCrown", Vector3.new(s.X * 1.02, 0.32, s.Z * 1.02), top * CFrame.new(0, 0.06, 0.02), MERCHANT_TROUSERS)
+		piece("CapBand", Vector3.new(s.X * 1.05, 0.1, s.Z * 1.05), top * CFrame.new(0, -0.05, 0.02), apron)
+		piece(
+			"CapPeak",
+			Vector3.new(s.X * 0.8, 0.08, 0.4),
+			top * CFrame.new(0, -0.04, -s.Z / 2 - 0.15) * CFrame.Angles(math.rad(-8), 0, 0),
+			MERCHANT_TROUSERS
+		)
+		piece(
+			"Hair",
+			Vector3.new(s.X * 1.01, s.Y * 0.35, 0.1),
+			head.CFrame * CFrame.new(0, s.Y * 0.1, s.Z / 2 + 0.03),
+			MERCHANT_HAIR
+		)
+		-- A friendly moustache just above the smile.
+		piece(
+			"Moustache",
+			Vector3.new(s.X * 0.42, 0.12, 0.06),
+			head.CFrame * CFrame.new(0, -s.Y * 0.06, -s.Z / 2 - 0.03),
+			MERCHANT_HAIR
+		)
+	end
+end
+
 local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: BoothSpec)
 	local station = Instance.new("Model")
 	station.Name = spec.Name
@@ -449,10 +562,7 @@ local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: Bo
 
 	task.spawn(function()
 		local ok, result = pcall(function()
-			return Players:CreateHumanoidModelFromDescription(
-				Instance.new("HumanoidDescription"),
-				Enum.HumanoidRigType.R15
-			)
+			return Players:CreateHumanoidModelFromDescription(merchantLook(), Enum.HumanoidRigType.R15)
 		end)
 		if not ok or typeof(result) ~= "Instance" or not result:IsA("Model") or not station.Parent then
 			return
@@ -474,6 +584,7 @@ local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: Bo
 				part.CanCollide = false
 			end
 		end
+		dressMerchant(keeper, spec.Stripe)
 	end)
 end
 
@@ -494,17 +605,7 @@ local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	local spacing = GameConfig.Cache.SlotSpacing
 	-- Slot 1 is closer to the road. A sale walks that animal out, then the one behind steps up.
 	local depths = { YARD_D - spacing, YARD_D }
-	local mid = (depths[1] + depths[2]) / 2
-	local floorPos = PlotLayout.point(plot, mid, CACHE_LAT, FLOOR_Y)
-	makePart({
-		Name = "CacheFloor",
-		Size = Vector3.new(spacing + 10, 0.4, 12),
-		Position = floorPos,
-		Color = Color3.fromRGB(230, 190, 120),
-		Material = Enum.Material.WoodPlanks,
-		CanQuery = false,
-		Parent = cache,
-	})
+	-- No platform: washed animals wait right on the drive.
 	for index, depth in depths do
 		local pos = PlotLayout.point(plot, depth, CACHE_LAT, FLOOR_Y)
 		local slot = makeMarker("Slot" .. index, CFrame.lookAt(pos, pos + plot.Look), cache)
@@ -534,7 +635,9 @@ local function addPenPrompts(
 		Name = "GatePost",
 		Size = Vector3.new(0.6, 3.5, 0.6),
 		Position = gate + Vector3.new(0, 1.75, 0) + plot.Right * 1.6,
-		Color = Color3.fromRGB(240, 240, 240),
+		-- Only carries the prompts; never seen.
+		Transparency = 1,
+		CanCollide = false,
 		Parent = pen,
 	})
 	-- E picks up / places, F sells, R sets the pet.
@@ -595,7 +698,10 @@ local function buildFencedPen(
 		Material = Enum.Material.Grass,
 		Parent = pen,
 	})
-	local h = math.clamp(latSize * 0.28, 3.5, 8)
+	-- Low fences so the animals show: stalls at 70% of the old height, every bigger pen at 50%.
+	local heightScale = if pen:GetAttribute("PenClass") == "Standard" then 0.7 else 0.5
+	local h = math.clamp(latSize * 0.28, 3.5, 8) * heightScale
+	pen:SetAttribute("FenceHeight", h)
 	local y = h / 2
 	local halfD, halfL = depthSize / 2, latSize / 2
 	local gate = if math.min(depthSize, latSize) <= 10 then 3 else 4
@@ -780,68 +886,30 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		local right = row(cursor, -1, group.Right)
 		cursor = math.max(left, right) + GROUP_GAP
 
-		-- The Robux pastures follow the starting stalls: the first upgrade a new player walks
-		-- past. Each shows its lock until bought.
-		if group.Tier == 0 then
-			local sides: { [number]: number } = { [1] = cursor, [-1] = cursor }
+		-- The road cages follow the small barn and open together as the next barn upgrade.
+		-- They stay in view behind a lock bar until then.
+		-- The cage upgrade follows the small barn: two stalls and two medium pens, laid out
+		-- like any other group (hidden, then ghosted while it is the next upgrade).
+		if group.Tier == ROAD_CAGE_TIER - 1 then
+			unlockSpot(ROAD_CAGE_TIER, cursor - GROUP_GAP / 2)
+			local sideSpecs: { [string]: { PenSpec } } = { Left = {}, Right = {} }
 			for offset, spec in GameConfig.Zoo.RoadCages do
-				local index = GameConfig.Zoo.MaxPens + offset
-				local size = PASTURE_SIZE[spec.Class] or 16
-				local side = if spec.Side == "Left" then 1 else -1
-				local lateral = side * (PEN_INNER + size / 2)
-				local depth = sides[side] + size / 2
-				sides[side] += size + PEN_GAP
-				local pen =
-					addPen(index, depth, lateral, Vector2.new(size, size), spec.Class, inwardLook(plot, lateral))
-				pen:SetAttribute("RoadUnlock", spec.Unlock)
-				local builtFloor = pen:FindFirstChild("Floor")
-				local large = spec.Class == "PastureLarge"
-				local labelColor = if large then Color3.fromRGB(255, 196, 80) else Color3.fromRGB(130, 220, 255)
-				if builtFloor and builtFloor:IsA("BasePart") then
-					local classLabel =
-						billboardLabel(builtFloor, spec.Label, Vector3.new(0, 5, 0), Vector2.new(110, 24), labelColor)
-					classLabel.Name = "ClassLabel"
-				end
-				-- A red bar across the gate, facing the walkway, with what unlocks it.
-				local lock = Instance.new("Model")
-				lock.Name = "FlexLock"
-				local bar = makePart({
-					Name = "Bar",
-					Size = Vector3.new(size - 6, 4.5, 0.6),
-					Position = PlotLayout.point(plot, depth, lateral - side * (size / 2 - 1.2), 2.4),
-					Color = Color3.fromRGB(176, 48, 40),
-					Material = Enum.Material.Wood,
-					Parent = lock,
-				})
-				local lockLabel = billboardLabel(
-					bar,
-					spec.Lock,
-					Vector3.new(0, 3.2, 0),
-					Vector2.new(120, 32),
-					Color3.fromRGB(255, 230, 120)
-				)
-				lockLabel.Name = "LockLabel"
-				lockLabel.TextWrapped = true
-				local lockGui = lockLabel.Parent :: BillboardGui
-				lockGui.MaxDistance = 40
-				lock.Parent = pen
-				compactBillboards(pen, 0.72)
-				-- Every road cage can be bought with cash at its gate.
-				local post = pen:FindFirstChild("GatePost")
-				if post and typeof(spec.Price) == "number" then
-					local unlock = makePrompt("UnlockPrompt", `Unlock ({UIStyle.formatMoney(spec.Price)})`, 0.6, post)
-					unlock.ObjectText = if large then "Large cage" else "Medium cage"
-					unlock.Enabled = false
-					unlock:SetAttribute("RestEnabled", true)
-				end
-				WorldBuilder.setShown(pen, false)
+				table.insert(sideSpecs[spec.Side], { Index = GameConfig.Zoo.MaxPens + offset, Class = spec.Class })
 			end
-			cursor = math.max(sides[1], sides[-1]) - PEN_GAP + GROUP_GAP
+			for _, specs in sideSpecs do
+				-- Stalls nearest the plaza, the medium pen behind.
+				table.sort(specs, function(a, b)
+					return (a.Class == "Standard") and b.Class ~= "Standard"
+				end)
+			end
+			local cageLeft = row(cursor, 1, sideSpecs.Left)
+			local cageRight = row(cursor, -1, sideSpecs.Right)
+			cursor = math.max(cageLeft, cageRight) + GROUP_GAP
 		end
 	end
 
 	-- The back row: three gargantuan yards abreast, gates toward the walkway's end.
-	unlockSpot(5, cursor - GROUP_GAP / 2)
+	unlockSpot(BACK_ROW_TIER, cursor - GROUP_GAP / 2)
 	for _, yard in BACK_ROW do
 		addPen(yard.Index, cursor + YARD.X / 2, yard.Lateral, YARD, "Gargantuan", plot.Look)
 	end
@@ -881,9 +949,9 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 			Parent = bay,
 		})
 	end
-	-- Animals walk in on a dirt path. The cache arm, where washed ones wait, is darker dirt.
+	-- One dirt path: in along the wash arm, out along the cache arm.
 	arm("WashArm", WASH_LAT, PATH_DIRT, PATH_EDGE)
-	arm("CacheArm", CACHE_LAT, CACHE_DIRT, CACHE_EDGE)
+	arm("CacheArm", CACHE_LAT, PATH_DIRT, PATH_EDGE)
 	local spanLat = (CACHE_LAT - WASH_LAT) + armW
 	makePart({
 		Name = "DriveCross",

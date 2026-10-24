@@ -121,8 +121,11 @@ local function backfill(player: Player)
 			own(`Hose{tier}`)
 		end
 	end
+	local cages = data.Extra.RoadCages
+	local cagesOpen = typeof(cages) == "table" and cages.Open == true
 	for _, step in GameConfig.Zoo.Expansions do
-		if data.ZooSize >= step.Pens then
+		local bought = if step.RoadCages then cagesOpen else data.ZooSize >= (step.Pens or 0)
+		if bought then
 			own(`Zone{step.Barn}`)
 			if step.Price == 100000 then
 				own("Barn100K")

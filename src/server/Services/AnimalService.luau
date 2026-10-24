@@ -184,7 +184,9 @@ end
 -- Scales a model to its pen size (penned) or back to its built size, shrinking it further
 -- when it is longer than maxLength (the cache). Records the result as RestScale.
 function AnimalService.resize(model: Model, scale: number, maxLength: number?)
-	model:ScaleTo(1)
+	if model:GetScale() ~= 1 then
+		model:ScaleTo(1)
+	end
 	local target = scale
 	if maxLength then
 		local _, size = model:GetBoundingBox()

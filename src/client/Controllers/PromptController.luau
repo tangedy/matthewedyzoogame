@@ -29,21 +29,20 @@ local PAD = 6
 
 -- Button colour by what the action does: muted so the card sits quietly over the world.
 -- Anything unlisted is the neutral blue (pick up, place, and other moves).
-local SELL = Color3.fromRGB(56, 158, 92)
-local BUY = Color3.fromRGB(56, 158, 92)
-local PET = Color3.fromRGB(132, 104, 196)
-local NEUTRAL = Color3.fromRGB(58, 118, 196)
-local CARD_COLOR = Color3.fromRGB(26, 30, 40)
-local EDGE_COLOR = Color3.fromRGB(14, 16, 22)
+local CASH = UIStyle.Colors.Cash
+local ROBUX = UIStyle.Colors.Robux
+local PET = UIStyle.Colors.Pet
+local NEUTRAL = UIStyle.Colors.Action
+local CARD_COLOR = UIStyle.Colors.Panel
+local EDGE_COLOR = UIStyle.Colors.Edge
 local COLORS: { [string]: Color3 } = {
-	SellPrompt = SELL,
-	PenSellPrompt = SELL,
-	PenPrompt2 = SELL,
-	UpgradePrompt = Color3.fromRGB(212, 160, 52),
-	ExpandPrompt = Color3.fromRGB(96, 160, 76),
-	TruckPrompt = BUY,
-	UnlockPrompt = BUY,
-	RobuxShopPrompt = Color3.fromRGB(40, 120, 210),
+	SellPrompt = CASH,
+	PenSellPrompt = CASH,
+	PenPrompt2 = CASH,
+	ExpandPrompt = CASH,
+	UnlockPrompt = CASH,
+	TruckPrompt = ROBUX,
+	RobuxShopPrompt = ROBUX,
 	PetPrompt = PET,
 	PetPrompt2 = PET,
 }

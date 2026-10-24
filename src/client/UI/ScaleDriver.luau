@@ -38,6 +38,7 @@ local GAME_GUIS: { [string]: boolean } = {
 	Tension = true,
 	LiveOps = true,
 	LiveOpsPopups = true,
+	FriendLuck = true,
 }
 
 type Record = {

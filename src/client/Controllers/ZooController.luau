@@ -103,8 +103,8 @@ local function buildGui()
 		end)
 		return button
 	end
-	carryButton("PUT DOWN", Color3.fromRGB(80, 160, 255), "drop")
-	carrySellButton = carryButton("SELL", Color3.fromRGB(70, 190, 90), "sell")
+	carryButton("PUT DOWN", UIStyle.Colors.Action, "drop")
+	carrySellButton = carryButton("SELL", UIStyle.Colors.Cash, "sell")
 
 	cacheHint = Instance.new("TextLabel")
 	cacheHint.AnchorPoint = Vector2.new(0.5, 1)
@@ -113,7 +113,7 @@ local function buildGui()
 	cacheHint.Visible = false
 	cacheHint.Parent = gui
 	UIStyle.text(cacheHint, Color3.fromRGB(110, 200, 255))
-	cacheHint.Text = "Cache full! Pick up an animal and put it in a pen, or sell it."
+	cacheHint.Text = "Cache full! Place or sell one."
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MaxSize = Vector2.new(720, 34)
 	constraint.Parent = cacheHint

@@ -35,11 +35,12 @@ export type Callbacks = {
 
 local MonetizationShop = {}
 
-local BUY_COLOR = Color3.fromRGB(70, 210, 90)
-local DISABLED_COLOR = Color3.fromRGB(120, 120, 130)
-local OWNED_COLOR = Color3.fromRGB(255, 190, 40)
-local TAB_COLOR = Color3.fromRGB(70, 60, 110)
-local TAB_ACTIVE_COLOR = Color3.fromRGB(255, 90, 200)
+-- Every card here spends Robux, so BUY is the shared Robux gold (UIStyle.Colors).
+local BUY_COLOR = UIStyle.Colors.Robux
+local DISABLED_COLOR = UIStyle.Colors.Disabled
+local OWNED_COLOR = UIStyle.Colors.Action
+local TAB_COLOR = UIStyle.Colors.Muted
+local TAB_ACTIVE_COLOR = UIStyle.Colors.Action
 
 local panel: Frame
 local panelScale: UIScale
@@ -136,7 +137,7 @@ local function makeCard(key: string, tab: string, order: number, color: Color3):
 	local price = textLabel(frame, {
 		Position = UDim2.fromOffset(8, 120),
 		Size = UDim2.new(1, -16, 0, 24),
-	}, Color3.fromRGB(120, 255, 170))
+	}, UIStyle.RobuxTextColor)
 	local buy, buyScale = chunkyButton(frame, BUY_COLOR, "BUY")
 	buy.AnchorPoint = Vector2.new(0.5, 1)
 	buy.Position = UDim2.new(0.5, 0, 1, -8)
@@ -192,7 +193,7 @@ local function refreshCard(card: Card, state: ShopState)
 		else pass :: MonetizationConfig.Pass
 	card.Name.Text = info.DisplayName
 	card.Description.Text = info.Description
-	card.Price.Text = `{info.Robux} ROBUX`
+	card.Price.Text = `R$ {info.Robux}`
 
 	if pass then
 		if state.Passes[pass.Key] then
@@ -230,20 +231,20 @@ local function refreshCard(card: Card, state: ShopState)
 			elseif state.Unavailable[product.Key] then
 				buyable = false
 				buyText = "SOON"
-				statusText = "COMING SOON"
+				statusText = "SOON"
 			elseif left and left <= 0 then
 				buyable = false
 				buyText = "SOLD OUT"
 				statusText = "SOLD OUT"
-				statusColor = Color3.fromRGB(255, 110, 110)
+				statusColor = UIStyle.Colors.ErrorText
 			elseif left then
 				statusText = `{left} / {product.Stock or 0} LEFT`
 				statusColor = Color3.fromRGB(255, 230, 120)
 			else
-				statusText = "CHECKING STOCK..."
+				statusText = "..."
 			end
 			if state.PendingAnimals > 0 and buyable then
-				statusText = `{state.PendingAnimals} waiting for cache space`
+				statusText = `{state.PendingAnimals} waiting`
 			end
 		end
 	end
@@ -337,7 +338,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	titleShine.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 160, 230))
 	titleShine.Parent = title
 
-	local close, closeScale = chunkyButton(panel, Color3.fromRGB(230, 70, 70), "X")
+	local close, closeScale = chunkyButton(panel, UIStyle.Colors.Close, "X")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -10, 0, 8)
 	close.Size = UDim2.fromOffset(44, 44)
@@ -390,7 +391,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -6),
 		Size = UDim2.new(1, -24, 0, 22),
-		Text = "TEST MODE: purchases are simulated, no Robux are spent",
+		Text = "TEST MODE: no Robux spent",
 		Visible = false,
 	}, Color3.fromRGB(255, 230, 120))
 

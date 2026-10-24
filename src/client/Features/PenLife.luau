@@ -6,7 +6,8 @@
 -- Each animal's rest pose is read once, relative to its pivot, and split into groups: ground
 -- (the aura ring stays flat on the floor), body, head (head, neck and everything in front of
 -- the neck base), tail and legs. Every frame each nearby animal is posed from that and the
--- whole set is moved with one BulkMoveTo. Animals far from the camera freeze where they are.
+-- whole set is moved with one BulkMoveTo. Animals far from the camera freeze where they are;
+-- those past NEAR_DISTANCE are posed every FAR_EVERY frames, and those behind the camera wait.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,6 +22,9 @@ local PenLife = {}
 
 local SCAN_SECONDS = 1
 local ACTIVE_DISTANCE = 160 -- studs from the camera
+local NEAR_DISTANCE = 70 -- closer than this, posed every frame
+local FAR_EVERY = 3 -- frames between poses further out (staggered per animal)
+local BEHIND_MARGIN = 20 -- studs behind the camera plane before an animal stops being posed
 local WALL_MARGIN = 0.6 -- kept clear of the fence
 local TURN_SPEED = math.rad(200) -- radians per second
 local LEG_SWING = math.rad(28)
@@ -76,6 +80,8 @@ type Life = {
 	Napped: number, -- os.clock() of the last nap
 	Zzz: BillboardGui?,
 	Droplets: ParticleEmitter?,
+	Pending: number, -- seconds not yet stepped (far animals step every few frames)
+	Stagger: number,
 }
 
 local lives: { [Model]: Life } = {}
@@ -632,6 +638,8 @@ local function track(model: Model, pen: Model)
 		Napped = os.clock() - rng:NextNumber(0, 40),
 		Zzz = nil,
 		Droplets = nil,
+		Pending = 0,
+		Stagger = rng:NextInteger(0, FAR_EVERY - 1),
 	}
 	-- The server parks it on the slot's own facing, which is yaw 0.
 	local look = home.LookVector
@@ -699,23 +707,33 @@ function PenLife.init(_initial: any)
 		end
 	end)
 
+	local frame = 0
 	RunService.Heartbeat:Connect(function(dt: number)
 		local camera = Workspace.CurrentCamera
 		if not camera then
 			return
 		end
 		local eye = camera.CFrame.Position
-		dt = math.min(dt, 0.1)
+		local look = camera.CFrame.LookVector
+		frame += 1
 		table.clear(parts)
 		table.clear(frames)
 		for model, life in lives do
 			if not model.Parent or not life.Slot.Parent then
 				continue
 			end
-			if (life.Slot.Position - eye).Magnitude > ACTIVE_DISTANCE then
+			local offset = life.Slot.Position - eye
+			local distance = offset.Magnitude
+			if distance > ACTIVE_DISTANCE or offset:Dot(look) < -BEHIND_MARGIN then
+				life.Pending = 0
 				continue
 			end
-			local bob, pitch, roll = step(life, dt)
+			life.Pending += dt
+			if distance > NEAR_DISTANCE and (frame + life.Stagger) % FAR_EVERY ~= 0 then
+				continue
+			end
+			local bob, pitch, roll = step(life, math.min(life.Pending, 0.1))
+			life.Pending = 0
 			pose(life, bob, pitch, roll)
 		end
 		if #parts > 0 then

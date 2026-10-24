@@ -88,43 +88,25 @@ local GameConfig = {
 	Zoo = {
 		MaxPens = 24,
 		StartPens = 6,
-		-- Two large cages on the road, with a medium cage behind each one so the
-		-- driveway between the larges stays open. Every road cage can be bought for Price at its gate. Unlock is a second, free way in:
-		-- any Robux spend opens both mediums, the Axolotl opens the left large ("Cash" has none).
+		-- The cage upgrade (the RoadCages step in Expansions): two stalls and two medium pens
+		-- right after the small barn, pens MaxPens+1.. in this order. The order is the save
+		-- format; Unlock is only read when migrating saves from before they were an upgrade.
 		RoadCages = {
-			{
-				Side = "Left",
-				Class = "PastureLarge",
-				Unlock = "Axolotl",
-				Price = 30000,
-				Label = "LARGE",
-				Lock = "$30K",
-			},
-			{
-				Side = "Left",
-				Class = "PastureMedium",
-				Unlock = "AnyRobux",
-				Price = 10000,
-				Label = "MEDIUM",
-				Lock = "$10K",
-			},
-			{
-				Side = "Right",
-				Class = "PastureMedium",
-				Unlock = "AnyRobux",
-				Price = 20000,
-				Label = "MEDIUM",
-				Lock = "$20K",
-			},
-			{ Side = "Right", Class = "PastureLarge", Unlock = "Cash", Price = 40000, Label = "LARGE", Lock = "$40K" },
+			{ Side = "Left", Class = "Medium", Unlock = "Axolotl" },
+			{ Side = "Left", Class = "Standard", Unlock = "AnyRobux" },
+			{ Side = "Right", Class = "Standard", Unlock = "AnyRobux" },
+			{ Side = "Right", Class = "Medium", Unlock = "Cash" },
 		},
+		-- In order along the walkway. Pens steps open pens up to that count; the RoadCages step
+		-- opens the four road cages. Each step's index is its UnlockSpot in WorldBuilder.
 		Expansions = {
-			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
+			{ Pens = 10, Price = 25000, Barn = "Small" }, -- +4 standard lanes, two each side
+			{ RoadCages = true, Price = 100000, Barn = "Cage" }, -- two stalls and two medium pens
 			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large
 			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- 2 small barns, then a giant barn behind
 			{ Pens = 22, Price = 10000000, Barn = "Gargantuan" }, -- open gargantuan pen, 3 skinny medium barns
 			{ Pens = 24, Price = 50000000, Barn = "Mega" }, -- two gargantuan pens behind that barn
-		},
+		} :: { { Pens: number?, RoadCages: boolean?, Price: number, Barn: string } },
 	},
 
 	-- Co-op wash. Extra sprayers speed the job up, and large bodies gain more per helper.

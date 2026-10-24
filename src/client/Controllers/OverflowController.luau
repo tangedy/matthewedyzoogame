@@ -49,7 +49,7 @@ function OverflowController.init()
 		local control = Instance.new("TextButton")
 		control.Position = UDim2.new(x, 0, 1, -30)
 		control.Size = UDim2.new(0.46, 0, 0, 24)
-		control.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
+		control.BackgroundColor3 = UIStyle.Colors.Muted
 		control.Text = text
 		control.TextScaled = false
 		control.TextSize = 14
@@ -66,7 +66,7 @@ function OverflowController.init()
 
 	local keep = button("Keep", 0.03)
 	local sell = button("Sell", 0.51)
-	sell.BackgroundColor3 = Color3.fromRGB(70, 190, 90)
+	sell.BackgroundColor3 = UIStyle.Colors.Cash
 	janitor:Add(keep.MouseButton1Click:Connect(function()
 		Remotes.event("OverflowChoice"):FireServer("keep")
 	end))
