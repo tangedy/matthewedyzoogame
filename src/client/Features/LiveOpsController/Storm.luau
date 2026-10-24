@@ -14,6 +14,7 @@ local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Storm = {}
 
 local FADE = TweenInfo.new(2.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+local EVENT_SCALE = 1.5 -- playtesters missed the storm splash at the old size
 
 local folder: Instance
 local topGui: ScreenGui
@@ -178,7 +179,7 @@ local function splash()
 	local frame = Instance.new("Frame")
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.Position = UDim2.fromScale(0.5, 0.4)
-	frame.Size = UDim2.new(0.9, 0, 0, 110)
+	frame.Size = UDim2.new(0.9 / EVENT_SCALE, 0, 0, 110) -- the scale below brings it back to 0.9 of the screen at most
 	frame.BackgroundTransparency = 1
 	frame.Parent = topGui
 	local fit = Instance.new("UISizeConstraint")
@@ -199,7 +200,12 @@ local function splash()
 	sub.Parent = frame
 	UIStyle.text(sub, Color3.new(1, 1, 1), nil, 1.5)
 	-- A little under full size and eased in, like the other banners.
-	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.8 })
+	TweenService
+		:Create(
+			scale,
+			TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Scale = 0.8 * EVENT_SCALE }
+		)
 		:Play()
 	task.delay(3, function()
 		local tween = TweenService:Create(

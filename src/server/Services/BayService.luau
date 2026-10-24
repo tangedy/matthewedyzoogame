@@ -74,6 +74,7 @@ type Bay = {
 	Job: Job?,
 	Thread: thread?,
 	FirstAnimalGiven: boolean,
+	Primed: boolean, -- the first line of this assignment has been filled
 }
 
 local BayService = {}
@@ -209,12 +210,16 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	}
 end
 
--- First join fills the U and waits until all three are standing. Later, only gaps are filled.
+-- Fills gaps in the U and waits until everyone is standing. On a fresh join the front animal
+-- is already on the wash spot and the rest walk in behind without holding up the first wash,
+-- so the hose works the moment the player lands.
 local function ensureLine(bay: Bay, owner: Player)
 	if #bay.Line >= lineCap(owner) or bay.Owner ~= owner then
 		return
 	end
 	setState(bay, "Arriving")
+	local fresh = not bay.Primed and #bay.Line == 0
+	bay.Primed = true
 	local moves = {}
 	while #bay.Line < lineCap(owner) and bay.Owner == owner do
 		local arrival = rollArrival(bay, owner)
@@ -222,6 +227,14 @@ local function ensureLine(bay: Bay, owner: Player)
 		table.insert(bay.Line, arrival)
 		local target = bay.QueueMarks[slot].CFrame
 		local turn = bay.TurnIn.CFrame
+		if fresh and slot == 1 then
+			local from = arrival.Model:GetPivot().Position
+			local goal = Vector3.new(target.Position.X, from.Y, target.Position.Z)
+			local flat = Vector3.new(goal.X - turn.Position.X, 0, goal.Z - turn.Position.Z)
+			local dir = if flat.Magnitude > 0.1 then flat.Unit else -bay.Right
+			arrival.Model:PivotTo(CFrame.lookAt(goal, goal + dir))
+			continue
+		end
 		local delay = (slot - 1) * 1.1
 		table.insert(moves, function()
 			if delay > 0 then
@@ -232,6 +245,12 @@ local function ensureLine(bay: Bay, owner: Player)
 				AnimalService.walkCorners(arrival.Model, { turn, target }, GameConfig.ArriveDuration * 0.7)
 			end
 		end)
+	end
+	if fresh then
+		for _, fn in moves do
+			task.spawn(fn)
+		end
+		return
 	end
 	waitAll(moves, bay, owner)
 end
@@ -519,14 +538,72 @@ local function makeBay(index: number): Bay
 		Job = nil,
 		Thread = nil,
 		FirstAnimalGiven = false,
+		Primed = false,
 	}
 end
 
--- Builds a bay on a random free plot. Returns false when every plot is taken (the player
--- is queued and gets the next plot that frees up).
+-- Slots owned by this player's friends (or whoever they followed in). IsFriendsWith is a web
+-- call, so every owner is asked at once and a slow or failed answer counts as not a friend.
+local FRIEND_WAIT = 2 -- seconds; the character loads only after the bay, so keep this short
+local function friendSlots(player: Player): { number }
+	local slots: { number } = {}
+	local pending = 0
+	for slot, bay in bayBySlot do
+		local owner = bay.Owner
+		if not owner or owner == player then
+			continue
+		end
+		if player.FollowUserId == owner.UserId or owner.FollowUserId == player.UserId then
+			table.insert(slots, slot)
+			continue
+		end
+		pending += 1
+		task.spawn(function()
+			local ok, isFriend = pcall(player.IsFriendsWith, player, owner.UserId)
+			if ok and isFriend and bay.Owner == owner then
+				table.insert(slots, slot)
+			end
+			pending -= 1
+		end)
+	end
+	local deadline = os.clock() + FRIEND_WAIT
+	while pending > 0 and os.clock() < deadline and player.Parent do
+		task.wait(0.1)
+	end
+	return slots
+end
+
+-- Picks the free plot nearest a friend's (next door, then across the road), or a random one.
+local function pickSlot(free: { number }, friends: { number }): number
+	if #friends == 0 then
+		return free[math.random(1, #free)]
+	end
+	local best: { number } = {}
+	local bestDistance = math.huge
+	for _, slot in free do
+		local here = PlotLayout.frame(slot).Anchor
+		local nearest = math.huge
+		for _, friend in friends do
+			nearest = math.min(nearest, (PlotLayout.frame(friend).Anchor - here).Magnitude)
+		end
+		if nearest < bestDistance - 0.5 then
+			best, bestDistance = { slot }, nearest
+		elseif math.abs(nearest - bestDistance) <= 0.5 then
+			table.insert(best, slot)
+		end
+	end
+	return best[math.random(1, #best)]
+end
+
+-- Builds a bay on a free plot, next to a friend's when one is here. Returns false when every
+-- plot is taken (the player is queued and gets the next plot that frees up).
 function BayService.assign(player: Player): boolean
 	if bayByOwner[player] then
 		return true
+	end
+	local friends = friendSlots(player)
+	if bayByOwner[player] or not player.Parent then
+		return bayByOwner[player] ~= nil
 	end
 	local free: { number } = {}
 	for i = 1, GameConfig.BayCount do
@@ -542,7 +619,7 @@ function BayService.assign(player: Player): boolean
 		return false
 	end
 
-	local index = free[math.random(1, #free)]
+	local index = pickSlot(free, friends)
 
 	local bay = makeBay(index)
 	bayBySlot[index] = bay

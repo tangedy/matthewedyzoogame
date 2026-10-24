@@ -34,7 +34,7 @@ local CutsceneController = {}
 local RENDER_STEP = "SpawnCutscene"
 local PEN_FOV = 50
 local YARD_FOV = 60
-local SET_WAIT = 20 -- seconds to wait for your bay and the set before giving the camera back
+local SET_WAIT = 20 -- seconds to wait for your bay, then for the set, before giving the camera back
 
 local function freeze(humanoid: Humanoid)
 	humanoid.WalkSpeed = 0
@@ -244,7 +244,7 @@ function CutsceneController.init(initial: Types.InitialState)
 		camera = Workspace.CurrentCamera
 	end
 	if camera == nil then
-		Remotes.event("CutsceneFinished"):FireServer()
+		Remotes.event("CutsceneFinished"):FireServer(false)
 		return
 	end
 	local previousSubject = camera.CameraSubject
@@ -287,7 +287,9 @@ function CutsceneController.init(initial: Types.InitialState)
 	skip.AnchorPoint = Vector2.new(0.5, 1)
 	skip.Position = UDim2.new(0.5, 0, 1, -24)
 	skip.Size = UDim2.new(0.4, 0, 0, 20)
-	skip.Text = "Press E to skip"
+	skip.Text = if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		then "Tap to skip"
+		else "Press E to skip"
 	skip.Visible = false
 	skip.ZIndex = 6
 	skip.Parent = gui
@@ -338,6 +340,7 @@ function CutsceneController.init(initial: Types.InitialState)
 		freeze(humanoid)
 	end
 
+	local started: number? = nil -- when the first shot begins, once the set is in place
 	local function release()
 		RunService:UnbindFromRenderStep(RENDER_STEP)
 		cloak(player.Character, 0)
@@ -348,7 +351,8 @@ function CutsceneController.init(initial: Types.InitialState)
 			camera.CameraType = Enum.CameraType.Custom
 			camera.CameraSubject = current or previousSubject
 		end
-		Remotes.event("CutsceneFinished"):FireServer()
+		-- Watched only if the shot actually ran; otherwise the server just unlocks the hose.
+		Remotes.event("CutsceneFinished"):FireServer(started ~= nil)
 	end
 	janitor:Add(release)
 
@@ -385,7 +389,6 @@ function CutsceneController.init(initial: Types.InitialState)
 	end)
 
 	local opened = os.clock()
-	local started: number? = nil -- when the first shot begins, once the set is in place
 	local duration = cfg.Duration
 	local skipAfter = cfg.SkipAfter
 	local ended = false
@@ -396,9 +399,14 @@ function CutsceneController.init(initial: Types.InitialState)
 		ended = true
 		janitor:Cleanup()
 	end
-	-- E is live for the whole shot. Presses before SkipAfter do nothing.
+	-- E (or a tap or click, for touch and mouse) is live for the whole shot. Presses before
+	-- SkipAfter do nothing.
 	janitor:Add(UserInputService.InputBegan:Connect(function(input: InputObject, _processed: boolean)
-		if input.KeyCode ~= Enum.KeyCode.E or not started then
+		local pressed = input.KeyCode == Enum.KeyCode.E
+			or input.KeyCode == Enum.KeyCode.ButtonA
+			or input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		if not pressed or not started then
 			return
 		end
 		if os.clock() - started < skipAfter then
@@ -426,13 +434,27 @@ function CutsceneController.init(initial: Types.InitialState)
 			task.wait(0.2)
 			bay = myBay()
 		end
-		local set = playerGui:WaitForChild("CutsceneSet", math.max(deadline - os.clock(), 0.1))
-		if ended or not bay or not set or not set:IsA("Model") then
+		if ended or not bay then
 			return false
 		end
-		local farm = set:FindFirstChild("MaxFarm")
-		local washMarker = bay:FindFirstChild("WashPosition")
+		-- The server starts the shot's clock and sends the set only now, so a slow join
+		-- can't outlast it.
+		Remotes.event("CutsceneReady"):FireServer()
+		deadline = os.clock() + SET_WAIT -- a fresh wait for the set itself
 		local mySlot = bay:GetAttribute("BayIndex")
+		if typeof(mySlot) == "number" then
+			-- With streaming on, both farms may not be loaded yet (no character to focus on).
+			local across = if mySlot <= 4 then mySlot + 4 else mySlot - 4
+			for _, slot in { mySlot, across } do
+				pcall(player.RequestStreamAroundAsync, player, PlotLayout.frame(slot).Anchor, 5)
+			end
+		end
+		local set = playerGui:WaitForChild("CutsceneSet", math.max(deadline - os.clock(), 0.1))
+		if ended or not set or not set:IsA("Model") then
+			return false
+		end
+		local farm = set:WaitForChild("MaxFarm", math.max(deadline - os.clock(), 0.1))
+		local washMarker = bay:WaitForChild("WashPosition", math.max(deadline - os.clock(), 0.1))
 		local templateSlot = set:GetAttribute("TemplateSlot")
 		if
 			not farm
@@ -613,7 +635,7 @@ function CutsceneController.init(initial: Types.InitialState)
 			camera.CameraType = Enum.CameraType.Scriptable
 		end
 		if not started then
-			if os.clock() - opened > SET_WAIT + 5 then
+			if os.clock() - opened > SET_WAIT * 2 + 5 then
 				finish()
 			end
 			return

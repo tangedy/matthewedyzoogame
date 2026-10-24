@@ -33,6 +33,7 @@ local CutsceneService = {}
 local skipAt: { [Player]: number } = {}
 local endsAt: { [Player]: number } = {}
 local sent: { [Player]: Instance } = {}
+local runs: { [Player]: number } = {} -- bumped on every begin, start and unlock, so stale timers do nothing
 local setFailed = false
 local template: Model? = nil
 local janitor = Janitor.new()
@@ -40,10 +41,11 @@ local janitor = Janitor.new()
 -- The maxed farm is built on this plot's frame; the client moves it to the plot it needs.
 local TEMPLATE_SLOT = 1
 local SET_NAME = "CutsceneSet"
--- The client may start a little after begin() (it waits for its bay and this set), so the
--- server holds the lock this long past Duration before dropping it on its own.
-local GRACE = 10
-local READY_WAIT = 8 -- seconds begin() waits for the keeper's avatar before sending anyway
+-- The client's shot starts once this set has replicated (up to its 20 s SET_WAIT after
+-- CutsceneReady), so the server holds the lock this long past Duration before dropping it.
+local GRACE = 25
+local READY_WAIT = 8 -- seconds sendSet waits for the keeper's avatar before sending anyway
+local READY_TIMEOUT = 60 -- seconds begin() waits for CutsceneReady before unlocking the hose
 local SHOWCASE_MAX = 16 -- longest side of the podium animal, like ZooService's podium
 
 local STEEL = Color3.fromRGB(168, 172, 178)
@@ -691,6 +693,21 @@ local function buildSet(): Model
 	return set
 end
 
+-- Ends the lock and drops this player's copy of the set.
+local function unlock(player: Player)
+	runs[player] = (runs[player] or 0) + 1
+	skipAt[player] = nil
+	endsAt[player] = nil
+	if player.Parent then
+		player:SetAttribute("InCutscene", false)
+	end
+	local copy = sent[player]
+	sent[player] = nil
+	if copy then
+		copy:Destroy()
+	end
+end
+
 function CutsceneService.init()
 	-- The set is decoration. If any of it fails to build, new players skip the cutscene
 	-- instead of the error stopping ServerBootstrap (which froze the whole game).
@@ -707,29 +724,34 @@ function CutsceneService.init()
 		end
 	end
 
-	janitor:Add(Remotes.event("CutsceneFinished").OnServerEvent:Connect(function(player: Player)
+	janitor:Add(Remotes.event("CutsceneReady").OnServerEvent:Connect(function(player: Player)
+		CutsceneService.start(player)
+	end))
+	janitor:Add(Remotes.event("CutsceneFinished").OnServerEvent:Connect(function(player: Player, watched: any)
 		local data = PlayerDataService.get(player)
+		if not data or data.CutsceneSeen or player:GetAttribute("InCutscene") ~= true then
+			return
+		end
+		if watched ~= true then
+			-- The client couldn't stage it: hand the hose back now, and try again next join.
+			unlock(player)
+			return
+		end
 		local skip = skipAt[player]
 		-- E is ignored until SkipAfter. After that the hose has to work immediately.
-		if not data or data.CutsceneSeen or skip == nil or os.clock() < skip then
+		if skip == nil or os.clock() < skip then
 			return
 		end
 		data.CutsceneSeen = true
 		PlayerDataService.markDirty(player)
 		PlayerDataService.saveNow(player)
-		skipAt[player] = nil
-		endsAt[player] = nil
-		player:SetAttribute("InCutscene", false)
-		local copy = sent[player]
-		sent[player] = nil
-		if copy then
-			copy:Destroy()
-		end
+		unlock(player)
 	end))
 	janitor:Add(Players.PlayerRemoving:Connect(function(player)
 		skipAt[player] = nil
 		endsAt[player] = nil
 		sent[player] = nil
+		runs[player] = nil
 	end))
 end
 
@@ -767,27 +789,42 @@ local function sendSet(player: Player)
 	sent[player] = copy
 end
 
+-- Locks the hose and waits for the client to say it is ready (CutsceneReady). The shot's
+-- clock starts then, not here: on a live server loading, the character and the bay can
+-- take longer than the whole shot, and the set used to be gone before the client looked.
 function CutsceneService.begin(player: Player)
 	local data = PlayerDataService.get(player)
 	if not data or data.CutsceneSeen or setFailed then
 		player:SetAttribute("InCutscene", false)
 		return
 	end
-	local now = os.clock()
-	local skipAfter = Settings.SkipAfter
-	local hold = Settings.Duration + GRACE
+	local run = (runs[player] or 0) + 1
+	runs[player] = run
 	player:SetAttribute("InCutscene", true)
-	skipAt[player] = now + skipAfter
+	skipAt[player] = nil
+	endsAt[player] = os.clock() + READY_TIMEOUT
+	task.delay(READY_TIMEOUT, function()
+		if runs[player] == run and skipAt[player] == nil then
+			unlock(player) -- the client never reported in
+		end
+	end)
+end
+
+-- The client is ready: start the clock and send the set.
+function CutsceneService.start(player: Player)
+	if player:GetAttribute("InCutscene") ~= true or skipAt[player] ~= nil then
+		return
+	end
+	local run = (runs[player] or 0) + 1
+	runs[player] = run
+	local now = os.clock()
+	local hold = Settings.Duration + GRACE
+	skipAt[player] = now + Settings.SkipAfter
 	endsAt[player] = now + hold
 	task.spawn(sendSet, player)
 	task.delay(hold, function()
-		if player.Parent and player:GetAttribute("InCutscene") == true then
-			player:SetAttribute("InCutscene", false)
-		end
-		local copy = sent[player]
-		if copy then
-			sent[player] = nil
-			copy:Destroy()
+		if runs[player] == run then
+			unlock(player)
 		end
 	end)
 end

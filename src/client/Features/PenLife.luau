@@ -9,11 +9,13 @@
 -- whole set is moved with one BulkMoveTo. Animals far from the camera freeze where they are;
 -- those past NEAR_DISTANCE are posed every FAR_EVERY frames, and those behind the camera wait.
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local AnimalGait = require(ReplicatedStorage.Shared.AnimalGait)
 local AnimalSounds = require(ReplicatedStorage.Shared.AnimalSounds)
 
 local player = Players.LocalPlayer
@@ -595,6 +597,9 @@ local function pose(life: Life, bob: number, pitch: number, roll: number)
 end
 
 local function track(model: Model, pen: Model)
+	if CollectionService:HasTag(model, AnimalGait.TAG) then
+		return -- WalkReplay is walking it; picked up on a later scan once it stands on its slot
+	end
 	local slot = pen:FindFirstChild("Slot")
 	local floor = pen:FindFirstChild("Floor")
 	if not slot or not slot:IsA("BasePart") or not floor or not floor:IsA("BasePart") then
@@ -639,7 +644,7 @@ local function track(model: Model, pen: Model)
 		Zzz = nil,
 		Droplets = nil,
 		Pending = 0,
-		Stagger = rng:NextInteger(0, FAR_EVERY - 1),
+		Stagger = rng:NextInteger(0, FAR_EVERY * 2 - 1), -- spread for low detail too
 	}
 	-- The server parks it on the slot's own facing, which is yaw 0.
 	local look = home.LookVector
@@ -696,6 +701,19 @@ local function scan()
 	end
 end
 
+-- Low detail (Performance, on slow machines): fewer animals animated, and less often.
+local activeDistance, nearDistance, farEvery = ACTIVE_DISTANCE, NEAR_DISTANCE, FAR_EVERY
+function PenLife.setLowDetail(low: boolean)
+	activeDistance = if low then ACTIVE_DISTANCE * 0.5 else ACTIVE_DISTANCE
+	nearDistance = if low then NEAR_DISTANCE * 0.5 else NEAR_DISTANCE
+	farEvery = if low then FAR_EVERY * 2 else FAR_EVERY
+end
+
+-- For WalkReplay: stop animating this animal and stand it at rest before a walk starts.
+function PenLife.release(model: Model)
+	untrack(model)
+end
+
 function PenLife.init(_initial: any)
 	task.spawn(function()
 		while true do
@@ -724,12 +742,12 @@ function PenLife.init(_initial: any)
 			end
 			local offset = life.Slot.Position - eye
 			local distance = offset.Magnitude
-			if distance > ACTIVE_DISTANCE or offset:Dot(look) < -BEHIND_MARGIN then
+			if distance > activeDistance or offset:Dot(look) < -BEHIND_MARGIN then
 				life.Pending = 0
 				continue
 			end
 			life.Pending += dt
-			if distance > NEAR_DISTANCE and (frame + life.Stagger) % FAR_EVERY ~= 0 then
+			if distance > nearDistance and (frame + life.Stagger) % farEvery ~= 0 then
 				continue
 			end
 			local bob, pitch, roll = step(life, math.min(life.Pending, 0.1))

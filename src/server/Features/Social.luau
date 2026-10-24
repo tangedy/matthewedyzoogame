@@ -349,7 +349,11 @@ local function accrue(player: Player, seconds: number)
 	local state = ensure(data)
 	state.PlaySeconds += seconds
 	PlayerDataService.markDirty(player)
-	applyCosmetic(player)
+	-- Rebuild the trail and glow only when the tier changes, so particles don't reset every tick.
+	local tier = tierFor(player)
+	if (if tier then tier.Name else nil) ~= player:GetAttribute("FlexTier") then
+		applyCosmetic(player)
+	end
 	applyVip(player)
 end
 

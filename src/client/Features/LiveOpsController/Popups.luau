@@ -19,7 +19,8 @@ local Popups = {}
 local BOUNCE = TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 local SHRINK = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In)
 -- Banners land a little under full size and ease in, so they read without shouting.
-local BANNER_SCALE = 0.85
+local EVENT_SCALE = 1.5 -- playtesters missed the event banners at the old size
+local BANNER_SCALE = 0.85 * EVENT_SCALE
 local BANNER_IN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local hudGui: ScreenGui
@@ -232,7 +233,7 @@ local function showDaily(name: any, rarity: any, mutation: any, rewardMultiplier
 	frame.Name = "DailyBanner"
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.Position = UDim2.new(0.5, 0, 0.5, 20) -- below the wash card, over the bay
-	frame.Size = UDim2.new(0.9, 0, 0, 124)
+	frame.Size = UDim2.new(0.9 / EVENT_SCALE, 0, 0, 124)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 	frame.BackgroundTransparency = 0.25
 	frame.Parent = hudGui
@@ -295,7 +296,7 @@ local function showNewPlayer(minutes: any, multiplier: any)
 	frame.Name = "DailyBanner" -- shares the slot, so it never stacks on the daily banner
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.Position = UDim2.new(0.5, 0, 0.5, 20)
-	frame.Size = UDim2.new(0.9, 0, 0, 124)
+	frame.Size = UDim2.new(0.9 / EVENT_SCALE, 0, 0, 124)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 	frame.BackgroundTransparency = 0.25
 	frame.Parent = hudGui

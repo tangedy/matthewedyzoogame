@@ -10,7 +10,8 @@ local EVENTS = {
 	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
 	"LetAnimalGo", -- () the owner sends a blocked animal away instead of paying to clean it
 	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide
-	"CutsceneFinished", -- () client finished the spawn cutscene (ignored if it arrives early)
+	"CutsceneReady", -- () client has its bay and is ready for the set; the server starts the shot's clock
+	"CutsceneFinished", -- (watched: boolean) false aborts (unlock, not saved); true is ignored before SkipAfter
 	"OverflowChoice", -- ("keep" | "sell")
 	-- both ways: server asks (token: number, text: string), client answers (token: number, accepted: boolean)
 	"PaidSellConfirm",

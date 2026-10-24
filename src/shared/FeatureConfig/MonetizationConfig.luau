@@ -5,7 +5,7 @@
 -- Permanent skips are gone: no Forever auto-collect, no Fire-Hose game pass, no forever
 -- speed. Speed and Incredible Luck are consumables with absolute expiry timestamps.
 --
--- Ids are placeholders (0). Robux prices here are for display only: Roblox charges whatever
+-- Ids live in MonetizationIds (0 until the product exists). Robux prices here are for display only: Roblox charges whatever
 -- the product is set to on the website, so keep the two in sync when the real ids go in.
 -- In Studio, or while an id is 0, buying simulates a successful purchase through the real
 -- grant path (live servers only simulate for the place owner, see SimulateUnconfiguredLive).
@@ -64,6 +64,7 @@ export type ShopState = {
 }
 
 local ToolConfig = require(script.Parent.Parent.ToolConfig)
+local Ids = require(script.Parent.MonetizationIds)
 
 local PINK = Color3.fromRGB(255, 90, 200)
 local BLUE = Color3.fromRGB(80, 190, 255)
@@ -337,6 +338,10 @@ end
 
 local productsByKey: { [string]: Product } = {}
 for _, product in products do
+	local id = Ids.Products[product.Key]
+	if typeof(id) == "number" and id > 0 then
+		product.Id = id
+	end
 	productsByKey[product.Key] = product
 end
 
@@ -360,6 +365,10 @@ end
 
 local passesByKey: { [string]: Pass } = {}
 for _, pass in passes do
+	local id = Ids.Passes[pass.Key]
+	if typeof(id) == "number" and id > 0 then
+		pass.Id = id
+	end
 	passesByKey[pass.Key] = pass
 end
 

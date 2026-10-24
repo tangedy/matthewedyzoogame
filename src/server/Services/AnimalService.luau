@@ -2,12 +2,14 @@
 -- Movement functions yield; BayService runs them inside the bay's thread so that
 -- cancelling the thread (owner left) stops them with nothing left connected.
 
+local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local AnimalGait = require(ReplicatedStorage.Shared.AnimalGait)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -372,162 +374,66 @@ function AnimalService.spawn(
 	return model, patches
 end
 
--- Walk cycle. Each leg (and the hoof or foot under it) swings from the hip while the model
--- moves; diagonal pairs step together, and two-legged animals alternate. Poses are written
--- relative to the pivot every frame, so nothing drifts, and the rest pose comes back at the end.
-type LegPose = { Parts: { BasePart }, Rest: { CFrame }, Hip: Vector3, Phase: number }
-type Gait = { Legs: { LegPose }, Stride: number, Swing: number, Heavy: boolean, Scale: number }
-
-local BIG_BODIES = { Giant = true, Gargantuan = true }
--- The rest pose is read once per model and size, so two overlapping walks can't record a
--- mid-swing leg as the rest pose.
-local gaits: { [Model]: Gait } = setmetatable({}, { __mode = "k" }) :: any
-
-local function gaitOf(model: Model): Gait?
-	local cached = gaits[model]
-	if cached and math.abs(cached.Scale - model:GetScale()) < 1e-4 then
-		return cached
-	end
-	local pivot = model:GetPivot()
-	local legs: { BasePart } = {}
-	for _, child in model:GetChildren() do
-		if child.Name == "Leg" and child:IsA("BasePart") then
-			table.insert(legs, child)
-		end
-	end
-	if #legs == 0 then
-		return nil
-	end
-	-- Hooves, feet, paws, toes and socks: anything tagged LegPart, plus the older names.
-	local feet: { BasePart } = {}
-	for _, child in model:GetChildren() do
-		if
-			child:IsA("BasePart")
-			and (child:GetAttribute("LegPart") == true or child.Name == "Hoof" or child.Name == "Foot")
-		then
-			table.insert(feet, child)
-		end
-	end
-	local poses: { LegPose } = {}
-	local legLength = 0
-	for _, leg in legs do
-		local rest = pivot:ToObjectSpace(leg.CFrame)
-		local hip = (rest * CFrame.new(0, leg.Size.Y / 2, 0)).Position
-		legLength = math.max(legLength, leg.Size.Y)
-		local front = rest.Position.Z < 0
-		local left = rest.Position.X < 0
-		local phase = if #legs == 2 then (if left then 0 else math.pi) elseif front == left then 0 else math.pi
-		local pose: LegPose = { Parts = { leg }, Rest = { rest }, Hip = hip, Phase = phase }
-		table.insert(poses, pose)
-	end
-	-- Each foot part swings with the leg it is closest to.
-	for _, foot in feet do
-		local footRest = pivot:ToObjectSpace(foot.CFrame)
-		local best: LegPose? = nil
-		local bestDist = math.huge
-		for _, pose in poses do
-			local offset = footRest.Position - pose.Rest[1].Position
-			local dist = Vector2.new(offset.X, offset.Z).Magnitude
-			if dist < bestDist then
-				best, bestDist = pose, dist
-			end
-		end
-		if best and bestDist < math.max(best.Parts[1].Size.X, best.Parts[1].Size.Z) * 2.5 then
-			table.insert(best.Parts, foot)
-			table.insert(best.Rest, footRest)
-		end
-	end
-	local key = model:GetAttribute("AnimalKey")
-	local def = if typeof(key) == "string" then AnimalConfig.Animals[key] else nil
-	local gait: Gait = {
-		Legs = poses,
-		Stride = math.max(legLength * 2.2, 1.2),
-		Swing = math.rad(32),
-		Heavy = def ~= nil and BIG_BODIES[def.BodyClass] == true,
-		Scale = model:GetScale(),
-	}
-	gaits[model] = gait
-	return gait
-end
-
-local function poseLegs(model: Model, gait: Gait, travelled: number)
-	local pivot = model:GetPivot()
-	local cycle = travelled / gait.Stride * math.pi * 2
-	for _, leg in gait.Legs do
-		local angle = math.sin(cycle + leg.Phase) * gait.Swing
-		local swing = CFrame.new(leg.Hip) * CFrame.Angles(angle, 0, 0) * CFrame.new(-leg.Hip)
-		for i, part in leg.Parts do
-			part.CFrame = pivot * swing * leg.Rest[i]
-		end
-	end
-end
-
-local function restLegs(model: Model, gait: Gait)
-	local pivot = model:GetPivot()
-	for _, leg in gait.Legs do
-		for i, part in leg.Parts do
-			part.CFrame = pivot * leg.Rest[i]
-		end
-	end
-end
-
--- Big animals bob slowly and heavily: a thud per step instead of a hop.
-local function stepBob(gait: Gait?, travelled: number, amplitude: number): number
-	if gait and gait.Heavy then
-		return math.abs(math.sin(travelled / gait.Stride * math.pi * 2)) * amplitude * 2
-	end
-	return 0
-end
+-- Walk cycle (Shared.AnimalGait): each leg swings from the hip while the model moves, and
+-- the rest pose comes back at the end.
+local gaitOf = AnimalGait.gaitOf
+local poseLegs = AnimalGait.poseLegs
+local restLegs = AnimalGait.restLegs
+local stepBob = AnimalGait.stepBob
 
 -- Right-angle walk. The animal turns in place at each corner, then walks straight to the
 -- next point without spinning on the way. Yields until the last point.
+--
+-- The server doesn't move the parts on the way: it publishes the plan (AnimalGait) and every
+-- client plays it locally (WalkReplay), then the model is placed at the end. Moving every
+-- anchored part each frame on the server replicated thousands of CFrames a second and was
+-- the main source of lag on slower machines and connections.
+local walking: { [Model]: { Plan: AnimalGait.Plan, Seq: number } } = setmetatable({}, { __mode = "k" }) :: any
+local walkSeq = 0
+
 function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach: number, bobHeight: number?)
-	local gait = gaitOf(model)
-	local travelled = 0
-	for _, target in points do
-		if not model.Parent then
-			return
-		end
-		local here = model:GetPivot().Position
-		local flat = Vector3.new(target.Position.X - here.X, 0, target.Position.Z - here.Z)
-		if flat.Magnitude < 0.4 then
-			continue
-		end
-		local dir = flat.Unit
-		local turnFrom = model:GetPivot()
-		local elapsed = 0
-		while elapsed < 0.28 and model.Parent do
-			elapsed += task.wait()
-			local t = math.min(elapsed / 0.28, 1)
-			local pos = turnFrom.Position
-			model:PivotTo(turnFrom:Lerp(CFrame.lookAt(pos, pos + dir), t))
-		end
-		local bobAmp = bobHeight or 0.25
-		local startPos = model:GetPivot().Position
-		local goal = Vector3.new(target.Position.X, startPos.Y, target.Position.Z)
-		local span = (goal - startPos).Magnitude
-		local startTravel = travelled
-		elapsed = 0
-		while elapsed < secondsEach and model.Parent do
-			elapsed += task.wait()
-			local t = math.min(elapsed / secondsEach, 1)
-			travelled = startTravel + span * t
-			local bob = if gait and gait.Heavy
-				then stepBob(gait, travelled, bobAmp)
-				else math.abs(math.sin(elapsed * 10)) * bobAmp
-			local pos = startPos:Lerp(goal, t) + Vector3.new(0, bob, 0)
-			model:PivotTo(CFrame.lookAt(pos, pos + dir))
-			if gait then
-				poseLegs(model, gait, travelled)
-			end
-		end
-		if model.Parent then
-			model:PivotTo(CFrame.lookAt(goal, goal + dir))
-		end
+	if not model.Parent then
+		return
 	end
-	if gait and model.Parent then
-		restLegs(model, gait)
+	local now = Workspace:GetServerTimeNow()
+	-- A walk that takes over another starts from where the old one has got to.
+	local previous = walking[model]
+	if previous then
+		local at = AnimalGait.sample(previous.Plan, now - previous.Plan.At, nil)
+		model:PivotTo(at)
 	end
+	local corners = {}
+	for _, point in points do
+		table.insert(corners, point.Position)
+	end
+	local plan = AnimalGait.plan(model:GetPivot(), corners, secondsEach, bobHeight or 0.25, now)
+	if plan.Duration <= 0 then
+		return
+	end
+	walkSeq += 1
+	local seq = walkSeq
+	walking[model] = { Plan = plan, Seq = seq }
+	model:SetAttribute(AnimalGait.ATTRIBUTE, AnimalGait.encode(plan))
+	CollectionService:AddTag(model, AnimalGait.TAG)
+
+	local ends = os.clock() + plan.Duration
+	while os.clock() < ends and model.Parent do
+		local current = walking[model]
+		if not current or current.Seq ~= seq then
+			return -- another walk took over
+		end
+		task.wait(math.min(ends - os.clock(), 0.1))
+	end
+	local current = walking[model]
+	if not current or current.Seq ~= seq then
+		return
+	end
+	walking[model] = nil
+	if model.Parent then
+		model:PivotTo(AnimalGait.finish(plan))
+	end
+	CollectionService:RemoveTag(model, AnimalGait.TAG)
+	model:SetAttribute(AnimalGait.ATTRIBUTE, nil)
 end
 
 -- Two quick hops and a SOLD! sign. Yields until the hop finishes.

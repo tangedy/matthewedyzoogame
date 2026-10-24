@@ -1,5 +1,5 @@
 -- One short strip in the top bar: what's live now, and the next event.
--- Sits in the free centre of the Roblox top bar (about 22px tall). The server titles
+-- Sits in the free centre of the Roblox top bar, at EVENT_SCALE of its original 22px. The server titles
 -- decide what is current; the clocks only count down.
 -- Odds and pity counters are not shown. Mud Storm shares this strip when it is the
 -- thing happening now or the soonest thing coming up.
@@ -17,6 +17,7 @@ local VariantBanner = {}
 local STORM_NAME = "Mud Storm"
 local STORM_COLOR = Color3.fromRGB(255, 176, 90)
 local REST_TRANSPARENCY = 0.45
+local EVENT_SCALE = 1.5 -- playtesters missed the events at the old size (22px strip, 13px text)
 local HOVER_FADE = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local folder: Instance
@@ -54,9 +55,9 @@ local function place()
 	local camera = Workspace.CurrentCamera
 	local width = if camera then camera.ViewportSize.X else 800
 	-- Leave the Roblox menu buttons on both ends of the top bar alone.
-	local maxWidth = math.clamp(width - 200, 180, 440)
-	strip.Size = UDim2.fromOffset(maxWidth, 22)
-	local y = if inset.Y >= 26 then inset.Y / 2 else 14
+	local maxWidth = math.clamp(width - 200, 180, 440 * EVENT_SCALE)
+	strip.Size = UDim2.fromOffset(maxWidth, math.round(22 * EVENT_SCALE))
+	local y = if inset.Y >= 26 then inset.Y / 2 else math.round(14 * EVENT_SCALE)
 	strip.Position = UDim2.fromScale(0.5, 0) + UDim2.fromOffset(0, y)
 end
 
@@ -71,7 +72,7 @@ local function label(name: string, color: Color3): TextLabel
 	created.Parent = strip
 	UIStyle.text(created, color, Color3.new(0, 0, 0), 1.5)
 	created.TextScaled = false
-	created.TextSize = 13
+	created.TextSize = math.round(13 * EVENT_SCALE)
 	return created
 end
 

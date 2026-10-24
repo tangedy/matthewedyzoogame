@@ -247,6 +247,7 @@ local function picketRun(a: Vector3, b: Vector3)
 			Size = Vector3.new(0.25, 0.3, length),
 			CFrame = frame * CFrame.new(0, height, -length / 2),
 			Color = PICKET,
+			CastShadow = false, -- thousands of fence parts: shadows cost a lot and barely show
 		})
 	end
 	local count = math.max(1, math.floor(length / 4))
@@ -256,6 +257,7 @@ local function picketRun(a: Vector3, b: Vector3)
 			Size = Vector3.new(0.35, 2.8, 0.5),
 			CFrame = frame * CFrame.new(0, 1.4, -i * length / count),
 			Color = PICKET,
+			CastShadow = false,
 		})
 	end
 end

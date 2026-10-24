@@ -6,7 +6,8 @@ Robux developer products and game passes, from the shop button to the grant. The
 
 | File | Role |
 | --- | --- |
-| `src/shared/FeatureConfig/MonetizationConfig.luau` | Products, passes, ids, Robux prices, boost strengths, offer rules, guardrails. Also the `ShopState` type the client draws from. |
+| `src/shared/FeatureConfig/MonetizationIds.luau` | The real product and pass ids, by key (written by `tools/create-products.ps1`). |
+| `src/shared/FeatureConfig/MonetizationConfig.luau` | Products, passes, Robux prices, boost strengths, offer rules, guardrails. Also the `ShopState` type the client draws from. |
 | `src/server/Features/Monetization.luau` | `init()`: remotes, `ProcessReceipt`, game pass checks, shop requests, Hooks modifiers and listeners, contextual offers, background loop. |
 | `src/server/Features/MonetizationState.luau` | `data.Extra.Monetization` (validated on read), per-session state, rate limits, test-mode decision, client payload. |
 | `src/server/Features/MonetizationGrants.luau` | What each item does once paid: boosts, cash, limited animal delivery, VIP tag, Fire-Hose Rig unlock. |
@@ -15,6 +16,24 @@ Robux developer products and game passes, from the shop button to the grant. The
 | `src/client/Features/MonetizationShop.luau` | SHOP button and the tabbed shop panel (pure view). |
 
 The helper modules have no `init`, so the feature autoloaders just require them.
+
+## Going live (real Robux)
+
+Every product and pass ships with id 0, which live servers treat as "Not on sale yet" (only the place owner gets a simulated purchase). To take real Robux:
+
+1. Creator Dashboard > Open Cloud > API Keys: make a key with `developer-product:read` and `developer-product:write`, limited to this experience.
+2. From the repo root, with the experience's **Universe** id (not the place id):
+   ```
+   $env:ROBLOX_API_KEY = "<key>"
+   powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id> -DryRun
+   powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id>
+   ```
+   It creates the 23 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
+3. Make the VIP Keeper game pass (399) by hand under Monetization > Passes and paste its id into `MonetizationIds.Passes.VIPKeeper`.
+4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number.
+5. Game Settings > Security: **Enable Studio Access to API Services** must be on (receipts save through DataStores).
+
+`MonetizationConfig` reads the ids from `MonetizationIds`; nothing else needs editing.
 
 ## What's for sale
 
