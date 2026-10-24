@@ -1,7 +1,7 @@
 -- Builds one farm when a player is given a plot, and destroys it when they leave.
 -- Slots 1-4 are east of the road, 5-8 west. Each plot faces the road and grows backward:
 --   road front: showcase podium | U driveway (cache arm, wash arm) | tier gear + truck
---   hub plaza (gear shop, kiosk, spawn) -> one walkway, pens on both sides in unlock order
+--   hub plaza (gear shop, Robux shop, spawn) -> one walkway, pens on both sides in unlock order
 --   -> three gargantuan yards across the back.
 --
 -- Each bay exposes:
@@ -13,7 +13,7 @@
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
---   KioskSpot                      the auto-collect kiosk (Monetization)
+--   RobuxShop.Counter              Robux shop prompt (+ auto-collect, Monetization)
 --   Zoo.Pen19 / 23 / 24  the three gargantuan yards across the back
 --   Zoo.Pen25-28   the Robux pastures, right after the starting stalls
 
@@ -44,7 +44,7 @@ local WASH_LAT = -DRIVE_ARM
 local CACHE_LAT = DRIVE_ARM
 local SOLD_LAT = CACHE_LAT
 -- Main Street. The drive's cross piece ends at depth 44; the hub plaza sits right behind it
--- (spawn, gear shop, auto-collect kiosk), and one walkway runs from the plaza to the back of
+-- (spawn, gear shop, Robux shop), and one walkway runs from the plaza to the back of
 -- the plot. Every pen opens onto it, in the order they unlock, so one walk up and back passes
 -- every animal and every collect pad. The three gargantuan yards close the far end, where a
 -- look down the walkway from the road ends on them.
@@ -210,46 +210,81 @@ local function compactBillboards(root: Instance, scale: number)
 	end
 end
 
+-- The stamped parts and decor under a root, in GetDescendants order. Pens are refreshed
+-- every income tick, so rescanning each pen's whole tree (animal included) every second
+-- was the cost. The list is dropped whenever anything under the root is added or removed.
+type Layout = { Parts: { BasePart }, Decor: { Instance } }
+local layouts: { [Instance]: Layout } = {}
+local layoutWatched: { [Instance]: boolean } = {}
+
+local function layoutOf(root: Instance): Layout
+	local cached = layouts[root]
+	if cached then
+		return cached
+	end
+	local parts: { BasePart } = {}
+	local decor: { Instance } = {}
+	for _, d in root:GetDescendants() do
+		if d:GetAttribute("LayoutPart") == true and d:IsA("BasePart") then
+			table.insert(parts, d)
+		elseif d:GetAttribute("LayoutDecor") == true then
+			if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Light") then
+				table.insert(decor, d)
+			end
+		end
+	end
+	cached = { Parts = parts, Decor = decor }
+	layouts[root] = cached
+	if not layoutWatched[root] then
+		layoutWatched[root] = true
+		local function invalidate()
+			layouts[root] = nil
+		end
+		root.DescendantAdded:Connect(invalidate)
+		root.DescendantRemoving:Connect(invalidate)
+		root.Destroying:Connect(function()
+			layouts[root] = nil
+			layoutWatched[root] = nil
+		end)
+	end
+	return cached
+end
+
 -- Shows or hides a pen or barn shell. Only parts stamped at build time move, so an
 -- animal standing in the pen is left alone.
 function WorldBuilder.setShown(root: Instance, shown: boolean)
-	for _, d in root:GetDescendants() do
-		if d:GetAttribute("LayoutPart") == true and d:IsA("BasePart") then
-			if shown then
-				d.Transparency = d:GetAttribute("RestTransparency") :: number
-				d.CanCollide = d:GetAttribute("RestCollide") == true
-				d.CanTouch = d:GetAttribute("RestTouch") == true
-				d.CanQuery = d:GetAttribute("RestQuery") == true
-			else
-				d.Transparency = 1
-				d.CanCollide = false
-				d.CanTouch = false
-				d.CanQuery = false
-			end
-		elseif d:GetAttribute("LayoutDecor") == true then
-			local enabled = shown and d:GetAttribute("RestEnabled") == true
-			if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Light") then
-				d.Enabled = enabled
-			end
+	local layout = layoutOf(root)
+	for _, d in layout.Parts do
+		if shown then
+			d.Transparency = d:GetAttribute("RestTransparency") :: number
+			d.CanCollide = d:GetAttribute("RestCollide") == true
+			d.CanTouch = d:GetAttribute("RestTouch") == true
+			d.CanQuery = d:GetAttribute("RestQuery") == true
+		else
+			d.Transparency = 1
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
 		end
+	end
+	for _, d in layout.Decor do
+		(d :: any).Enabled = shown and d:GetAttribute("RestEnabled") == true
 	end
 end
 
 -- A locked pen in the next unlock group: a faint outline you can walk through, with no
 -- prompts or pad, so players see what the next upgrade gives them and where.
 function WorldBuilder.setGhost(root: Instance)
-	for _, d in root:GetDescendants() do
-		if d:GetAttribute("LayoutPart") == true and d:IsA("BasePart") then
-			local rest = d:GetAttribute("RestTransparency") :: number
-			d.Transparency = if rest >= 1 or d.Name == "CollectPad" then 1 else math.max(rest, 0.72)
-			d.CanCollide = false
-			d.CanTouch = false
-			d.CanQuery = false
-		elseif d:GetAttribute("LayoutDecor") == true then
-			if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("Light") then
-				d.Enabled = false
-			end
-		end
+	local layout = layoutOf(root)
+	for _, d in layout.Parts do
+		local rest = d:GetAttribute("RestTransparency") :: number
+		d.Transparency = if rest >= 1 or d.Name == "CollectPad" then 1 else math.max(rest, 0.72)
+		d.CanCollide = false
+		d.CanTouch = false
+		d.CanQuery = false
+	end
+	for _, d in layout.Decor do
+		(d :: any).Enabled = false
 	end
 end
 
@@ -284,17 +319,65 @@ local function ensureGround()
 	})
 end
 
--- The gear shop: a booth on the left of the hub plaza, its counter turned to the plaza. The
--- gear for the player's tier (StationProps) stands at GearSpot, right of the wash arm on the
--- road, with the fire truck at TruckSpot beside it; the showcase podium mirrors it on the left.
+-- The two plaza shops: the gear shop is a booth on the left of the hub plaza, and the Robux
+-- shop is the same booth in bright blue on the right, both with their counters turned to the
+-- plaza. The gear for the player's tier (StationProps) stands at GearSpot, right of the wash
+-- arm on the road, with the fire truck at TruckSpot beside it; the showcase podium mirrors it.
 local SHOP_DEPTH = PLAZA_DEPTH
 local SHOP_LAT = PLAZA_HALF_LAT + 6
 local GEAR_DEPTH = 30
 local GEAR_LAT = WASH_LAT - 15
-local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
+
+type BoothSpec = {
+	Name: string,
+	Lateral: number,
+	Counter: Color3,
+	Stripe: Color3, -- every other awning stripe; the rest are white
+	Sign: Color3,
+	SignText: string,
+	SignTextColor: Color3,
+	SignStroke: Color3,
+	PromptName: string,
+	PromptAction: string,
+	PromptObject: string,
+	Keeper: string,
+}
+
+local GEAR_BOOTH: BoothSpec = {
+	Name = "UpgradeStation",
+	Lateral = SHOP_LAT,
+	Counter = Color3.fromRGB(60, 150, 230),
+	Stripe = Color3.fromRGB(230, 60, 60),
+	Sign = Color3.fromRGB(255, 210, 70),
+	SignText = "GEAR SHOP",
+	SignTextColor = Color3.fromRGB(60, 40, 20),
+	SignStroke = Color3.new(1, 1, 1),
+	PromptName = "UpgradePrompt",
+	PromptAction = "Upgrade Gear",
+	PromptObject = "Gear Shop",
+	Keeper = "Shop",
+}
+
+-- Every Robux purchase in the world lives here (Monetization adds the auto-collect prompt).
+local ROBUX_BOOTH: BoothSpec = {
+	Name = "RobuxShop",
+	Lateral = -SHOP_LAT,
+	Counter = Color3.fromRGB(0, 120, 255),
+	Stripe = Color3.fromRGB(0, 160, 255),
+	Sign = Color3.fromRGB(40, 190, 255),
+	SignText = "ROBUX SHOP",
+	SignTextColor = Color3.new(1, 1, 1),
+	SignStroke = Color3.fromRGB(0, 40, 110),
+	PromptName = "RobuxShopPrompt",
+	PromptAction = "Open Robux Shop",
+	PromptObject = "Robux Shop",
+	Keeper = "Robux Shop",
+}
+
+local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: BoothSpec)
 	local station = Instance.new("Model")
-	station.Name = "UpgradeStation"
-	local base = PlotLayout.point(plot, SHOP_DEPTH, SHOP_LAT, 0)
+	station.Name = spec.Name
+	local base = PlotLayout.point(plot, SHOP_DEPTH, spec.Lateral, 0)
 	-- Local -Z faces the plaza, so the counter is what you see stepping out of the wash.
 	local plazaCentre = PlotLayout.point(plot, PLAZA_DEPTH, 0, 0)
 	local frame = CFrame.lookAt(base, plazaCentre)
@@ -311,11 +394,10 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 		end
 		return makePart(fields)
 	end
-	local blue = Color3.fromRGB(60, 150, 230)
 	local white = Color3.fromRGB(245, 245, 240)
 	local wood = Color3.fromRGB(200, 150, 95)
 	block("Deck", Vector3.new(9, 0.4, 7), CFrame.new(0, 0.2, 0.5), wood, { Material = Enum.Material.WoodPlanks })
-	local counter = block("Counter", Vector3.new(8, 3.2, 1.6), CFrame.new(0, 2, -2.2), blue)
+	local counter = block("Counter", Vector3.new(8, 3.2, 1.6), CFrame.new(0, 2, -2.2), spec.Counter)
 	block("CounterTop", Vector3.new(8.6, 0.3, 2.2), CFrame.new(0, 3.75, -2.2), white, { CanQuery = false })
 	block("BackWall", Vector3.new(9, 9, 0.6), CFrame.new(0, 4.7, 3.7), wood, { Material = Enum.Material.WoodPlanks })
 	for _, side in { -1, 1 } do
@@ -327,11 +409,11 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 			"Awning",
 			Vector3.new(1.5, 0.25, 7.6),
 			CFrame.new(-3.75 + i * 1.5, 9.1, 0) * CFrame.Angles(math.rad(-12), 0, 0),
-			if i % 2 == 0 then Color3.fromRGB(230, 60, 60) else white,
+			if i % 2 == 0 then spec.Stripe else white,
 			{ CanQuery = false }
 		)
 	end
-	local sign = block("Sign", Vector3.new(8, 2.2, 0.4), CFrame.new(0, 11.2, -0.6), Color3.fromRGB(255, 210, 70), {
+	local sign = block("Sign", Vector3.new(8, 2.2, 0.4), CFrame.new(0, 11.2, -0.6), spec.Sign, {
 		CanQuery = false,
 	})
 	local gui = Instance.new("SurfaceGui")
@@ -342,10 +424,10 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local text = Instance.new("TextLabel")
 	text.Size = UDim2.fromScale(1, 1)
 	text.BackgroundTransparency = 1
-	text.Text = "GEAR SHOP"
+	text.Text = spec.SignText
 	text.Parent = gui
-	UIStyle.text(text, Color3.fromRGB(60, 40, 20), Color3.new(1, 1, 1), 2)
-	-- Upgrades hang on the back wall: a sponge, a brush, a nozzle.
+	UIStyle.text(text, spec.SignTextColor, spec.SignStroke, 2)
+	-- Wares hang on the back wall: a sponge, a brush, a nozzle.
 	block(
 		"Hook1",
 		Vector3.new(1.2, 0.8, 0.4),
@@ -354,15 +436,9 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 		{ CanQuery = false }
 	)
 	block("Hook2", Vector3.new(0.3, 2, 0.4), CFrame.new(0, 6, 3.3), Color3.fromRGB(170, 115, 60), { CanQuery = false })
-	block(
-		"Hook3",
-		Vector3.new(0.5, 0.5, 1.6),
-		CFrame.new(2.6, 6, 3.1),
-		Color3.fromRGB(220, 40, 40),
-		{ CanQuery = false }
-	)
-	local prompt = makePrompt("UpgradePrompt", "Upgrade Gear", 0, counter)
-	prompt.ObjectText = "Gear Shop"
+	block("Hook3", Vector3.new(0.5, 0.5, 1.6), CFrame.new(2.6, 6, 3.1), spec.Stripe, { CanQuery = false })
+	local prompt = makePrompt(spec.PromptName, spec.PromptAction, 0, counter)
+	prompt.ObjectText = spec.PromptObject
 	prompt.MaxActivationDistance = 12
 	station.Parent = parent
 
@@ -380,7 +456,7 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 		keeper.Name = "ShopKeeper"
 		local humanoid = keeper:FindFirstChildOfClass("Humanoid")
 		if humanoid then
-			humanoid.DisplayName = "Shop"
+			humanoid.DisplayName = spec.Keeper
 			humanoid.WalkSpeed = 0
 			humanoid.JumpHeight = 0
 		end
@@ -394,15 +470,17 @@ local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 			end
 		end
 	end)
+end
+
+local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
+	buildBooth(plot, parent, GEAR_BOOTH)
+	buildBooth(plot, parent, ROBUX_BOOTH)
 
 	local gearPos = PlotLayout.point(plot, GEAR_DEPTH, GEAR_LAT, FLOOR_Y - 0.5)
 	makeMarker("GearSpot", CFrame.lookAt(gearPos, gearPos + plot.Right), parent)
 	-- Nose toward the road, beside the gear spot.
 	local truckPos = PlotLayout.point(plot, 24, WASH_LAT - 32, 0)
 	makeMarker("TruckSpot", CFrame.lookAt(truckPos, truckPos + plot.Look), parent)
-	-- The auto-collect kiosk (Monetization): the right of the hub plaza, facing the gear shop.
-	local kioskPos = PlotLayout.point(plot, PLAZA_DEPTH, -(PLAZA_HALF_LAT + 3), 0)
-	makeMarker("KioskSpot", CFrame.lookAt(kioskPos, kioskPos + plot.Right), parent)
 end
 
 local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)

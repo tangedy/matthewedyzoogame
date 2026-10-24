@@ -50,6 +50,7 @@ export type InitialState = {
 	Coins: number,
 	ToolTier: number,
 	ToolName: string,
+	ToolUpgrade: number?, -- sub-tier on the current hose (GearLadder), 0 for the hose itself
 	TutorialCompleted: boolean,
 	GuideStep: string?, -- Wash while the opening lesson is running, otherwise Done
 	PlayCutscene: boolean?,

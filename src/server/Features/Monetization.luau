@@ -24,7 +24,6 @@ local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
-local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Parent.Services
@@ -59,75 +58,36 @@ local function clock(seconds: number): string
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
--- One kiosk at the plot's KioskSpot, past the cache. It sells timed auto-collect only; there
--- is no forever pass.
+-- Robux purchases in the world live at the blue Robux shop on the plaza (WorldBuilder
+-- builds it). Its counter opens the shop panel (client) and carries the timed auto-collect
+-- prompt; there is no forever pass.
 local function ensureStand(bay: Model): Model?
+	-- The old green kiosk from earlier builds of the plot.
 	local zoo = bay:FindFirstChild("Zoo")
-	local existing = zoo and zoo:FindFirstChild("AutoCollectStand")
-	if existing and existing:IsA("Model") and existing:FindFirstChild("TimedCounter") then
-		local forever = existing:FindFirstChild("ForeverCounter")
-		if forever then
-			forever:Destroy()
-		end
-		return existing
+	local old = zoo and zoo:FindFirstChild("AutoCollectStand")
+	if old then
+		old:Destroy()
 	end
-	if existing then
-		existing:Destroy()
-	end
-	local spot = bay:FindFirstChild("KioskSpot")
-	if not zoo or not spot or not spot:IsA("BasePart") then
+	local shop = bay:FindFirstChild("RobuxShop")
+	local counter = shop and shop:FindFirstChild("Counter")
+	if not shop or not shop:IsA("Model") or not counter or not counter:IsA("BasePart") then
 		return nil
 	end
-	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
-	local stand = Instance.new("Model")
-	stand.Name = "AutoCollectStand"
-	local base = spot.Position + Vector3.new(0, 1.6, 0)
-
-	local function kiosk(
-		name: string,
-		promptName: string,
-		title: string,
-		price: string,
-		color: Color3,
-		offset: Vector3
-	): BasePart
-		local counter = Instance.new("Part")
-		counter.Name = name
-		counter.Anchored = true
-		counter.Size = Vector3.new(4.2, 3.2, 2.6)
-		counter.Position = base + offset
-		counter.Color = color
-		counter.Material = Enum.Material.SmoothPlastic
-		counter.TopSurface = Enum.SurfaceType.Smooth
-		counter.BottomSurface = Enum.SurfaceType.Smooth
-		counter.Parent = stand
-		local billboard = Instance.new("BillboardGui")
-		billboard.Name = "Sign"
-		billboard.Size = UDim2.fromOffset(180, 70)
-		billboard.StudsOffset = Vector3.new(0, 3.2, 0)
-		billboard.MaxDistance = 70
-		billboard.Parent = counter
-		local label = Instance.new("TextLabel")
-		label.Name = "Title"
-		label.Size = UDim2.fromScale(1, 1)
-		label.Parent = billboard
-		UIStyle.text(label, Color3.new(1, 1, 1), nil, 3)
-		label.Text = `{title}\n{price}`
+	if not counter:FindFirstChild("TimedPrompt") then
+		local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 		local created = Instance.new("ProximityPrompt")
-		created.Name = promptName
-		created.ActionText = `Buy ({price})`
-		created.ObjectText = title
+		created.Name = "TimedPrompt"
+		created.ActionText = `Buy ({product.Robux} ROBUX)`
+		created.ObjectText = "Auto-Collect 10 MIN"
 		created.HoldDuration = 0 -- the Robux dialog is the confirmation
-		created.MaxActivationDistance = 8
+		created.MaxActivationDistance = 12
 		created.RequiresLineOfSight = false
-		created.KeyboardKeyCode = Enum.KeyCode.E
+		created.KeyboardKeyCode = Enum.KeyCode.F
+		created.GamepadKeyCode = Enum.KeyCode.ButtonY
+		created.UIOffset = Vector2.new(0, -110) -- above the shop's own prompt
 		created.Parent = counter
-		return counter
 	end
-
-	kiosk("TimedCounter", "TimedPrompt", "10 MIN", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.zero)
-	stand.Parent = zoo
-	return stand
+	return shop
 end
 
 local function promptOn(stand: Model, counterName: string, promptName: string): ProximityPrompt?
@@ -144,16 +104,11 @@ local function refreshStand(player: Player)
 	if not stand or not stand.Parent then
 		return
 	end
-	local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
+	local timed = promptOn(stand, "Counter", "TimedPrompt")
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	if timed then
 		timed.Enabled = true
-		timed.ObjectText = "10 MIN"
-		local sign = timed.Parent and timed.Parent:FindFirstChild("Sign")
-		local title = sign and sign:FindFirstChild("Title")
-		if title and title:IsA("TextLabel") then
-			title.Text = `10 MIN\n{product.Robux} ROBUX`
-		end
+		timed.ObjectText = "Auto-Collect 10 MIN"
 		local left = MonetizationGrants.autoCollectLeft(player)
 		timed.ActionText = if left > 0
 			then `Add 10 minutes ({product.Robux} ROBUX) {clock(left)} left`
@@ -177,7 +132,7 @@ local function bindStand(player: Player, bay: Model)
 	local stand = ensureStand(bay)
 	if stand then
 		standByPlayer[player] = stand
-		local timed = promptOn(stand, "TimedCounter", "TimedPrompt")
+		local timed = promptOn(stand, "Counter", "TimedPrompt")
 		if timed then
 			bindPrompt(timed, player, "AutoCollect2h")
 		end

@@ -26,7 +26,7 @@ CutsceneService.init()
 ZooService.init()
 PlayerDataService.init()
 EconomyService.init()
-CleaningService.init({ getTool = EconomyService.getTool })
+CleaningService.init({ getTool = EconomyService.getGear })
 StationProps.init()
 DevService.init()
 
@@ -54,12 +54,13 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 	end
 	initialStatePending[player] = true
 	local data = PlayerDataService.waitFor(player, 30)
-	local tool = EconomyService.getTool(player)
+	local tool = EconomyService.getGear(player)
 	local state = {
 		DataStatus = PlayerDataService.getStatus(player) or "Failed",
 		Coins = if data then data.Coins else 0,
 		ToolTier = if tool then tool.Tier else 1,
 		ToolName = if tool then tool.Name else "",
+		ToolUpgrade = if tool then tool.Level else 0,
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		GuideStep = if data then data.GuideStep else "Done",
 		PlayCutscene = if data then not data.CutsceneSeen else false,

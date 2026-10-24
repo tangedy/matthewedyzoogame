@@ -1,5 +1,6 @@
--- Delivery truck (TruckConfig): every few minutes a truck drives down the dirt road, parks at
--- the player's zoo for ParkSeconds carrying one high-rarity animal, then drives on.
+-- Delivery truck (TruckConfig): once the player owns the Garden Hose, every few minutes a truck
+-- drives down the dirt road, parks at the player's zoo for ParkSeconds carrying one animal a
+-- rarity above what their hose can wash (fixed odds at the top tiers), then drives on.
 -- Holding the prompt on the truck buys the animal for Robux through the Monetization feature:
 --   * when the truck parks, the offer is written to data.Extra.Truck.Offer (server-chosen),
 --   * the prompt fires Hooks "TruckBuyRequested" (player); Monetization prompts the product,
@@ -12,8 +13,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local TruckConfig = require(ReplicatedStorage.Shared.FeatureConfig.TruckConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -47,20 +50,48 @@ local function truckData(player: Player): { [string]: any }?
 	return data.Extra.Truck
 end
 
--- A high-rarity species (weighted by spawn weight) and a mutation roll.
-local function pickAnimal(): (string, string)
-	local minOrder = RarityConfig.ByKey[TruckConfig.MinRarity].Order
+local function toolTier(player: Player): number
+	local data = PlayerDataService.get(player)
+	return if data then data.ToolTier else 1
+end
+
+-- The truck's rarity: one above the rarest this hose can wash, or the high-tier roll once
+-- that is Farm God or better.
+local function pickRarity(player: Player): string
+	local tool = ToolConfig[toolTier(player)] or ToolConfig[1]
+	local above = CleanPower.rarityAbove(tool.CleaningPower)
+	if RarityConfig.ByKey[above].Order < RarityConfig.ByKey[TruckConfig.HighTierFrom].Order then
+		return above
+	end
+	local roll = rng:NextNumber()
+	local chances: { [string]: number } = TruckConfig.HighTierChances
+	-- Rarest first, so the odds read the same whatever order the table lists them in.
+	for index = #RarityConfig.List, 1, -1 do
+		local key = RarityConfig.List[index].Key
+		local p = chances[key]
+		if p then
+			roll -= p
+			if roll < 0 then
+				return key
+			end
+		end
+	end
+	return TruckConfig.HighTierFallback
+end
+
+-- A species of that rarity (weighted by spawn weight) and a mutation roll.
+local function pickAnimal(player: Player): (string, string)
+	local rarityKey = pickRarity(player)
 	local pool, total = {}, 0
 	for key, def in AnimalConfig.Animals do
-		local rarity = RarityConfig.ByKey[def.Rarity]
-		if rarity and rarity.Order >= minOrder and not def.Limited and def.SpawnWeight > 0 then
+		if def.Rarity == rarityKey and not def.Limited and def.SpawnWeight > 0 then
 			table.insert(pool, key)
 			total += def.SpawnWeight
 		end
 	end
 	table.sort(pool)
 	local roll = rng:NextNumber(0, total)
-	local species = pool[#pool]
+	local species = pool[#pool] or AnimalConfig.FallbackAnimal
 	for _, key in pool do
 		roll -= AnimalConfig.Animals[key].SpawnWeight
 		if roll <= 0 then
@@ -167,7 +198,7 @@ local function visit(player: Player, bay: Model)
 	if not entrance or not entrance:IsA("BasePart") then
 		return
 	end
-	local species, mutation = pickAnimal()
+	local species, mutation = pickAnimal(player)
 	local def = AnimalConfig.Animals[species]
 	local product = MonetizationConfig.ProductsByKey[TruckConfig.ProductKey]
 	local robux = if product then product.Robux else 200
@@ -249,7 +280,18 @@ local function visit(player: Player, bay: Model)
 end
 
 local function run(player: Player, bay: Model)
-	task.wait(TruckConfig.FirstArrivalSeconds)
+	if toolTier(player) >= TruckConfig.UnlockToolTier then
+		task.wait(TruckConfig.FirstArrivalSeconds)
+	else
+		-- No trucks until the second hose upgrade; the first one follows soon after it.
+		while toolTier(player) < TruckConfig.UnlockToolTier do
+			task.wait(1)
+			if not player.Parent or not bay.Parent then
+				return
+			end
+		end
+		task.wait(TruckConfig.FirstAfterUnlockSeconds)
+	end
 	while player.Parent and bay.Parent do
 		local ok, err = pcall(visit, player, bay)
 		if not ok then

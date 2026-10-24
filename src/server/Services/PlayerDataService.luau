@@ -14,6 +14,7 @@ local RunService = game:GetService("RunService")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -52,6 +53,7 @@ export type SavedData = {
 	SchemaVersion: number,
 	Coins: number,
 	ToolTier: number,
+	ToolUpgrade: number, -- sub-tier bought on the current hose (GearLadder); 0 is the hose itself
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
 	-- First lesson is the wash. "Done" once the intro auto-sells are finished.
@@ -104,6 +106,7 @@ local function defaults(): SavedData
 		SchemaVersion = SCHEMA_VERSION,
 		Coins = GameConfig.StartingCoins,
 		ToolTier = 1,
+		ToolUpgrade = 0,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
 		GuideStep = "Wash",
@@ -290,6 +293,7 @@ local function sanitize(raw: any): SavedData
 		tier += 1
 	end
 	data.ToolTier = if ToolConfig[tier] then tier else 1
+	data.ToolUpgrade = math.min(cleanCount(raw.ToolUpgrade), GearLadder.upgradeCount(data.ToolTier))
 
 	local version = cleanCount(raw.SchemaVersion)
 	-- v4 replaced the 4/6/8 pen row with face stalls (6) and a small barn (10).

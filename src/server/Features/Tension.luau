@@ -27,6 +27,7 @@ local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local TensionConfig = require(ReplicatedStorage.Shared.FeatureConfig.TensionConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -108,19 +109,20 @@ local function isFiniteNumber(n: any): boolean
 end
 
 -- Seconds a wash would take spraying one patch at a time with this player's hose (an upper
--- bound; CleaningService removes `power` from every patch a spray hits).
+-- bound; CleaningService removes `power * WashSpeed` from every patch a spray hits).
 local function expectedWashSeconds(player: Player, species: string, mutation: string?): number
 	local def = AnimalConfig.Animals[species]
 	local multiplier = Hooks.apply("WashTimeMultiplier", def.WashTimeMultiplier, player, species, mutation)
 	if not isFiniteNumber(multiplier) then
 		multiplier = def.WashTimeMultiplier
 	end
-	local tool = EconomyService.getTool(player) or ToolConfig[1]
+	local tool = EconomyService.getGear(player) or GearLadder.get(1)
 	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
 	if not isFiniteNumber(power) or power <= 0 then
 		power = tool.CleaningPower
 	end
-	return GameConfig.BaseWashSeconds * ToolConfig[1].CleaningPower * math.max(0.05, multiplier) / power
+	local speed = power * tool.WashSpeed
+	return GameConfig.BaseWashSeconds * ToolConfig[1].CleaningPower * math.max(0.05, multiplier) / speed
 end
 
 -- Rarity defaults with the species override on top, then patience and the wander-off timer

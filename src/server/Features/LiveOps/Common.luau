@@ -22,6 +22,12 @@ export type State = {
 	PlaySeconds: number, -- seconds actually in a server, across sessions
 	Milestones: { [string]: number },
 	OfflineDouble: number, -- welcome-back cash that can still be doubled once
+	RareClock: number, -- play seconds toward the next guaranteed rarer walk-in
+	CheckInDay: number?, -- UTC day number of the last check-in claim
+	CheckInCount: number, -- days claimed in the current seven-day chart (0..7)
+	EarningsBuff: boolean, -- check-in day 4: permanent income multiplier
+	ProWasher: boolean, -- check-in day 6: PRO WASHER chat title
+	CheckInUnlocked: boolean, -- has upgraded gear once and placed an animal; the chart shows from then on
 }
 
 local Common = {}
@@ -82,6 +88,13 @@ function Common.state(player: Player): State?
 	end
 	raw.PlaySeconds = math.clamp(math.floor(finite(raw.PlaySeconds) or 0), 0, 315360000)
 	raw.OfflineDouble = math.max(0, math.floor(finite(raw.OfflineDouble) or 0))
+	raw.RareClock = math.max(0, math.floor(finite(raw.RareClock) or 0))
+	local checkInDay = finite(raw.CheckInDay)
+	raw.CheckInDay = if checkInDay and checkInDay > 0 then math.floor(checkInDay) else nil
+	raw.CheckInCount = math.clamp(math.floor(finite(raw.CheckInCount) or 0), 0, 7)
+	raw.EarningsBuff = raw.EarningsBuff == true
+	raw.ProWasher = raw.ProWasher == true
+	raw.CheckInUnlocked = raw.CheckInUnlocked == true
 	-- Seed from washes already finished so a zoo in progress still hits the next pity mark.
 	-- Counted when an animal walks in. Not replicated.
 	local rolled = finite(raw.WashesRolled)

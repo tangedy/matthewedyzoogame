@@ -72,6 +72,9 @@ type SocialData = {
 
 local followers: { [Player]: { Model } } = {}
 local followerKey: { [Player]: string } = {}
+-- Pet footprints for the follow step, which runs every frame. A pet's size only changes if
+-- it is rescaled, so measure once per scale instead of every frame.
+local petSizes: { [Model]: { Scale: number, Size: Vector3 } } = setmetatable({}, { __mode = "k" }) :: any
 local sessionStart: { [Player]: number } = {}
 local folder: Folder
 
@@ -350,7 +353,14 @@ local function step(dt: number)
 			if not model.Parent then
 				continue
 			end
-			local _, size = model:GetBoundingBox()
+			local scale = model:GetScale()
+			local measured = petSizes[model]
+			if not measured or measured.Scale ~= scale then
+				local _, extents = model:GetBoundingBox()
+				measured = { Scale = scale, Size = extents }
+				petSizes[model] = measured
+			end
+			local size = measured.Size
 			local lateral = (index - (count + 1) / 2) * math.max(4.5, size.X * 0.55)
 			local back = math.max(6, size.Z * 0.5 + 3)
 			local goal = (root.CFrame * CFrame.new(lateral, 0, back)).Position

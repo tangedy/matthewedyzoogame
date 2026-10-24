@@ -36,6 +36,25 @@ function CleanPower.stepsAbove(power: number, rarityKey: string): number?
 	return nil
 end
 
+-- The rarest tier this power can wash (rarities are ordered by required power), or nil.
+function CleanPower.maxWashable(power: number): string?
+	local best: string? = nil
+	for _, entry in RarityConfig.List do
+		if CleanPower.canClean(power, entry.Key) then
+			best = entry.Key
+		end
+	end
+	return best
+end
+
+-- One rarity above the rarest this power can wash, capped at the rarest tier there is.
+function CleanPower.rarityAbove(power: number): string
+	local best = CleanPower.maxWashable(power)
+	local order = if best then RarityConfig.ByKey[best].Order else 0
+	local index = math.clamp(order + 1, 1, #RarityConfig.List)
+	return RarityConfig.List[index].Key
+end
+
 -- The cheapest hose that can wash this rarity, or nil when none of them can.
 function CleanPower.hoseName(rarityKey: string): string?
 	local need = CleanPower.required(rarityKey)

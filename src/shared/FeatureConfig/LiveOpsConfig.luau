@@ -1,6 +1,7 @@
 -- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
--- Animal, the scheduled Mud Storm, offline earnings, the zoo star rating, leaderstats and the
--- plaza leaderboard, and the analytics funnel. All times are UTC so every server agrees.
+-- Animal, the five-minute rare guarantee, the seven-day check-in, the scheduled Mud Storm,
+-- offline earnings, the zoo star rating, leaderstats and the plaza leaderboard, and the
+-- analytics funnel. All times are UTC so every server agrees.
 -- Rotating variant events (Gold Rush, Rainbow Rush, and the rest) and the hidden gold/rainbow
 -- odds are not in this file. Edit src/server/DevParams.json.
 
@@ -11,6 +12,18 @@ export type StormSlot = {
 	Weekday: number?, -- 1 = Sunday ... 7 = Saturday; nil = every day
 }
 
+export type CheckInReward = {
+	Kind: string,
+	Label: string,
+	Detail: string,
+	Amount: number?,
+	Species: string?,
+	Rarity: string?,
+	Mutation: string?,
+	Multiplier: number?,
+	Text: string?,
+}
+
 local LiveOpsConfig = {
 	Daily = {
 		MinRarity = "Rare", -- the daily animal is this tier or better (and allowed by the hose)
@@ -19,6 +32,28 @@ local LiveOpsConfig = {
 		-- Species are picked by SpawnWeight ^ WeightExponent: below 1 flattens the odds so
 		-- the daily animal is more often something exciting.
 		WeightExponent = 0.5,
+	},
+
+	-- Every EverySeconds of play time (saved across sessions), the next walk-in is a species one
+	-- rarity above the rarest the player's hose can wash.
+	RareGuarantee = {
+		EverySeconds = 300,
+	},
+
+	-- Seven-day check-in: one claim per UTC day, in order. Missing a day does not reset the
+	-- chart; after day 7 it starts over at day 1 (permanent rewards are kept, never stacked).
+	-- Kind: "Cash" (Amount) | "Animal" (Species or Rarity, Mutation) | "EarningsBuff" (Multiplier)
+	-- | "Title" (Text). Label / Detail are what the chart shows.
+	CheckIn = {
+		Rewards = {
+			{ Kind = "Cash", Amount = 1000, Label = "$1,000", Detail = "Cash" },
+			{ Kind = "Animal", Species = "Horse", Mutation = "Rainbow", Label = "Rainbow Horse", Detail = "Animal" },
+			{ Kind = "Cash", Amount = 100000, Label = "$100,000", Detail = "Cash" },
+			{ Kind = "EarningsBuff", Multiplier = 1.25, Label = "1.25x Earnings", Detail = "Permanent" },
+			{ Kind = "Cash", Amount = 1000000, Label = "$1,000,000", Detail = "Cash" },
+			{ Kind = "Title", Text = "PRO WASHER", Label = "PRO WASHER", Detail = "Chat title, permanent" },
+			{ Kind = "Animal", Rarity = "Secret", Label = "Random Secret", Detail = "Secret animal" },
+		} :: { CheckInReward },
 	},
 
 	MudStorm = {

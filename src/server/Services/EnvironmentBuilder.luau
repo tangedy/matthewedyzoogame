@@ -49,6 +49,7 @@ local function part(props: { [string]: any }): Part
 	p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Material = Enum.Material.SmoothPlastic
 	p.CanQuery = false
+	p.CanTouch = false -- scenery never needs touch events; skips that physics work
 	for key, value in props do
 		(p :: any)[key] = value
 	end
@@ -564,9 +565,13 @@ function EnvironmentBuilder.build()
 	buildRoadside()
 	buildPlots()
 	buildPond()
-	buildTrees()
-	buildHills()
-	buildClouds()
+	-- The forest, hills and clouds yield as they build. Run them on their own thread so
+	-- services and player loading start right away instead of waiting on scenery.
+	task.spawn(function()
+		buildTrees()
+		buildHills()
+		buildClouds()
+	end)
 end
 
 return EnvironmentBuilder

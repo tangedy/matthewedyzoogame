@@ -155,15 +155,24 @@ local GameConfig = {
 		ShowcaseMutation = "Diamond",
 	},
 
-	-- Spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator; the avatar is
-	-- loaded at runtime and a stand-in is used if that load fails. E skips it after SkipAfter.
+	-- Spawn cutscene, in the real world: you sponge a muddy piglet at your own starter bay, the
+	-- ground shakes, the camera whip-pans across the road to a fully upgraded farm and pulls
+	-- back to show a top player on a crane rig fire-hosing a Kaiju at its wash. That player
+	-- wears AvatarUserId's look (a stand-in if it fails to load); no name is ever shown.
+	-- Beat times are seconds from the start; Duration ends it; E skips after SkipAfter.
+	-- Read through Shared.CutsceneSettings, which fills in any key missing here.
 	Cutscene = {
-		Duration = 12,
+		Duration = 15,
 		SkipAfter = 5,
 		AvatarUserId = 140258990,
-		Species = "TRex",
-		Scale = 1.35,
-		HoseTier = 6,
+		Species = "Kaiju",
+		PigletScale = 0.75,
+		Beats = { Shake = 3.0, Whip = 4.4, Reveal = 5.2, Hero = 11.0 },
+		Sounds = {
+			Rumble = "rbxasset://sounds/impact_explosion_03.mp3",
+			Whoosh = "rbxasset://sounds/action_falling.ogg",
+			Cannon = "rbxasset://sounds/impact_water.mp3",
+		},
 	},
 
 	-- Shop

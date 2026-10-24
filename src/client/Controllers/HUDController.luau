@@ -389,12 +389,12 @@ end
 
 -- Persistent warning: the doc requires explaining when progress can't be saved.
 local function showDataWarning(status: Types.DataStatus)
-	-- Left column, under the SHOP button. A full-width footer covered the index, the
-	-- shop, and the phone thumbstick.
+	-- Left column, under the SHOP and DAILY buttons. A full-width footer covered the index,
+	-- the shop, and the phone thumbstick.
 	local warning = textLabel(gui, {
 		Name = "DataWarning",
 		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 16, 0.5, 100),
+		Position = UDim2.new(0, 16, 0.5, 140),
 		Size = UDim2.fromOffset(210, 52),
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,

@@ -193,13 +193,29 @@ function ZooController.init(initial: Types.InitialState)
 	end)
 
 	-- Rainbow labels: slide every tagged gradient along so the colours flow.
+	-- The tagged sets are tracked through signals instead of fetched fresh every frame.
+	local function tracked(tag: string): { [Instance]: true }
+		local set: { [Instance]: true } = {}
+		for _, inst in CollectionService:GetTagged(tag) do
+			set[inst] = true
+		end
+		CollectionService:GetInstanceAddedSignal(tag):Connect(function(inst)
+			set[inst] = true
+		end)
+		CollectionService:GetInstanceRemovedSignal(tag):Connect(function(inst)
+			set[inst] = nil
+		end)
+		return set
+	end
+	local gradients = tracked(UIStyle.RainbowTag)
+	local rings = tracked(UIStyle.RainbowRingTag)
 	RunService.RenderStepped:Connect(function()
-		local offset = (os.clock() * 0.6) % 2 - 1
-		for _, gradient in CollectionService:GetTagged(UIStyle.RainbowTag) do
-			(gradient :: UIGradient).Offset = Vector2.new(offset, 0)
+		local offset = Vector2.new((os.clock() * 0.6) % 2 - 1, 0)
+		for gradient in gradients do
+			(gradient :: UIGradient).Offset = offset
 		end
 		local hue = Color3.fromHSV((os.clock() * 0.25) % 1, 0.55, 1)
-		for _, ring in CollectionService:GetTagged(UIStyle.RainbowRingTag) do
+		for ring in rings do
 			(ring :: BasePart).Color = hue
 		end
 	end)

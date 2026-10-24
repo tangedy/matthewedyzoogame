@@ -13,7 +13,7 @@ local Workspace = game:GetService("Workspace")
 
 local WashTool = require(ReplicatedStorage.Shared.WashTool)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIPlatform = require(script.Parent.Parent.UI)
@@ -171,7 +171,7 @@ local cleaningIntent = Remotes.event("CleaningIntent")
 local jobId: string? = nil
 local washing = false
 local bayName: string? = nil
-local range = ToolConfig[1].Range
+local range = GearLadder.get(1).Range
 
 local mouseHeld, touchHeld, padHeld = false, false, false
 local lastSendAt = 0
@@ -206,6 +206,9 @@ local sprayStartedAt = 0 -- os.clock() when the current spray began
 local sprayOnTarget = false
 local sprayScreenPoint = Vector2.zero
 local random = Random.new()
+-- Reused every frame; only the exclusion list changes.
+local sprayParams = RaycastParams.new()
+sprayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function getRoot(): BasePart?
 	local character = player.Character
@@ -700,8 +703,7 @@ local function onHeartbeat()
 		elseif shiftLock then viewport / 2
 		else UserInputService:GetMouseLocation()
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
+	local params = sprayParams
 	params.FilterDescendantsInstances = characterExclusions()
 
 	local origin = root.Position + GameConfig.NozzleOffset
@@ -840,9 +842,9 @@ local function applyBay(bay: Types.BaySnapshot?)
 	end
 end
 
--- Range drives aiming; the tier's feel sets the jet, particles and sounds.
-local function applyTier(tier: number)
-	local tool = ToolConfig[tier] or ToolConfig[1]
+-- Range drives aiming (a sub-tier can stretch it); the tier's feel sets the jet, particles and sounds.
+local function applyTier(tier: number, _name: string?, level: number?)
+	local tool = GearLadder.get(tier, level)
 	range = tool.Range
 	feel = FEEL[tool.Tier] or FEEL[1]
 	if beam then
@@ -880,7 +882,7 @@ end
 
 function CleaningController.init(initial: Types.InitialState)
 	buildEffects()
-	applyTier(initial.ToolTier)
+	applyTier(initial.ToolTier, initial.ToolName, initial.ToolUpgrade)
 	buildReticle()
 	bindInput()
 	applyBay(initial.Bay)

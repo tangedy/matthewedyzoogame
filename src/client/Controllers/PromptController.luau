@@ -39,6 +39,7 @@ local COLORS: { [string]: Color3 } = {
 	TruckPrompt = BUY,
 	UnlockPrompt = BUY,
 	TimedPrompt = BUY,
+	RobuxShopPrompt = Color3.fromRGB(0, 140, 255),
 	PetPrompt = Color3.fromRGB(190, 120, 255),
 	PetPrompt2 = Color3.fromRGB(190, 120, 255),
 }
@@ -46,6 +47,7 @@ local COLORS: { [string]: Color3 } = {
 -- Prompts whose object needs no name over the button.
 local NO_TITLE: { [string]: boolean } = {
 	UpgradePrompt = true,
+	RobuxShopPrompt = true,
 }
 
 type Button = {

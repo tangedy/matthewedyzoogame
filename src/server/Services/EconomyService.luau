@@ -3,6 +3,8 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -24,6 +26,12 @@ end
 function EconomyService.getTool(player: Player): ToolConfig.ToolTier?
 	local data = PlayerDataService.get(player)
 	return data and ToolConfig[data.ToolTier]
+end
+
+-- The player's hose with its bought sub-tier applied: range, spray, wash speed and wash perks.
+function EconomyService.getGear(player: Player): GearLadder.Step?
+	local data = PlayerDataService.get(player)
+	return data and GearLadder.get(data.ToolTier, data.ToolUpgrade)
 end
 
 -- Coins from a completed wash. Amount comes from server config.
@@ -77,12 +85,14 @@ function EconomyService.grant(player: Player, amount: number): boolean
 end
 
 -- Writes the next hose onto the profile and tells the client. Cash is the caller's job.
+-- A new hose starts at its own sub-tier I.
 local function commitTier(player: Player, data: PlayerDataService.SavedData, nextTool: ToolConfig.ToolTier)
 	local previousTier = data.ToolTier
 	data.ToolTier = nextTool.Tier
+	data.ToolUpgrade = 0
 	CleanGateService.onTiersGained(player, previousTier, nextTool.Tier)
 	PlayerDataService.saveNow(player)
-	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name)
+	toolTierChanged:FireClient(player, nextTool.Tier, nextTool.Name, 0)
 	CleaningService.refreshHose(player)
 	Hooks.fire("ToolPurchased", player, nextTool.Tier, nextTool.Name)
 end
@@ -99,7 +109,8 @@ function EconomyService.grantToolTier(player: Player, tier: number): boolean
 	return true
 end
 
--- Buys the next hose tier. The server picks the tier and price; nothing comes from the client.
+-- Buys the next step on the gear ladder: the current hose's next sub-tier, or the next hose
+-- once those are all owned. The server picks the step and price; nothing comes from the client.
 -- Doesn't yield, so two requests can't both pass the balance check.
 local function purchaseToolUpgrade(player: Player)
 	local data = PlayerDataService.get(player)
@@ -107,34 +118,49 @@ local function purchaseToolUpgrade(player: Player)
 		purchaseResult:FireClient(player, false, "Still loading your data. Try again in a moment.")
 		return
 	end
-	local nextTool = ToolConfig[data.ToolTier + 1]
-	if not nextTool then
+	local step = GearLadder.next(data.ToolTier, data.ToolUpgrade)
+	if not step then
 		purchaseResult:FireClient(player, false, "Your gear is already fully upgraded!")
 		return
 	end
-	if data.Coins < nextTool.Price then
+	if data.Coins < step.Price then
 		purchaseResult:FireClient(
 			player,
 			false,
-			`Not enough cash. You need {UIStyle.formatMoney(nextTool.Price - data.Coins)} more.`
+			`Not enough cash. You need {UIStyle.formatMoney(step.Price - data.Coins)} more.`
 		)
 		return
 	end
 
-	data.Coins -= nextTool.Price
+	data.Coins -= step.Price
 	coinsChanged:FireClient(player, data.Coins)
-	commitTier(player, data, nextTool)
-	purchaseResult:FireClient(player, true, `Upgraded to {nextTool.Name}!`)
+	if step.Level == 0 then
+		commitTier(player, data, ToolConfig[step.Tier])
+	else
+		data.ToolUpgrade = step.Level
+		PlayerDataService.saveNow(player)
+		toolTierChanged:FireClient(player, step.Tier, step.Name, step.Level)
+		Hooks.fire("GearUpgraded", player, step.Tier, step.Level, step.Label)
+	end
+	purchaseResult:FireClient(player, true, `Upgraded to {step.Label}!`)
 end
 
 function EconomyService.sendTool(player: Player)
-	local tool = EconomyService.getTool(player)
-	if tool then
-		toolTierChanged:FireClient(player, tool.Tier, tool.Name)
+	local gear = EconomyService.getGear(player)
+	if gear then
+		toolTierChanged:FireClient(player, gear.Tier, gear.Name, gear.Level)
 	end
 end
 
 function EconomyService.init()
+	-- Sub-tier wash perks: more seconds of income per wash, plus a flat cash bonus.
+	Hooks.modify("WashReward", function(reward: number, player: Player): number
+		local gear = EconomyService.getGear(player)
+		if not gear then
+			return reward
+		end
+		return reward * gear.WashRewardSeconds / GameConfig.WashRewardSeconds * (1 + gear.WashCashBonus)
+	end)
 	local lastPurchaseAt: { [Player]: number } = {}
 	Remotes.event("PurchaseToolUpgrade").OnServerEvent:Connect(function(player)
 		local now = os.clock()

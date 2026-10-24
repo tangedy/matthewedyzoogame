@@ -5,15 +5,16 @@
 -- a product key, and offers / auto-opens never show in a session's first QuietSeconds.
 
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local MonetizationShop = require(script.Parent.MonetizationShop)
@@ -63,6 +64,7 @@ local failedHoseBuys = 0
 local autoOpens = 0
 local coins = 0
 local toolTier = 1
+local toolLevel = 0 -- sub-tier on the current hose
 local clickSound: Sound
 local buySound: Sound
 
@@ -342,8 +344,8 @@ local function watchHoseShop()
 	for _, child in panel:GetChildren() do
 		if child:IsA("TextButton") then
 			child.Activated:Connect(function()
-				local nextTool = ToolConfig[toolTier + 1]
-				if string.sub(child.Text, 1, 7) == "Buy for" and nextTool and coins < nextTool.Price then
+				local nextStep = GearLadder.next(toolTier, toolLevel)
+				if string.sub(child.Text, 1, 7) == "Buy for" and nextStep and coins < nextStep.Price then
 					onCurrencyFailed()
 				end
 			end)
@@ -471,6 +473,7 @@ end
 function MonetizationController.init(initial: Types.InitialState)
 	coins = initial.Coins
 	toolTier = initial.ToolTier
+	toolLevel = initial.ToolUpgrade or 0
 	buyRemote = Remotes.event("MonetizationBuy")
 	stateFunction = Remotes.func("GetMonetizationState")
 	buildGui()
@@ -510,10 +513,18 @@ function MonetizationController.init(initial: Types.InitialState)
 	Remotes.event("WashCompleted").OnClientEvent:Connect(function(_jobId: string, _reward: number, value: number)
 		coins = value
 	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number)
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
 		toolTier = value
+		toolLevel = newLevel or 0
 	end)
 	task.spawn(watchHoseShop)
+
+	-- The blue Robux shop on the plaza opens the same panel as the SHOP button.
+	ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt)
+		if prompt.Name == "RobuxShopPrompt" then
+			MonetizationShop.open(nil)
+		end
+	end)
 
 	requestState()
 	task.spawn(function()

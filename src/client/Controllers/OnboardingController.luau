@@ -11,7 +11,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -54,6 +54,7 @@ local guideStep = "Done"
 local introLeft = 0
 local coins = 0
 local tier = 1
+local level = 0 -- sub-tier on the current hose
 local bayName: string? = nil
 local jobId: string? = nil
 local washing = false
@@ -195,8 +196,8 @@ local function upgradeCounter(): BasePart?
 end
 
 local function upgradeAffordable(): boolean
-	local nextTool = ToolConfig[tier + 1]
-	return nextTool ~= nil and coins >= nextTool.Price
+	local nextStep = GearLadder.next(tier, level)
+	return nextStep ~= nil and coins >= nextStep.Price
 end
 
 -- The parked delivery truck's bed while it still has an animal for sale.
@@ -464,6 +465,7 @@ function OnboardingController.init(initial: Types.InitialState)
 	tutorialCompleted = initial.TutorialCompleted
 	coins = initial.Coins
 	tier = initial.ToolTier
+	level = initial.ToolUpgrade or 0
 	buildGui()
 	applyGuide(initial.GuideStep or "Done")
 	applyBay(initial.Bay)
@@ -493,8 +495,9 @@ function OnboardingController.init(initial: Types.InitialState)
 	Remotes.event("CoinsChanged").OnClientEvent:Connect(function(value: number)
 		coins = value
 	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number)
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
 		tier = value
+		level = newLevel or 0
 	end)
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
 		if prompt.Name == "UpgradePrompt" then

@@ -338,16 +338,16 @@ local function bayOf(player: Player): Model?
 	return nil
 end
 
--- Rebuilds the station gear when the tier changes. Cheap to call again with the same tier.
-function StationProps.refresh(player: Player, tier: number)
-	local bay = bayOf(player)
-	local spot = bay and bay:FindFirstChild("GearSpot")
-	if not bay or not spot or not spot:IsA("BasePart") then
-		return
+-- Parks this tier's gear (and, at tier 6, the fire truck) in a bay, replacing any older set.
+-- Also used for the spawn cutscene's maxed farm, which has no owner.
+function StationProps.buildGear(bay: Model, tier: number): Model?
+	local spot = bay:FindFirstChild("GearSpot")
+	if not spot or not spot:IsA("BasePart") then
+		return nil
 	end
 	local existing = bay:FindFirstChild(GEAR_NAME)
 	if existing and existing:GetAttribute("Tier") == tier then
-		return
+		return existing :: Model
 	end
 	if existing then
 		existing:Destroy()
@@ -373,7 +373,22 @@ function StationProps.refresh(player: Player, tier: number)
 	kitModel.WorldPivot = spot.CFrame
 	kitModel:ScaleTo(GEAR_SCALE)
 	gear.Parent = bay
-	StationProps.link(player)
+	return gear
+end
+
+-- Rebuilds the station gear when the tier changes. Cheap to call again with the same tier.
+function StationProps.refresh(player: Player, tier: number)
+	local bay = bayOf(player)
+	if not bay then
+		return
+	end
+	local existing = bay:FindFirstChild(GEAR_NAME)
+	if existing and existing:GetAttribute("Tier") == tier then
+		return
+	end
+	if StationProps.buildGear(bay, tier) then
+		StationProps.link(player)
+	end
 end
 
 -- Runs the hose line from the gear to the tool in the player's hand, when this tier has one.

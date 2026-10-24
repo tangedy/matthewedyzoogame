@@ -16,7 +16,7 @@ local EVENTS = {
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
 	"CoinsChanged", -- (coins: number)
-	"ToolTierChanged", -- (tier: number, name: string)
+	"ToolTierChanged", -- (tier: number, name: string, level: number) level is the GearLadder sub-tier
 	"WashCompleted", -- (jobId: string, reward: number, coins: number, discoveryBonus: number)
 	"PurchaseResult", -- (success: boolean, message: string)
 	"ZooChanged", -- (ZooSummary)

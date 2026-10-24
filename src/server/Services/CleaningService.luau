@@ -14,6 +14,7 @@ local Workspace = game:GetService("Workspace")
 
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local WashTool = require(ReplicatedStorage.Shared.WashTool)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -65,7 +66,7 @@ local cleanNowCredit: { [Player]: number } = {}
 
 local progressChanged = Remotes.event("CleaningProgressChanged")
 
-local getTool: (Player) -> ToolConfig.ToolTier? = function(_player)
+local getTool: (Player) -> GearLadder.Step? = function(_player)
 	return nil
 end
 
@@ -226,12 +227,13 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 		bonus = GameConfig.Coop.HelperBonus.Standard
 	end
 	local coop = 1 + math.max(0, helping - 1) * bonus
-	local amount = power * step * coop
+	-- Hose sub-tiers wash faster without raising the power the rarity gates check.
+	local amount = power * tool.WashSpeed * step * coop
 	local ownerSpray = player == job.Owner
 	for _, patch in hitPatches do
 		local nextRemaining = math.max(0, patch.RemainingDirt - amount)
 		local fraction = nextRemaining / patch.InitialDirt
-		if ownerSpray and fraction <= GameConfig.PatchCleanThreshold then
+		if ownerSpray and fraction <= tool.SnapThreshold then
 			nextRemaining = 0
 		end
 		patch.RemainingDirt = nextRemaining
@@ -276,7 +278,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	end
 end
 
-function CleaningService.init(deps: { getTool: (Player) -> ToolConfig.ToolTier? })
+function CleaningService.init(deps: { getTool: (Player) -> GearLadder.Step? })
 	getTool = deps.getTool
 	Remotes.event("CleaningIntent").OnServerEvent:Connect(onCleaningIntent)
 	Players.PlayerRemoving:Connect(function(player)

@@ -1,5 +1,6 @@
--- Puts a black-stroked rainbow VIP title in front of chat messages for anyone
--- the server marked with the Vip attribute. It is not drawn over the avatar.
+-- Puts black-stroked rainbow titles in front of chat messages: VIP for anyone the server
+-- marked with the Vip attribute, PRO WASHER for the ProWasher attribute (daily check-in).
+-- They are not drawn over the avatar.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,17 +13,28 @@ local Social = {}
 
 function Social.init(_initial: any)
 	local title = UIStyle.vipChatTitle(MonetizationConfig.VIP.TagText)
+	local proTitle = UIStyle.vipChatTitle("PRO WASHER") -- daily check-in, day 6
 	TextChatService.OnIncomingMessage = function(message: TextChatMessage): TextChatMessageProperties?
 		local source = message.TextSource
 		if not source then
 			return nil
 		end
 		local speaker = Players:GetPlayerByUserId(source.UserId)
-		if not speaker or speaker:GetAttribute("Vip") ~= true then
+		if not speaker then
+			return nil
+		end
+		local prefix = ""
+		if speaker:GetAttribute("Vip") == true then
+			prefix ..= `{title} `
+		end
+		if speaker:GetAttribute("ProWasher") == true then
+			prefix ..= `{proTitle} `
+		end
+		if prefix == "" then
 			return nil
 		end
 		local props = Instance.new("TextChatMessageProperties")
-		props.PrefixText = `{title} {message.PrefixText}`
+		props.PrefixText = `{prefix}{message.PrefixText}`
 		return props
 	end
 end

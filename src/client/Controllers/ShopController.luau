@@ -1,5 +1,6 @@
 -- Hose upgrade shop: opens from the station's ProximityPrompt, never automatically.
--- Shows current/next tier, the cleaning speed gain and price; the server validates purchases.
+-- Shows the current and next step on the gear ladder (hoses and their sub-tiers, GearLadder),
+-- the wash speed gain, perks and price; the server validates purchases.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -9,6 +10,7 @@ local RunService = game:GetService("RunService")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -35,6 +37,7 @@ local purchaseRemote = Remotes.event("PurchaseToolUpgrade")
 
 local coins = 0
 local tier = 1
+local level = 0 -- sub-tier on the current hose
 local openStation: BasePart? = nil
 local awaitingResult = false
 local preview: ViewportFrame
@@ -42,6 +45,7 @@ local previewCamera: Camera
 local previewModel: Model? = nil
 local previewTier = 0
 local previewDistance = 6
+local previewCentre = Vector3.zero -- the preview never moves, so its centre is measured once
 local lastSentAt = 0
 
 local panel: Frame
@@ -121,7 +125,8 @@ local function showPreview(showTier: number)
 		previewModel:Destroy()
 	end
 	local model = HoseBuilder.preview(showTier)
-	local _, size = model:GetBoundingBox()
+	local box, size = model:GetBoundingBox()
+	previewCentre = box.Position
 	local radius = size.Magnitude / 2
 	previewDistance = radius / math.tan(math.rad(previewCamera.FieldOfView / 2)) * 1.15
 	model.Parent = preview
@@ -132,24 +137,27 @@ local function refresh()
 	if not panel then
 		return
 	end
-	local current = ToolConfig[tier] or ToolConfig[1]
-	local nextTool = ToolConfig[tier + 1]
-	showPreview(if nextTool then nextTool.Tier else current.Tier)
-	currentLabel.Text = `Current: {current.Name} — clean power {CleanPower.format(current.CleaningPower)}`
-	if nextTool then
-		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
-		nextLabel.Text = `Next: {nextTool.Name}`
-		local reach = if nextTool.Range > current.Range
-			then `, reach {current.Range} → {nextTool.Range} studs`
+	local current = GearLadder.get(tier, level)
+	local nextStep = GearLadder.next(tier, level)
+	showPreview(if nextStep then nextStep.Tier else current.Tier)
+	currentLabel.Text = `Current: {current.Label} — {CleanPower.format(current.Speed)}x wash speed`
+	if nextStep then
+		local gain = math.floor((nextStep.Speed / current.Speed - 1) * 100 + 0.5)
+		nextLabel.Text = `Next: {nextStep.Label}`
+		local reach = if nextStep.Range > current.Range
+			then `, reach {current.Range} → {nextStep.Range} studs`
 			else ""
-		gainLabel.Text =
-			`Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){reach}{unlocksText(nextTool.Tier)}`
+		local perk = if nextStep.Perk then `\n{nextStep.Perk}` else ""
+		-- Only a new hose raises clean power, so only a new hose unlocks rarer animals.
+		local unlocks = if nextStep.Level == 0 then unlocksText(nextStep.Tier) else ""
+		gainLabel.Text = `Wash speed {CleanPower.format(nextStep.Speed)}x (+{gain}%){reach}{perk}{unlocks}`
 		buyButton.Visible = true
-		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
-		local affordable = coins >= nextTool.Price
+		buyButton.Text = `Buy for {UIStyle.formatMoney(nextStep.Price)}`
+		local affordable = coins >= nextStep.Price
 		buyButton.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
-		-- Robux buys exactly the next hose. The Fire Hose has no product, so it stays cash-only.
-		local robux = MonetizationConfig.productForHoseTier(nextTool.Tier)
+		-- Robux buys exactly the next hose, never a sub-tier. The Fire Hose has no product, so it
+		-- stays cash-only.
+		local robux = if nextStep.Level == 0 then MonetizationConfig.productForHoseTier(nextStep.Tier) else nil
 		local showRobux = robux ~= nil and not affordable
 		robuxButton.Visible = showRobux
 		if robux and showRobux then
@@ -309,8 +317,8 @@ local function buildGui()
 	})
 
 	buyButton.Activated:Connect(function()
-		local nextTool = ToolConfig[tier + 1]
-		if not nextTool or awaitingResult then
+		local nextStep = GearLadder.next(tier, level)
+		if not nextStep or awaitingResult then
 			return
 		end
 		-- The server owns the balance and always answers, so even a stale local balance
@@ -328,9 +336,9 @@ local function buildGui()
 		end)
 	end)
 	robuxButton.Activated:Connect(function()
-		local nextTool = ToolConfig[tier + 1]
-		local product = nextTool and MonetizationConfig.productForHoseTier(nextTool.Tier)
-		if not product or not nextTool or coins >= nextTool.Price then
+		local nextStep = GearLadder.next(tier, level)
+		local product = nextStep and nextStep.Level == 0 and MonetizationConfig.productForHoseTier(nextStep.Tier)
+		if not product or not nextStep or coins >= nextStep.Price then
 			return
 		end
 		Remotes.event("MonetizationBuy"):FireServer(product.Key)
@@ -340,6 +348,7 @@ end
 function ShopController.init(initial: Types.InitialState)
 	coins = initial.Coins
 	tier = initial.ToolTier
+	level = initial.ToolUpgrade or 0
 	buildGui()
 
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
@@ -357,8 +366,9 @@ function ShopController.init(initial: Types.InitialState)
 		coins = value
 		refresh()
 	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number)
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
 		tier = value
+		level = newLevel or 0
 		refresh()
 	end)
 	Remotes.event("PurchaseResult").OnClientEvent:Connect(function(success: boolean, message: string)
@@ -373,7 +383,7 @@ function ShopController.init(initial: Types.InitialState)
 		if not panel.Visible or not previewModel then
 			return
 		end
-		local centre = previewModel:GetBoundingBox().Position
+		local centre = previewCentre
 		local angle = os.clock() * 0.8
 		local eye = centre + Vector3.new(math.sin(angle), 0.45, math.cos(angle)).Unit * previewDistance
 		previewCamera.CFrame = CFrame.lookAt(eye, centre)

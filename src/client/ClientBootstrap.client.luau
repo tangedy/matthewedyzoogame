@@ -30,6 +30,7 @@ if not ok or typeof(initial) ~= "table" then
 		Coins = 0,
 		ToolTier = 1,
 		ToolName = "Sponge",
+		ToolUpgrade = 0,
 		TutorialCompleted = false,
 		GuideStep = "Done",
 		PlayCutscene = false,
