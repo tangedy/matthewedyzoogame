@@ -138,6 +138,16 @@ Check by eye (live motion doesn't come across in screenshots):
 - [ ] **Wash card:** springs in for each new animal. A shine sweeps along the clean bar, the bar's border pulses, the % pops as it rises, and it ends on "SQUEAKY CLEAN!" in green.
 - [ ] **Auras:** Epic twinkles, Legendary glitters, Mythic gives off rising embers, Zoo God shows rainbow sparkles, and Secret has dark smoke with stars.
 - [ ] **Washing feel:** it should feel close to instant. Tune with `GameConfig.BaseWashSeconds` and each tier's `ToolConfig.SprayRadius`.
+- [ ] **Pen life** (`src/client/Features/PenLife.luau`): pen animals wander, swing their legs as they walk, look around, graze, wag, hop, shake off droplets and sometimes nap with a "z z Z". Nobody pokes through a fence; animals too long to turn round only shuffle forward and back. Walk up to a pen and its animal sometimes turns to you. Check a Giraffe/Elephant (neck and trunk move with the head) and a penguin-style upright animal (no head bob, turns instead).
+- [ ] **Delivery truck:** red cab with grille, round headlights, windows, mirrors and door paw prints; ANIMAL DELIVERY on the roof sign and both bed sides; the animal rides on straw between stake rails. Wheels spin and the stack puffs while it drives, it nods on the springs when it stops, and the roof beacon flashes while it waits.
+- [ ] **Audio pass** (licensed Roblox audio, ids in `GameConfig.Sounds`, `GameConfig.Music` and `src/shared/AnimalSounds.luau`; audition each and swap any that sound wrong):
+  - Robux shop buttons give a soft wooden tap, and a purchase a gentle chime (no more electronic ping).
+  - Collecting a pen pad plays a cash-register ca-ching.
+  - Lo-fi music plays quietly from the start, fades in, and moves to a different track when one ends.
+  - Aiming the hose at an animal it is too weak for plays an "eh-ehhh" buzzer, at most every 1.4 s while held, and not when aiming elsewhere.
+  - A washed animal makes its call with its chat bubble; pen animals near the camera call out now and then (one at a time). Chicken, Duck, Rabbit, Giraffe and Panda have no call yet.
+- [ ] **Pens:** any animal can go in any pen (no "Needs a … pen" prompt). Penned animals are a little smaller than at the wash, and big ones shrink to fit a small stall. A pad stops filling at its cap and reads "$1K FULL" in orange: stalls $1K, medium stalls and medium pastures $10K, giant barns and large pastures $100K, gargantuan yards $1M (`GameConfig.PenCashCap`).
+- [ ] **Legendary+ walk-ins** (force one with the dev tools): a beam drops onto the animal, rings race out, sparkles burst, the model flashes and a tier stamp pops over it, with a whoosh, boom and rising chord. The owner also gets the screen stamp ("A Golden Lion is walking in!"), a colour flash and a camera shake. Each tier is bigger than the last; Secret dims the screen and strikes lightning first. A soft pillar of light stays over it until it leaves the wash. Washing one adds tier-coloured shockwaves, a sparkle fountain and the fanfare to the usual celebration.
 
 ## Feature systems
 

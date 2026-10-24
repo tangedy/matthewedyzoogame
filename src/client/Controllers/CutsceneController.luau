@@ -18,6 +18,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local PlotLayout = require(ReplicatedStorage.Shared.PlotLayout)
@@ -160,23 +161,6 @@ local function copyOfYou(): Model?
 	return copy
 end
 
-local function bubble(adornee: BasePart, text: string): BillboardGui
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "Oink"
-	billboard.Size = UDim2.fromOffset(110, 34)
-	billboard.StudsOffset = Vector3.new(0.6, 1.8, 0)
-	billboard.AlwaysOnTop = true
-	billboard.Enabled = false
-	billboard.Adornee = adornee
-	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.fromScale(1, 1)
-	textLabel.BackgroundTransparency = 1
-	textLabel.Text = text
-	textLabel.Parent = billboard
-	UIStyle.text(textLabel, Color3.fromRGB(255, 190, 210), Color3.fromRGB(60, 20, 40), 2)
-	return billboard
-end
-
 local function suds(parent: Instance, rate: number, drip: boolean): ParticleEmitter
 	local fx = Instance.new("ParticleEmitter")
 	fx.Name = "Suds"
@@ -297,18 +281,6 @@ function CutsceneController.init(initial: Types.InitialState)
 		table.insert(bars, bar)
 	end
 
-	local caption = Instance.new("TextLabel")
-	caption.BackgroundTransparency = 1
-	caption.AnchorPoint = Vector2.new(0.5, 1)
-	caption.Position = UDim2.new(0.5, 0, 1, -52)
-	caption.Size = UDim2.new(0.7, 0, 0, 24)
-	caption.Text = ""
-	caption.ZIndex = 6
-	caption.Parent = gui
-	UIStyle.text(caption, Color3.fromRGB(240, 240, 240), Color3.fromRGB(20, 20, 20), 1.5)
-	caption.TextScaled = false
-	caption.TextSize = 18
-
 	local skip = Instance.new("TextLabel")
 	skip.Name = "Skip"
 	skip.BackgroundTransparency = 1
@@ -333,7 +305,7 @@ function CutsceneController.init(initial: Types.InitialState)
 		if not humanoid then
 			return
 		end
-		humanoid.WalkSpeed = 16
+		humanoid.WalkSpeed = GameConfig.WalkSpeed
 		humanoid.JumpHeight = 7.2
 		humanoid.AutoRotate = true
 		local root = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")
@@ -444,8 +416,6 @@ function CutsceneController.init(initial: Types.InitialState)
 	local actorR15 = true
 	local spongeSuds: ParticleEmitter? = nil
 	local pigSuds: ParticleEmitter? = nil
-	local oink: BillboardGui? = nil
-	local startled: BillboardGui? = nil
 	local jets: { Beam } = {}
 	local cannon: Sound? = nil
 
@@ -515,15 +485,6 @@ function CutsceneController.init(initial: Types.InitialState)
 			piglet = found
 			standOn(found, CFrame.lookAt(wash, wash + plot.Back), floorY)
 			pigBase = found:GetPivot()
-			local head = found:FindFirstChild("Head") or found.PrimaryPart or found:FindFirstChildWhichIsA("BasePart")
-			if head and head:IsA("BasePart") then
-				-- Billboards render from PlayerGui, not from inside a ScreenGui.
-				local happy = janitor:Add(bubble(head, "oink!"))
-				local scared = janitor:Add(bubble(head, "OINK?!"))
-				happy.Parent = playerGui
-				scared.Parent = playerGui
-				oink, startled = happy, scared
-			end
 			local body = found:FindFirstChild("Body")
 			if body and body:IsA("BasePart") then
 				pigSuds = suds(body, 14, true)
@@ -611,15 +572,6 @@ function CutsceneController.init(initial: Types.InitialState)
 		TweenService:Create(fade, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
 	end)
 
-	local captions = {
-		{ 0.3, "Day one: a muddy piglet and a kitchen sponge." },
-		{ beats.Shake + 0.2, "...what was that?" },
-		{ beats.Whip, "" },
-		{ beats.Reveal + 2.5, "A maxed farm: a Kaiju and a fire hose." },
-		{ beats.Hero + 1.2, "This is the farm you're building." },
-	}
-	local captionIndex = 0
-
 	local rumbled, whooshed, barsOut = false, false, false
 	local sawLock = player:GetAttribute("InCutscene") == true
 
@@ -681,11 +633,6 @@ function CutsceneController.init(initial: Types.InitialState)
 			camera.FieldOfView = fov
 		end
 
-		while captions[captionIndex + 1] and t >= captions[captionIndex + 1][1] do
-			captionIndex += 1
-			caption.Text = captions[captionIndex][2]
-		end
-
 		-- The wash: happy scrubbing until the ground shakes.
 		local calm = t < beats.Shake
 		if piglet and pigBase then
@@ -710,14 +657,6 @@ function CutsceneController.init(initial: Types.InitialState)
 		end
 		if pigSuds then
 			pigSuds.Enabled = t < beats.Whip
-		end
-		if oink then
-			local phase = t % 2.2
-			oink.Enabled = calm and t > 0.8 and phase < 1
-			oink.StudsOffset = Vector3.new(0.6, 1.8 + math.sin(phase * 6) * 0.1, 0)
-		end
-		if startled then
-			startled.Enabled = t >= beats.Shake + 0.3 and t < beats.Whip
 		end
 
 		-- Sound and blur cues.

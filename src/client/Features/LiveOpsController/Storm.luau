@@ -185,20 +185,21 @@ local function splash()
 	fit.MaxSize = Vector2.new(620, 110)
 	fit.Parent = frame
 	local scale = Instance.new("UIScale")
-	scale.Scale = 0.2
+	scale.Scale = 0.7
 	scale.Parent = frame
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0, 70)
-	title.Text = "MUD STORM!"
+	title.Text = "Mud Storm!"
 	title.Parent = frame
-	UIStyle.text(title, Color3.fromRGB(255, 190, 90), Color3.fromRGB(60, 30, 10), 5)
+	UIStyle.text(title, Color3.fromRGB(255, 190, 90), Color3.fromRGB(60, 30, 10), 2.5)
 	local sub = Instance.new("TextLabel")
 	sub.Position = UDim2.fromOffset(0, 72)
 	sub.Size = UDim2.new(1, 0, 0, 30)
 	sub.Text = "Rare animals & mutations x3!"
 	sub.Parent = frame
-	UIStyle.text(sub, Color3.new(1, 1, 1), nil, 3)
-	TweenService:Create(scale, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+	UIStyle.text(sub, Color3.new(1, 1, 1), nil, 1.5)
+	-- A little under full size and eased in, like the other banners.
+	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.8 })
 		:Play()
 	task.delay(3, function()
 		local tween = TweenService:Create(

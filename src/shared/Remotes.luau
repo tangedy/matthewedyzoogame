@@ -12,6 +12,8 @@ local EVENTS = {
 	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide
 	"CutsceneFinished", -- () client finished the spawn cutscene (ignored if it arrives early)
 	"OverflowChoice", -- ("keep" | "sell")
+	-- both ways: server asks (token: number, text: string), client answers (token: number, accepted: boolean)
+	"PaidSellConfirm",
 	-- server -> client
 	"BayStateChanged", -- (BaySnapshot)
 	"CleaningProgressChanged", -- (jobId: string, progress: number, showHint: boolean)
@@ -27,6 +29,7 @@ local EVENTS = {
 	"OverflowPrompt", -- ({ Label: string, SellValue: number, Waiting: number }?) nil clears it
 	"YardRevealed", -- () pens and the cache are visible
 	"IntroAutoSold", -- (amount: number, remaining: number)
+	"RareArrival", -- (model: Model, rarity: string, mutation: string, bay: Instance) Legendary+ walk-in, to everyone
 }
 
 local FUNCTIONS = {

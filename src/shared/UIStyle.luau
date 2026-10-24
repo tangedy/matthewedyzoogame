@@ -262,7 +262,12 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	table.insert(rows, span(rarity.Color, rarity.DisplayName))
 	table.insert(rows, span(UIStyle.CashColor, UIStyle.formatMoney(info.IncomePerSecond) .. "/s"))
 	if info.Needs then
+		-- The client (CleanGateController) swaps to OpenText once the viewer's gear can wash it.
+		label:SetAttribute("OpenText", table.concat(rows, "\n"))
+		label:SetAttribute("OpenLines", #rows)
+		label:SetAttribute("Lines", lines)
 		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `🔒 {info.Needs}`))
+		label:SetAttribute("LockText", table.concat(rows, "\n"))
 	end
 	label.Text = table.concat(rows, "\n")
 	if rainbowLabel then

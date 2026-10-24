@@ -3,7 +3,6 @@
 --     on the pen pads (the server put it there); COLLECT just closes the panel.
 --   * DAILY DIRTY ANIMAL: a big banner when today's guaranteed Rare+ animal walks in.
 
-local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
@@ -19,6 +18,9 @@ local Popups = {}
 
 local BOUNCE = TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 local SHRINK = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+-- Banners land a little under full size and ease in, so they read without shouting.
+local BANNER_SCALE = 0.85
+local BANNER_IN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local hudGui: ScreenGui
 local modalGui: ScreenGui
@@ -232,26 +234,17 @@ local function showDaily(name: any, rarity: any, mutation: any, rewardMultiplier
 	frame.Position = UDim2.new(0.5, 0, 0.5, 20) -- below the wash card, over the bay
 	frame.Size = UDim2.new(0.9, 0, 0, 124)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	frame.BackgroundTransparency = 0.35
+	frame.BackgroundTransparency = 0.25
 	frame.Parent = hudGui
-	UIStyle.border(frame, 4)
+	UIStyle.border(frame, 2)
 	local fit = Instance.new("UISizeConstraint")
 	fit.MaxSize = Vector2.new(560, 124)
 	fit.Parent = frame
 	local scale = Instance.new("UIScale")
-	scale.Scale = 0.2
+	scale.Scale = 0.7
 	scale.Parent = frame
 
-	local title = textLabel(frame, { Size = UDim2.new(1, 0, 0, 50), Text = "DAILY DIRTY ANIMAL!" }, nil, 4)
-	local gradient = Instance.new("UIGradient")
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 70, 70)),
-		ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255, 200, 50)),
-		ColorSequenceKeypoint.new(0.66, Color3.fromRGB(90, 255, 90)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 200, 255)),
-	})
-	gradient.Parent = title
-	CollectionService:AddTag(gradient, UIStyle.RainbowTag)
+	textLabel(frame, { Size = UDim2.new(1, 0, 0, 50), Text = "Daily Dirty Animal" }, Color3.fromRGB(255, 220, 140), 2)
 
 	local mutationKey = if typeof(mutation) == "string" and MutationConfig.ByKey[mutation]
 		then mutation
@@ -270,12 +263,66 @@ local function showDaily(name: any, rarity: any, mutation: any, rewardMultiplier
 		Position = UDim2.fromOffset(0, 100),
 		Size = UDim2.new(1, 0, 0, 18),
 		Text = bonus,
-	}, Color3.fromRGB(255, 230, 120), 2)
+	}, Color3.fromRGB(235, 225, 190), 1.5)
 
-	playSound("rbxasset://sounds/electronicpingshort.wav", 0.8)
-	TweenService:Create(scale, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
-		:Play()
+	playSound("rbxasset://sounds/electronicpingshort.wav", 0.5)
+	TweenService:Create(scale, BANNER_IN, { Scale = BANNER_SCALE }):Play()
 	task.delay(4.5, function()
+		if token ~= dailyToken or not frame.Parent then
+			return
+		end
+		local tween = TweenService:Create(scale, SHRINK, { Scale = 0 })
+		tween.Completed:Once(function()
+			frame:Destroy()
+		end)
+		tween:Play()
+	end)
+end
+
+-- Once per profile, as the new-player Kaiju walks the road: the boost and how long it runs.
+local function showNewPlayer(minutes: any, multiplier: any)
+	if typeof(minutes) ~= "number" or typeof(multiplier) ~= "number" then
+		return
+	end
+	dailyToken += 1
+	local token = dailyToken
+	local old = hudGui:FindFirstChild("DailyBanner")
+	if old then
+		old:Destroy()
+	end
+
+	local frame = Instance.new("Frame")
+	frame.Name = "DailyBanner" -- shares the slot, so it never stacks on the daily banner
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.new(0.5, 0, 0.5, 20)
+	frame.Size = UDim2.new(0.9, 0, 0, 124)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	frame.BackgroundTransparency = 0.25
+	frame.Parent = hudGui
+	UIStyle.border(frame, 2)
+	local fit = Instance.new("UISizeConstraint")
+	fit.MaxSize = Vector2.new(560, 124)
+	fit.Parent = frame
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.7
+	scale.Parent = frame
+
+	textLabel(frame, { Size = UDim2.new(1, 0, 0, 50), Text = "New Player Boost" }, Color3.fromRGB(160, 230, 170), 2)
+	local rarityLabel =
+		textLabel(frame, { Position = UDim2.new(0.5, -140, 0, 52), Size = UDim2.fromOffset(280, 26), Text = "" })
+	UIStyle.rarity(rarityLabel, "Secret")
+	rarityLabel.Text = "A Secret Kaiju walks by!"
+	local times = if multiplier % 1 == 0 then tostring(multiplier) else string.format("%.1f", multiplier)
+	textLabel(frame, {
+		Position = UDim2.fromOffset(0, 84),
+		Size = UDim2.new(1, 0, 0, 30),
+		Text = `{times}x odds on every rarity for {minutes} min`,
+	}, Color3.fromRGB(235, 225, 190), 1.5)
+
+	playSound("rbxasset://sounds/impact_explosion_03.mp3", 0.35)
+	playSound("rbxasset://sounds/electronicpingshort.wav", 0.5)
+	TweenService:Create(scale, BANNER_IN, { Scale = BANNER_SCALE }):Play()
+	task.delay(6, function()
 		if token ~= dailyToken or not frame.Parent then
 			return
 		end
@@ -293,6 +340,7 @@ function Popups.start(hud: ScreenGui, modal: ScreenGui)
 	Remotes.event("LiveOpsWelcomeBack").OnClientEvent:Connect(Popups.welcomeBack)
 	Remotes.event("LiveOpsOfflineDoubled").OnClientEvent:Connect(Popups.offlineDoubled)
 	Remotes.event("LiveOpsDaily").OnClientEvent:Connect(showDaily)
+	Remotes.event("LiveOpsNewPlayer").OnClientEvent:Connect(showNewPlayer)
 end
 
 return Popups

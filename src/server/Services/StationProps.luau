@@ -108,7 +108,8 @@ end
 local function bucket(kit: Kit, at: Vector3)
 	drum(kit, "Bucket", 2, 2.4, at + Vector3.new(0, 1, 0), WOOD).Material = Enum.Material.Wood
 	drum(kit, "BucketBand", 0.25, 2.5, at + Vector3.new(0, 1.5, 0), STEEL)
-	local water = drum(kit, "Water", 0.1, 2.1, at + Vector3.new(0, 1.95, 0), Color3.fromRGB(110, 190, 255))
+	-- Just above the bucket's rim: level with it, the two tops flicker.
+	local water = drum(kit, "Water", 0.1, 2.1, at + Vector3.new(0, 2.02, 0), Color3.fromRGB(110, 190, 255))
 	water.Transparency = 0.2
 	water.Material = Enum.Material.Glass
 	for i = 0, 3 do
@@ -141,7 +142,7 @@ local BUILDERS: { [number]: (kit: Kit, truck: Kit?) -> () } = {
 		add(
 			kit,
 			"ScrubPad",
-			Vector3.new(1.4, 0.2, 1),
+			Vector3.new(1.46, 0.2, 1.06), -- a hair wider than the sponge so their sides never share a plane
 			CFrame.new(1.33, 2.65, 0) * CFrame.Angles(0, 0, math.rad(-20)),
 			Color3.fromRGB(60, 170, 80)
 		)
@@ -226,7 +227,7 @@ local BUILDERS: { [number]: (kit: Kit, truck: Kit?) -> () } = {
 		add(
 			kit,
 			"TankDome",
-			Vector3.new(2.8, 2.8, 2.8),
+			Vector3.new(2.7, 2.7, 2.7), -- narrower than the tank, so it does not graze the rim
 			CFrame.new(-0.4, 5.45, 0),
 			Color3.fromRGB(255, 150, 220),
 			Enum.PartType.Ball
@@ -263,7 +264,7 @@ local BUILDERS: { [number]: (kit: Kit, truck: Kit?) -> () } = {
 		-- Chassis along local Z, nose at -Z.
 		add(truck, "Chassis", Vector3.new(7, 1, 20), CFrame.new(0, 1.6, 0), Color3.fromRGB(60, 60, 65))
 		add(truck, "Body", Vector3.new(7, 4.6, 13), CFrame.new(0, 4.4, 2.8), RED)
-		add(truck, "Stripe", Vector3.new(7.1, 0.6, 13), CFrame.new(0, 3.4, 2.8), WHITE)
+		add(truck, "Stripe", Vector3.new(7.1, 0.6, 13.1), CFrame.new(0, 3.4, 2.8), WHITE)
 		add(truck, "Cab", Vector3.new(7, 5.2, 5.6), CFrame.new(0, 4.7, -6.7), RED)
 		local windshield =
 			add(truck, "Windshield", Vector3.new(6, 2, 0.2), CFrame.new(0, 5.8, -9.5), Color3.fromRGB(150, 200, 230))

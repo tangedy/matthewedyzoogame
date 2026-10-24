@@ -222,7 +222,12 @@ local function refreshCard(card: Card, state: ShopState)
 			statusColor = UIStyle.CashColor
 		elseif product.Kind == "Limited" then
 			local left = state.Stock[product.Key]
-			if state.Unavailable[product.Key] then
+			if product.OncePerPlayer and state.Once[product.Key] then
+				buyable = false
+				buyText = "OWNED"
+				statusText = "OWNED"
+				statusColor = OWNED_COLOR
+			elseif state.Unavailable[product.Key] then
 				buyable = false
 				buyText = "SOON"
 				statusText = "COMING SOON"
@@ -390,7 +395,8 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	}, Color3.fromRGB(255, 230, 120))
 
 	for _, product in MonetizationConfig.Products do
-		if not product.OncePerPlayer and not product.Hidden then -- intro products appear on their full-price card
+		-- Intro products appear on their full-price card. A once-only limited has its own.
+		if (product.Kind == "Limited" or not product.OncePerPlayer) and not product.Hidden then
 			makeCard(product.Key, product.Tab, product.Order, product.Color)
 		end
 	end

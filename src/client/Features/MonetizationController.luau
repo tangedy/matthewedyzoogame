@@ -13,6 +13,7 @@ local Workspace = game:GetService("Workspace")
 
 local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -203,6 +204,17 @@ local function refreshTimers()
 	local luckEnds = state.LuckEndsAt or 0
 	local luckLeft = luckEnds - now
 	syncTimed("Luck", 3, Color3.fromRGB(170, 90, 255), luckEnds, if luckLeft > 0 then `LUCK {clock(luckLeft)}` else "")
+	-- LiveOps NewPlayer: the first-five-minutes rarity boost.
+	local newEnds = player:GetAttribute("NewPlayerBoostEndsAt")
+	newEnds = if typeof(newEnds) == "number" then newEnds else 0
+	local newLeft = newEnds - now
+	syncTimed(
+		"NewPlayer",
+		0,
+		Color3.fromRGB(60, 190, 90),
+		newEnds,
+		if newLeft > 0 then `NEW PLAYER LUCK {clock(newLeft)}` else ""
+	)
 	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY: {state.LuckyLeft} LEFT` else nil)
 end
 
@@ -363,8 +375,9 @@ local function buildGui()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	clickSound = sound("rbxasset://sounds/electronicpingshort.wav", 0.5)
-	buySound = sound("rbxasset://sounds/electronicpingshort.wav", 0.5)
+	-- Soft and low: a wooden tap on clicks, a gentle chime on a purchase.
+	clickSound = sound(GameConfig.Sounds.ShopClick, 0.3)
+	buySound = sound(GameConfig.Sounds.ShopBuy, 0.35)
 
 	-- Right of the INDEX / SHOP buttons, just under the cash
 	local timers = Instance.new("Frame")

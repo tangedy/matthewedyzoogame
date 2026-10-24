@@ -671,6 +671,40 @@ local function bindInput()
 	end)
 end
 
+-- Spraying an animal the hose is too weak for: a game-show "eh-ehhh". A short blip, then a
+-- longer, lower one, cut from one buzzer sample. Repeats at most every BUZZ_GAP while held.
+local BUZZ_GAP = 1.4
+local lastBuzz = 0
+
+local function buzzClip(length: number, pitch: number)
+	local s = Instance.new("Sound")
+	s.SoundId = GameConfig.Sounds.Buzzer
+	s.Volume = 0.35
+	s.PlaybackSpeed = pitch
+	s.PlaybackRegionsEnabled = true
+	s.PlaybackRegion = NumberRange.new(0, length)
+	s.Parent = SoundService
+	s.Ended:Once(function()
+		s:Destroy()
+	end)
+	s:Play()
+	task.delay(2, function()
+		if s.Parent then
+			s:Destroy()
+		end
+	end)
+end
+
+local function buzz()
+	local now = os.clock()
+	if now - lastBuzz < BUZZ_GAP then
+		return
+	end
+	lastBuzz = now
+	buzzClip(0.14, 1)
+	task.delay(0.2, buzzClip, 0.5, 0.9)
+end
+
 local function stopEffects()
 	beam.Enabled = false
 	splash.Enabled = false
@@ -791,6 +825,9 @@ local function onHeartbeat()
 	-- Helping on someone else's animal is not blocked by the local bay's gate.
 	if player:GetAttribute("CleanBlocked") == true and not helping then
 		stopEffects()
+		if onTarget then
+			buzz() -- only when actually aiming at the animal
+		end
 		return
 	end
 

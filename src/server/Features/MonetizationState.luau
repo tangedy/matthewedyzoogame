@@ -202,12 +202,24 @@ function MonetizationState.saved(player: Player): Saved?
 	local already = typeof(raw) == "table" and raw.PastureUnlocked == true
 	local alreadySide = typeof(raw) == "table" and raw.SidePastureUnlocked == true
 	local saved = sanitize(data.Extra.Monetization)
-	if not saved.SidePastureUnlocked and profileHasAxolotl(data) then
+	-- The Axolotl is one per player; someone who bought it before that rule counts as bought.
+	local alreadyAxolotl = saved.Once.LimitedAxolotl == true
+	if profileHasAxolotl(data) then
 		saved.SidePastureUnlocked = true
+		saved.Once.LimitedAxolotl = true
+	end
+	for _, entry in saved.PendingAnimals do
+		if entry.Species == "Axolotl" then
+			saved.Once.LimitedAxolotl = true
+		end
 	end
 	data.Extra.Monetization = saved
 	savedCache[player] = saved
-	if (saved.PastureUnlocked and not already) or (saved.SidePastureUnlocked and not alreadySide) then
+	if
+		(saved.PastureUnlocked and not already)
+		or (saved.SidePastureUnlocked and not alreadySide)
+		or (saved.Once.LimitedAxolotl and not alreadyAxolotl)
+	then
 		PlayerDataService.markDirty(player)
 	end
 	return saved

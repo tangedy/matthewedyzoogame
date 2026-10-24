@@ -1,4 +1,4 @@
--- Seven-day check-in (LiveOpsConfig.CheckIn): one claim per UTC day, days in order. Day 4's
+-- Seven-day check-in (LiveOpsConfig.CheckIn): one claim every CooldownHours, days in order. Day 4's
 -- earnings buff and day 6's PRO WASHER chat title are permanent flags in data.Extra.LiveOps;
 -- animals go straight into the player's hands, or queue for the cache like a bought animal.
 -- Remotes:
@@ -60,19 +60,30 @@ local function unlocked(player: Player, state: Common.State): boolean
 	return false
 end
 
+local COOLDOWN = LiveOpsConfig.CheckIn.CooldownHours * 3600
+
+-- When the next claim opens. Saves from before CheckInAt fall back to the next UTC midnight.
+local function nextClaimAt(state: Common.State): number
+	if state.CheckInAt then
+		return state.CheckInAt + COOLDOWN
+	elseif state.CheckInDay then
+		return (state.CheckInDay + 1) * Common.DAY
+	end
+	return 0
+end
+
 local function payload(player: Player, claimed: string?): { [string]: any }?
 	local state = Common.state(player)
 	if not state then
 		return nil
 	end
-	local today = Common.utcDay()
-	local canClaim = state.CheckInDay ~= today
+	local canClaim = Common.now() >= nextClaimAt(state)
 	return {
 		-- Days ticked on the chart: a finished chart stays full until the next day starts it over.
 		Count = if canClaim then state.CheckInCount % #Rewards else state.CheckInCount,
 		CanClaim = canClaim,
 		NextDay = state.CheckInCount % #Rewards + 1,
-		NextClaimIn = (today + 1) * Common.DAY - Common.now(),
+		NextClaimIn = math.max(0, nextClaimAt(state) - Common.now()),
 		Claimed = claimed,
 		Unlocked = unlocked(player, state),
 	}
@@ -138,15 +149,15 @@ local function claim(player: Player)
 		return
 	end
 	local state = Common.state(player)
-	local today = Common.utcDay()
-	if not state or state.CheckInDay == today or not unlocked(player, state) then
+	if not state or Common.now() < nextClaimAt(state) or not unlocked(player, state) then
 		push(player)
 		return
 	end
 	claiming[player] = true
 	-- Mark the day first, so nothing that yields below can let a second claim through.
 	local index = state.CheckInCount % #Rewards + 1
-	state.CheckInDay = today
+	state.CheckInDay = Common.utcDay()
+	state.CheckInAt = Common.now()
 	state.CheckInCount = index
 	PlayerDataService.markDirty(player)
 	local ok, message = pcall(grant, player, Rewards[index])
@@ -185,15 +196,22 @@ function CheckIn.init()
 		claiming[player] = nil
 	end)
 
-	-- A new UTC day while playing makes the next claim available without a rejoin.
+	-- A cooldown ending while playing makes the next claim available without a rejoin.
 	task.spawn(function()
-		local day = Common.utcDay()
+		local ready: { [Player]: boolean } = {}
 		while true do
 			task.wait(5)
-			if Common.utcDay() ~= day then
-				day = Common.utcDay()
-				for _, player in Players:GetPlayers() do
+			for _, player in Players:GetPlayers() do
+				local state = Common.state(player)
+				local now = state ~= nil and Common.now() >= nextClaimAt(state)
+				if now and ready[player] == false then
 					push(player)
+				end
+				ready[player] = now
+			end
+			for player in ready do
+				if player.Parent ~= Players then
+					ready[player] = nil
 				end
 			end
 		end

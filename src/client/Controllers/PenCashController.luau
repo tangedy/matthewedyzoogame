@@ -34,10 +34,19 @@ type Counter = {
 
 local counters: { [BasePart]: Counter } = {}
 
+local FULL_COLOR = Color3.fromRGB(255, 170, 40)
+
+-- "$950", or "$1K FULL" in orange once the pad reaches its pen's cap (pad attribute "Cap").
 local function setText(counter: Counter, value: number)
-	local text = if counter.Pad:GetAttribute("Cash") == nil then "" else UIStyle.formatMoney(value)
+	local cap = counter.Pad:GetAttribute("Cap")
+	local full = typeof(cap) == "number" and value >= cap
+	local text = if counter.Pad:GetAttribute("Cash") == nil
+		then ""
+		elseif full then `{UIStyle.formatMoney(value)} FULL`
+		else UIStyle.formatMoney(value)
 	counter.Label.Text = text
 	counter.Glow.Text = text
+	counter.Label.TextColor3 = if full then FULL_COLOR else UIStyle.CashColor
 end
 
 -- "+$12" rising and fading above the counter.

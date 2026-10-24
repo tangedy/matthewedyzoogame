@@ -40,11 +40,26 @@ local LiveOpsConfig = {
 		EverySeconds = 300,
 	},
 
-	-- Seven-day check-in: one claim per UTC day, in order. Missing a day does not reset the
+	-- New players, once: a Secret Kaiju stomps down the main road past their farm, then every
+	-- rarity above Common walks in more often for BoostMinutes. It happens at ShowAtSeconds of
+	-- play once the opening washes are done, and at LatestSeconds either way, so always inside
+	-- the first five minutes. Profiles already past LatestSeconds never see it.
+	NewPlayer = {
+		ShowAtSeconds = 240,
+		LatestSeconds = 290,
+		BoostMinutes = 10,
+		SpawnWeightMultiplier = 2.5, -- every rarity above Common
+		Species = "Kaiju",
+		RoadSpan = 200, -- studs the Kaiju walks either side of the player's farm
+		WalkSeconds = 32,
+	},
+
+	-- Seven-day check-in: one claim every CooldownHours, in order. Missing a day does not reset the
 	-- chart; after day 7 it starts over at day 1 (permanent rewards are kept, never stacked).
 	-- Kind: "Cash" (Amount) | "Animal" (Species or Rarity, Mutation) | "EarningsBuff" (Multiplier)
 	-- | "Title" (Text). Label / Detail are what the chart shows.
 	CheckIn = {
+		CooldownHours = 23, -- after a claim, the next day's reward unlocks this many hours later
 		Rewards = {
 			{ Kind = "Cash", Amount = 1000, Label = "$1,000", Detail = "Cash" },
 			{ Kind = "Animal", Species = "Horse", Mutation = "Rainbow", Label = "Rainbow Horse", Detail = "Animal" },

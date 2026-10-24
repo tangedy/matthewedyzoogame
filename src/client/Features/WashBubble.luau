@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local AnimalSounds = require(ReplicatedStorage.Shared.AnimalSounds)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -126,6 +127,10 @@ local function show(model: Model)
 
 	-- Directly under PlayerGui: a BillboardGui nested inside a ScreenGui is never drawn.
 	board.Parent = player:WaitForChild("PlayerGui")
+	local species = model:GetAttribute("AnimalKey")
+	if typeof(species) == "string" then
+		AnimalSounds.play(species, head)
+	end
 	TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
 		:Play()
 	task.delay(SHOW_SECONDS, function()

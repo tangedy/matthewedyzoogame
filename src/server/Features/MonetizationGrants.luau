@@ -165,6 +165,9 @@ local function grantLimited(
 		return compensate(player, `{product.DisplayName} sold out just before your purchase!`)
 	end
 	table.insert(saved.PendingAnimals, { Species = species, Mutation = mutation })
+	if product.OncePerPlayer then
+		saved.Once[product.Key] = true
+	end
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
 	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false

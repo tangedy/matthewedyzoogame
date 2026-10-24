@@ -31,9 +31,6 @@ local OWN_PROMPTS = {
 local myBay: string? = nil
 local latestBay: Types.BaySnapshot? = nil
 local carryBanner: Frame
-local carryName: TextLabel
-local carryRarity: TextLabel
-local carryHint: TextLabel
 local cacheHint: TextLabel
 local carrySellButton: TextButton
 local carryAction = Remotes.event("CarryAction")
@@ -67,38 +64,17 @@ local function buildGui()
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- "CARRYING / Gold Pig / Rare / Place it in a pen" above the bottom toast
+	-- Just the two choices while carrying: put it back in the cache, or sell it.
 	carryBanner = Instance.new("Frame")
 	carryBanner.AnchorPoint = Vector2.new(0.5, 1)
 	carryBanner.Position = UDim2.new(0.5, 0, 1, -190)
-	carryBanner.Size = UDim2.fromOffset(420, 150)
+	carryBanner.Size = UDim2.fromOffset(420, 52)
 	carryBanner.BackgroundTransparency = 1
 	carryBanner.Visible = false
 	carryBanner.Parent = gui
-	local list = Instance.new("UIListLayout")
-	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	list.Parent = carryBanner
-	local function line(order: number, height: number): TextLabel
-		local label = Instance.new("TextLabel")
-		label.LayoutOrder = order
-		label.Size = UDim2.new(1, 0, 0, height)
-		label.Parent = carryBanner
-		UIStyle.text(label)
-		return label
-	end
-	local title = line(1, 22)
-	title.Text = "CARRYING"
-	carryName = line(2, 30)
-	carryRarity = line(3, 20)
-	carryHint = line(4, 22)
-	carryHint.TextColor3 = Color3.fromRGB(255, 230, 120)
-	carryHint.Text = "Take it to a pen: Place or Swap"
 
-	-- Or decide right here: put it back in the cache, or sell it.
 	local row = Instance.new("Frame")
-	row.LayoutOrder = 5
-	row.Size = UDim2.new(1, 0, 0, 52)
+	row.Size = UDim2.fromScale(1, 1)
 	row.BackgroundTransparency = 1
 	row.Parent = carryBanner
 	local rowLayout = Instance.new("UIListLayout")
@@ -126,7 +102,7 @@ local function buildGui()
 		return button
 	end
 	carryButton("PUT DOWN", Color3.fromRGB(80, 160, 255), "drop")
-	carrySellButton = carryButton("SELL", Color3.fromRGB(255, 120, 60), "sell")
+	carrySellButton = carryButton("SELL", Color3.fromRGB(70, 190, 90), "sell")
 
 	cacheHint = Instance.new("TextLabel")
 	cacheHint.AnchorPoint = Vector2.new(0.5, 1)
@@ -143,8 +119,6 @@ end
 
 local function onCarry(info: Types.CarryInfo?)
 	if info then
-		carryName.Text = info.Label
-		UIStyle.rarity(carryRarity, info.Rarity)
 		carrySellButton.Text = "SELL " .. UIStyle.formatMoney(info.SellValue or 0)
 		carryBanner.Visible = true
 		cacheHint.Visible = false

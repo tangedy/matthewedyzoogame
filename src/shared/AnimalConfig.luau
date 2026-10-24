@@ -1,6 +1,7 @@
 -- Animal roster. Each species has a fixed rarity tier (Steal a Brainrot style) and earns
 -- Income cash per second while it lives in one of your pens (times its mutation multiplier).
--- SpawnWeight is relative. RequiredToolTier and RarityConfig.RequiredCleaningPower both gate
+-- SpawnWeight is relative, and only between species of the same tier: each tier's share of
+-- walk-ins comes from GameConfig.SpawnCurve. RequiredToolTier and RarityConfig.RequiredCleaningPower both gate
 -- which animals can walk in, so a hose only rolls animals it has the clean power to wash.
 -- Scripted walk-ins of a rarity this hose cannot wash skip that gate.
 -- WashTimeMultiplier scales total dirt relative to BaseWashSeconds.
@@ -55,38 +56,38 @@ local AnimalConfig = {
 		-- Common
 		Chicken = animal("Chicken", "Common", 1, 40, 1, 0.6),
 		Duck = animal("Duck", "Common", 1, 40, 1, 0.7),
-		Rabbit = animal("Rabbit", "Common", 2, 40, 1, 0.75),
-		Pig = animal("Pig", "Common", 3, 40, 1, 1.0),
+		Rabbit = animal("Rabbit", "Common", 1, 40, 1, 0.75),
+		Pig = animal("Pig", "Common", 2, 40, 1, 1.0),
 		-- Rare
-		Sheep = animal("Sheep", "Rare", 6, 15, 1, 1.3),
-		Goat = animal("Goat", "Rare", 7, 15, 1, 1.25),
-		Dog = animal("Dog", "Rare", 8, 15, 1, 1.1),
-		Cat = animal("Cat", "Rare", 9, 15, 1, 0.9),
+		Sheep = animal("Sheep", "Rare", 4, 15, 1, 1.3),
+		Goat = animal("Goat", "Rare", 5, 15, 1, 1.25),
+		Dog = animal("Dog", "Rare", 6, 15, 1, 1.1),
+		Cat = animal("Cat", "Rare", 7, 15, 1, 0.9),
 		-- Epic
-		Cow = animal("Cow", "Epic", 18, 6, 3, 1.8),
-		Donkey = animal("Donkey", "Epic", 20, 6, 3, 1.6),
-		Penguin = animal("Penguin", "Epic", 22, 6, 3, 1.0),
-		Fox = animal("Fox", "Epic", 25, 6, 3, 1.0),
+		Cow = animal("Cow", "Epic", 14, 6, 3, 1.8),
+		Donkey = animal("Donkey", "Epic", 16, 6, 3, 1.6),
+		Penguin = animal("Penguin", "Epic", 17, 6, 3, 1.0),
+		Fox = animal("Fox", "Epic", 20, 6, 3, 1.0),
 		-- Legendary
-		Llama = animal("Llama", "Legendary", 55, 2, 4, 1.9),
-		Zebra = animal("Zebra", "Legendary", 65, 2, 4, 2.2),
-		Horse = animal("Horse", "Legendary", 70, 2, 4, 2.2),
-		Panda = animal("Panda", "Legendary", 80, 2, 4, 2.0),
-		Griffon = animal("Griffon", "Legendary", 90, 1.5, 4, 2.3),
+		Llama = animal("Llama", "Legendary", 44, 2, 4, 1.9),
+		Zebra = animal("Zebra", "Legendary", 52, 2, 4, 2.2),
+		Horse = animal("Horse", "Legendary", 56, 2, 4, 2.2),
+		Panda = animal("Panda", "Legendary", 64, 2, 4, 2.0),
+		Griffon = animal("Griffon", "Legendary", 72, 1.5, 4, 2.3),
 		-- Mythic
-		Lion = animal("Lion", "Mythic", 180, 0.6, 5, 2.4),
-		Hippo = animal("Hippo", "Mythic", 220, 0.6, 5, 3.0),
-		Giraffe = animal("Giraffe", "Mythic", 250, 0.6, 5, 2.8),
-		Phoenix = animal("Phoenix", "Mythic", 280, 0.5, 5, 2.2),
-		Kitsune = animal("Kitsune", "Mythic", 300, 0.5, 5, 2.4),
-		Axolotl = limited(animal("Axolotl", "Mythic", 400, 0, 1, 1.2)),
+		Lion = animal("Lion", "Mythic", 144, 0.6, 5, 2.4),
+		Hippo = animal("Hippo", "Mythic", 176, 0.6, 5, 3.0),
+		Giraffe = animal("Giraffe", "Mythic", 200, 0.6, 5, 2.8),
+		Phoenix = animal("Phoenix", "Mythic", 224, 0.5, 5, 2.2),
+		Kitsune = animal("Kitsune", "Mythic", 240, 0.5, 5, 2.4),
+		Axolotl = limited(animal("Axolotl", "Mythic", 320, 0, 1, 1.2)),
 		-- Zoo God
-		Elephant = animal("Elephant", "ZooGod", 800, 0.15, 6, 4.0),
-		Unicorn = animal("Unicorn", "ZooGod", 1000, 0.15, 6, 2.6),
-		Dragon = animal("Dragon", "ZooGod", 1200, 0.12, 6, 4.2),
+		Elephant = animal("Elephant", "ZooGod", 640, 0.15, 6, 4.0),
+		Unicorn = animal("Unicorn", "ZooGod", 800, 0.15, 6, 2.6),
+		Dragon = animal("Dragon", "ZooGod", 960, 0.12, 6, 4.2),
 		-- Secret
-		TRex = animal("T-Rex", "Secret", 3000, 0.03, 7, 4.5),
-		Kaiju = animal("Kaiju", "Secret", 5000, 0.02, 7, 5.0),
+		TRex = animal("T-Rex", "Secret", 2400, 0.03, 7, 4.5),
+		Kaiju = animal("Kaiju", "Secret", 4000, 0.02, 7, 5.0),
 	} :: { [string]: AnimalDefinition },
 }
 AnimalConfig.Animals.TRex.TemplateName = "TRex"
@@ -129,7 +130,15 @@ local PASTURE_ONLY = {
 	PastureLarge = "ExtraLarge",
 }
 
+-- Any animal can go in any pen: ZooService shrinks it to fit, and the pen's size sets how
+-- much cash its pad can hold instead (GameConfig.PenCashCap). The old body-class rules stay
+-- below behind STRICT_SIZES in case they come back.
+local STRICT_SIZES = false
+
 function AnimalConfig.fits(bodyClass: string, penClass: string): boolean
+	if not STRICT_SIZES then
+		return true
+	end
 	local only = PASTURE_ONLY[penClass]
 	if only then
 		return bodyClass == only

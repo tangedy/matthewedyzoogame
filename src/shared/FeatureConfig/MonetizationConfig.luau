@@ -229,7 +229,7 @@ local products: { Product } = {
 		Id = 0,
 		Robux = 1000,
 		DisplayName = "Axolotl",
-		Description = "Limited Mythic! Only 1,000 will ever exist. Never restocked. Includes the first large cage.",
+		Description = "Limited Mythic! Only 1,000 will ever exist. One per player. Includes the first large cage.",
 		Tab = "Limited",
 		Order = 1,
 		Kind = "Limited",
@@ -237,6 +237,7 @@ local products: { Product } = {
 		Species = "Axolotl",
 		Mutation = "Normal",
 		Stock = 1000,
+		OncePerPlayer = true,
 	},
 	-- Kept so a receipt for the old right pasture still grants the first large cage.
 	-- The cage itself is included with the Axolotl; nothing in the world prompts this.

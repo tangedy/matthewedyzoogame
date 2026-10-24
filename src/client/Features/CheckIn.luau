@@ -1,8 +1,8 @@
 -- Seven-day check-in chart (server: Features/LiveOps/CheckIn). A DAILY button on the left,
 -- right above SHOP, opens a panel with all seven rewards: claimed days are ticked, today's
--- glows, and CLAIM sends the request (the server picks the reward). The button only shows
--- while today's reward is waiting, and only once the player has upgraded their gear and
--- placed an animal (the server's Unlocked). The panel never opens by itself. Rewards and their
+-- glows, and CLAIM sends the request (the server picks the reward). After a claim the button
+-- stays, counting down to the next reward (LiveOpsConfig.CheckIn.CooldownHours). It only shows
+-- once the player has upgraded their gear and placed an animal (the server's Unlocked). The panel never opens by itself. Rewards and their
 -- labels come from LiveOpsConfig.CheckIn, so the chart always shows exactly what each day gives.
 
 local Players = game:GetService("Players")
@@ -109,12 +109,13 @@ local function render()
 		claimButton.BackgroundColor3 = BUTTON_COLOR
 		claimButton.Active = true
 	else
-		claimButton.Text = `NEXT IN {clock(left)}`
+		claimButton.Text = `COME BACK TOMORROW · {clock(left)}`
 		claimButton.BackgroundColor3 = WAIT_COLOR
 		claimButton.Active = false
 	end
 	badge.Visible = s.CanClaim
-	local show = s.CanClaim and s.Unlocked == true
+	dailyButton.Text = if s.CanClaim then "DAILY" else `DAILY {clock(left)}`
+	local show = s.Unlocked == true
 	dailyButton.Visible = show
 	local shop = player.PlayerGui:FindFirstChild("ShopButton", true)
 	if shop and shop:IsA("GuiObject") then
@@ -332,8 +333,8 @@ function CheckIn.init(_initial: any)
 	task.spawn(function()
 		while dailyButton.Parent do
 			task.wait(1)
-			if panel.Visible then
-				render()
+			if panel.Visible or (state and not state.CanClaim) then
+				render() -- keeps the countdowns ticking
 			elseif state and state.CanClaim then
 				pop(dailyScale, 1.12, 0.5) -- a nudge while a reward is waiting
 				task.wait(4)

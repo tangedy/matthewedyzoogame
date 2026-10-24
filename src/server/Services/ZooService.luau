@@ -63,6 +63,19 @@ local purchaseResult = Remotes.event("PurchaseResult")
 local introAutoSold = Remotes.event("IntroAutoSold")
 local overflowPrompt = Remotes.event("OverflowPrompt")
 local yardRevealed = Remotes.event("YardRevealed")
+local paidConfirm = Remotes.event("PaidSellConfirm")
+
+-- Robux animals ask first: selling one (or swapping it out of a pen) sends the question to the
+-- client, and only an Accept with the matching token runs the action. Each action checks
+-- again when it runs, since the zoo may have changed while the question was open.
+local pendingConfirm: { [Player]: { Token: number, Run: () -> () } } = {}
+local confirmCount = 0
+
+local function askPaid(player: Player, text: string, run: () -> ())
+	confirmCount += 1
+	pendingConfirm[player] = { Token = confirmCount, Run = run }
+	paidConfirm:FireClient(player, confirmCount, text)
+end
 
 -- Values -------------------------------------------------------------------------------
 
@@ -211,6 +224,33 @@ local function animalsInPen(data: PlayerDataService.SavedData, pen: number): { O
 	return list
 end
 
+-- Most uncollected cash this pen's pad holds (GameConfig.PenCashCap by the pen's class).
+local function penCap(zoo: Zoo?, penIndex: number): number
+	local pen = if zoo then penOf(zoo, penIndex) else nil
+	local class = pen and pen:GetAttribute("PenClass")
+	local caps: { [string]: number } = GameConfig.PenCashCap
+	return caps[if typeof(class) == "string" then class else "Standard"] or caps.Standard
+end
+
+local function penPending(data: PlayerDataService.SavedData, penIndex: number): number
+	local sum = 0
+	for _, animal in data.Animals do
+		if animal.Pen == penIndex then
+			sum += animal.Pending
+		end
+	end
+	return sum
+end
+
+-- Adds cash to an animal's share of its pen's pad, stopping at the pen's cap. Returns what
+-- actually went in.
+local function credit(zoo: Zoo?, data: PlayerDataService.SavedData, animal: OwnedAnimal, amount: number): number
+	local room = math.max(0, penCap(zoo, animal.Pen) - penPending(data, animal.Pen))
+	local added = math.min(amount, room)
+	animal.Pending += added
+	return added
+end
+
 local function totalIncome(data: PlayerDataService.SavedData): number
 	local sum = 0
 	for _, animal in data.Animals do
@@ -332,6 +372,7 @@ local function refreshPens(player: Player)
 			-- The client renders the counter (count-up, bounce, money pop) from these.
 			pad:SetAttribute("Cash", if #occupants > 0 then math.floor(cash) else nil)
 			pad:SetAttribute("Rate", if #occupants > 0 then rate else nil)
+			pad:SetAttribute("Cap", penCap(zoo, i))
 		end
 
 		local post = pen:FindFirstChild("GatePost")
@@ -574,7 +615,10 @@ local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model, data: Pla
 	local slot = if pen and data then slotFor(pen, data, animal) else pen and pen:FindFirstChild("Slot") :: BasePart?
 	model.Name = "ZooAnimal"
 	model:SetAttribute("AnimalId", animal.Id)
-	AnimalService.resize(model, AnimalService.bodyScale(animal.Species))
+	-- A touch smaller than at the wash, and never longer than the pen is wide.
+	local floor = pen and pen:FindFirstChild("Floor") :: BasePart?
+	local room = if floor then math.min(floor.Size.X, floor.Size.Z) - GameConfig.PenFitMargin else nil
+	AnimalService.resize(model, AnimalService.bodyScale(animal.Species) * GameConfig.PenAnimalScale, room)
 	if slot then
 		model:PivotTo(slot.CFrame)
 	end
@@ -748,7 +792,7 @@ end
 
 -- Put the carried animal into a pen. An occupied pen sells its animal first (plus any cash
 -- still on its pad), which is the swap.
-local function placeCarried(player: Player, penIndex: number)
+local function placeCarried(player: Player, penIndex: number, confirmed: boolean?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = carriedRecord(player)
@@ -776,6 +820,17 @@ local function placeCarried(player: Player, penIndex: number)
 		return
 	end
 	local old, oldIndex = animalInPen(data, penIndex)
+	if old and old.Paid and not confirmed then
+		local label = ZooService.label(old.Species, old.Mutation)
+		askPaid(player, `You bought the {label} with Robux. Swapping sells it. Sell it?`, function()
+			local now = PlayerDataService.get(player)
+			local held = carriedRecord(player)
+			if now and held and held.Id == record.Id and animalInPen(now, penIndex) == old then
+				placeCarried(player, penIndex, true)
+			end
+		end)
+		return
+	end
 	if old and oldIndex then
 		table.remove(data.Animals, oldIndex)
 		EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
@@ -796,6 +851,7 @@ local function placeCarried(player: Player, penIndex: number)
 		Mutation = record.Mutation,
 		Pen = penIndex,
 		Pending = 0,
+		Paid = record.Paid,
 	}
 	table.insert(data.Animals, animal)
 	dropCarry(player)
@@ -807,11 +863,21 @@ local function placeCarried(player: Player, penIndex: number)
 end
 
 -- Sells the animal in hand for its sell value.
-local function sellCarried(player: Player)
+local function sellCarried(player: Player, confirmed: boolean?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = carriedRecord(player)
 	if not zoo or not data or not record then
+		return
+	end
+	if record.Paid and not confirmed then
+		local label = ZooService.label(record.Species, record.Mutation)
+		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+			local held = carriedRecord(player)
+			if held and held.Id == record.Id then
+				sellCarried(player, true)
+			end
+		end)
 		return
 	end
 	removeCached(data, record.Id)
@@ -833,7 +899,7 @@ local function putDownCarried(player: Player)
 	returnCarryToCache(player)
 end
 
-local function sellFromPen(player: Player, penIndex: number, which: number?)
+local function sellFromPen(player: Player, penIndex: number, which: number?, confirmed: boolean?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	if not zoo or not data then
@@ -842,6 +908,16 @@ local function sellFromPen(player: Player, penIndex: number, which: number?)
 	local occupants = animalsInPen(data, penIndex)
 	local animal = occupants[which or 1]
 	if not animal then
+		return
+	end
+	if animal.Paid and not confirmed then
+		local label = ZooService.label(animal.Species, animal.Mutation)
+		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+			local now = PlayerDataService.get(player)
+			if now and animalsInPen(now, penIndex)[which or 1] == animal then
+				sellFromPen(player, penIndex, which, true)
+			end
+		end)
 		return
 	end
 	local index = table.find(data.Animals, animal)
@@ -867,11 +943,26 @@ local function sellFromPen(player: Player, penIndex: number, which: number?)
 	refreshAll(player)
 end
 
-local function sellFromCache(player: Player, slotIndex: number)
+local function sellFromCache(player: Player, slotIndex: number, confirmed: boolean?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = zoo and data and waitingRecords(zoo, data)[slotIndex]
 	if not zoo or not data or not record then
+		return
+	end
+	if record.Paid and not confirmed then
+		local label = ZooService.label(record.Species, record.Mutation)
+		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+			local nowZoo, now = zoos[player], PlayerDataService.get(player)
+			if nowZoo and now then
+				for index, waiting in waitingRecords(nowZoo, now) do
+					if waiting.Id == record.Id then
+						sellFromCache(player, index, true)
+						return
+					end
+				end
+			end
+		end)
 		return
 	end
 	removeCached(data, record.Id)
@@ -1126,12 +1217,22 @@ local function keepOverflow(player: Player)
 	fireOverflow(player)
 end
 
-local function sellOverflow(player: Player)
+local function sellOverflow(player: Player, confirmed: boolean?)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = data and data.Overflow[1]
 	if not zoo or not data or not record then
 		fireOverflow(player)
+		return
+	end
+	if record.Paid and not confirmed then
+		local label = ZooService.label(record.Species, record.Mutation)
+		askPaid(player, `You bought the {label} with Robux. Sell it?`, function()
+			local now = PlayerDataService.get(player)
+			if now and now.Overflow[1] == record then
+				sellOverflow(player, true)
+			end
+		end)
 		return
 	end
 	table.remove(data.Overflow, 1)
@@ -1266,9 +1367,10 @@ function ZooService.addToPads(player: Player, total: number)
 		return
 	end
 	local sum = totalIncome(data)
+	local zoo = zoos[player]
 	for _, animal in data.Animals do
 		local share = if sum > 0 then ZooService.income(animal.Species, animal.Mutation) / sum else 1 / #data.Animals
-		animal.Pending += total * share
+		credit(zoo, data, animal, total * share)
 	end
 	PlayerDataService.markDirty(player)
 	refreshPens(player)
@@ -1611,8 +1713,19 @@ function ZooService.init()
 			sellOverflow(player)
 		end
 	end))
+	choiceJanitor:Add(paidConfirm.OnServerEvent:Connect(function(player: Player, token: any, accepted: any)
+		local pending = pendingConfirm[player]
+		if not pending or pending.Token ~= token then
+			return
+		end
+		pendingConfirm[player] = nil
+		if accepted == true then
+			pending.Run()
+		end
+	end))
 	choiceJanitor:Add(Players.PlayerRemoving:Connect(function(player)
 		lastAction[player] = nil
+		pendingConfirm[player] = nil
 	end))
 	-- Income: every tick, each penned animal adds its income to its pen's pad.
 	task.spawn(function()
@@ -1622,13 +1735,13 @@ function ZooService.init()
 				local data = PlayerDataService.get(player)
 				if data and #data.Animals > 0 then
 					local multiplier = Hooks.apply("IncomeMultiplier", 1, player)
+					local zoo = zoos[player]
 					local tick = 0
 					for _, animal in data.Animals do
 						local amount = ZooService.income(animal.Species, animal.Mutation)
 							* multiplier
 							* GameConfig.IncomeTickSeconds
-						animal.Pending += amount
-						tick += amount
+						tick += credit(zoo, data, animal, amount) -- a full pad stops filling
 					end
 					PlayerDataService.markDirty(player)
 					refreshPens(player)

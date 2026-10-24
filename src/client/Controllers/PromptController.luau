@@ -27,7 +27,7 @@ local BUTTON_HEIGHT = 44
 local BUTTON_GAP = 6
 
 -- Button colour by what the action does. Anything unlisted is the neutral blue.
-local SELL = Color3.fromRGB(255, 130, 60)
+local SELL = Color3.fromRGB(70, 190, 90)
 local BUY = Color3.fromRGB(70, 200, 100)
 local NEUTRAL = Color3.fromRGB(70, 150, 240)
 local COLORS: { [string]: Color3 } = {
@@ -38,7 +38,6 @@ local COLORS: { [string]: Color3 } = {
 	ExpandPrompt = Color3.fromRGB(120, 200, 80),
 	TruckPrompt = BUY,
 	UnlockPrompt = BUY,
-	TimedPrompt = BUY,
 	RobuxShopPrompt = Color3.fromRGB(0, 140, 255),
 	PetPrompt = Color3.fromRGB(190, 120, 255),
 	PetPrompt2 = Color3.fromRGB(190, 120, 255),

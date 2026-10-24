@@ -47,6 +47,7 @@ export type OwnedAnimal = {
 	Mutation: string,
 	Pen: number,
 	Pending: number, -- cash earned but not yet collected from the pen's pad
+	Paid: boolean?, -- bought with Robux: selling or swapping it out asks first
 }
 
 export type SavedData = {
@@ -367,6 +368,7 @@ local function sanitize(raw: any): SavedData
 				Mutation = mutation,
 				Pen = pen,
 				Pending = cleanCount(animal.Pending),
+				Paid = if animal.Paid == true then true else nil,
 			})
 			data.Index[PlayerDataService.indexKey(species, mutation)] = true
 		end
@@ -384,6 +386,7 @@ local function sanitize(raw: any): SavedData
 					Species = species,
 					Mutation = mutation,
 					Pending = cleanCount(animal.Pending),
+					Paid = animal.Paid == true,
 					Body = AnimalConfig.Animals[species].BodyClass,
 				})
 				continue
@@ -441,6 +444,7 @@ local function sanitize(raw: any): SavedData
 						Id = entry.Id,
 						Species = entry.Species,
 						Mutation = entry.Mutation,
+						Paid = if entry.Paid then true else nil,
 					})
 				end
 			end

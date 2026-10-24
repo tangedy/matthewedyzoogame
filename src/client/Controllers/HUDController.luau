@@ -143,11 +143,11 @@ local function buildGui()
 	announcementLabel = textLabel(gui, {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 40),
-		Size = UDim2.new(0.9, 0, 0, 34),
+		Size = UDim2.new(0.9, 0, 0, 26),
 		Visible = false,
 	})
 	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(720, 34)
+	constraint.MaxSize = Vector2.new(560, 26)
 	constraint.Parent = announcementLabel
 
 	-- Bottom center: contextual instructions and hints
@@ -307,6 +307,13 @@ local function showAnnouncement(text: string, rarityKey: string)
 	UIStyle.rarity(announcementLabel, rarityKey)
 	if RarityConfig.ByKey[rarityKey] == nil then
 		announcementLabel.TextColor3 = Color3.new(1, 1, 1)
+	else
+		-- Softened toward white with a thin outline, so a loud tier colour still reads calmly.
+		announcementLabel.TextColor3 = announcementLabel.TextColor3:Lerp(Color3.new(1, 1, 1), 0.35)
+	end
+	local outline = announcementLabel:FindFirstChildOfClass("UIStroke")
+	if outline then
+		outline.Thickness = 1.5
 	end
 	announcementLabel.Text = text
 	announcementLabel.Visible = true

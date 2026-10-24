@@ -89,7 +89,7 @@ local DESIGNS: { [number]: Design } = {
 		NozzleZ = -0.8,
 		Decorate = function(body)
 			body.Material = Enum.Material.Sand
-			piece("ScrubPad", Vector3.new(1.1, 0.2, 1.5), CFrame.new(0, 0.47, 0), Color3.fromRGB(60, 170, 80), body).Material =
+			piece("ScrubPad", Vector3.new(1.14, 0.2, 1.54), CFrame.new(0, 0.47, 0), Color3.fromRGB(60, 170, 80), body).Material =
 				Enum.Material.Fabric
 			local suds = piece(
 				"Suds",

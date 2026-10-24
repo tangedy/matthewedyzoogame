@@ -2,9 +2,13 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
+
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 
 -- The character waits until a base exists, then loads on that base's spawn.
 Players.CharacterAutoLoads = false
+StarterPlayer.CharacterWalkSpeed = GameConfig.WalkSpeed
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Services

@@ -46,23 +46,12 @@ local passesById: { [number]: Pass } = {}
 local processing: { [string]: boolean } = {} -- PurchaseIds being granted right now
 
 local offerRemote: RemoteEvent
-local standByPlayer: { [Player]: Model } = {}
-local purchaseFromStand: (Player, string) -> ()
-
-local function clock(seconds: number): string
-	local s = math.max(0, math.floor(seconds))
-	local hours = s // 3600
-	if hours > 0 then
-		return string.format("%d:%02d:%02d", hours, (s % 3600) // 60, s % 60)
-	end
-	return string.format("%d:%02d", s // 60, s % 60)
-end
 
 -- Robux purchases in the world live at the blue Robux shop on the plaza (WorldBuilder
--- builds it). Its counter opens the shop panel (client) and carries the timed auto-collect
--- prompt; there is no forever pass.
-local function ensureStand(bay: Model): Model?
-	-- The old green kiosk from earlier builds of the plot.
+-- builds it); its counter only opens the shop panel. Auto-Collect is sold from that panel.
+-- This clears what earlier builds left on the plot: the green kiosk and the counter's
+-- separate Auto-Collect prompt.
+local function clearOldStands(bay: Model)
 	local zoo = bay:FindFirstChild("Zoo")
 	local old = zoo and zoo:FindFirstChild("AutoCollectStand")
 	if old then
@@ -70,73 +59,9 @@ local function ensureStand(bay: Model): Model?
 	end
 	local shop = bay:FindFirstChild("RobuxShop")
 	local counter = shop and shop:FindFirstChild("Counter")
-	if not shop or not shop:IsA("Model") or not counter or not counter:IsA("BasePart") then
-		return nil
-	end
-	if not counter:FindFirstChild("TimedPrompt") then
-		local product = MonetizationConfig.ProductsByKey.AutoCollect2h
-		local created = Instance.new("ProximityPrompt")
-		created.Name = "TimedPrompt"
-		created.ActionText = `Buy ({product.Robux} ROBUX)`
-		created.ObjectText = "Auto-Collect 10 MIN"
-		created.HoldDuration = 0 -- the Robux dialog is the confirmation
-		created.MaxActivationDistance = 12
-		created.RequiresLineOfSight = false
-		created.KeyboardKeyCode = Enum.KeyCode.F
-		created.GamepadKeyCode = Enum.KeyCode.ButtonY
-		created.UIOffset = Vector2.new(0, -110) -- above the shop's own prompt
-		created.Parent = counter
-	end
-	return shop
-end
-
-local function promptOn(stand: Model, counterName: string, promptName: string): ProximityPrompt?
-	local counter = stand:FindFirstChild(counterName)
-	local prompt = counter and counter:FindFirstChild(promptName)
-	if prompt and prompt:IsA("ProximityPrompt") then
-		return prompt
-	end
-	return nil
-end
-
-local function refreshStand(player: Player)
-	local stand = standByPlayer[player]
-	if not stand or not stand.Parent then
-		return
-	end
-	local timed = promptOn(stand, "Counter", "TimedPrompt")
-	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
+	local timed = counter and counter:FindFirstChild("TimedPrompt")
 	if timed then
-		timed.Enabled = true
-		timed.ObjectText = "Auto-Collect 10 MIN"
-		local left = MonetizationGrants.autoCollectLeft(player)
-		timed.ActionText = if left > 0
-			then `Add 10 minutes ({product.Robux} ROBUX) {clock(left)} left`
-			else `Buy ({product.Robux} ROBUX)`
-	end
-end
-
-local function bindPrompt(prompt: ProximityPrompt, player: Player, key: string)
-	if prompt:GetAttribute("Bound") then
-		return
-	end
-	prompt:SetAttribute("Bound", true)
-	prompt.Triggered:Connect(function(who: Player)
-		if who == player then
-			purchaseFromStand(player, key)
-		end
-	end)
-end
-
-local function bindStand(player: Player, bay: Model)
-	local stand = ensureStand(bay)
-	if stand then
-		standByPlayer[player] = stand
-		local timed = promptOn(stand, "Counter", "TimedPrompt")
-		if timed then
-			bindPrompt(timed, player, "AutoCollect2h")
-		end
-		refreshStand(player)
+		timed:Destroy()
 	end
 end
 
@@ -226,7 +151,10 @@ local function buyProduct(player: Player, product: Product)
 		return
 	end
 	if product.OncePerPlayer and saved.Once[product.Key] then
-		MonetizationState.notify(player, "You already used that offer.", false)
+		local text = if product.Kind == "Limited"
+			then `You already own the {product.DisplayName}. It's one per player.`
+			else "You already used that offer."
+		MonetizationState.notify(player, text, false)
 		return
 	end
 	-- A second intro prompt opened before the first receipt lands would also get the intro price.
@@ -353,8 +281,6 @@ local function onBuy(player: Player, key: any)
 		buyPass(player, pass)
 	end
 end
-
-purchaseFromStand = onBuy
 
 -- Offers --------------------------------------------------------------------------------
 
@@ -512,8 +438,8 @@ local function connectHooks()
 		end
 	end)
 
-	Hooks.on("BayAssigned", function(player: Player, bay: Model)
-		bindStand(player, bay)
+	Hooks.on("BayAssigned", function(_player: Player, bay: Model)
+		clearOldStands(bay)
 	end)
 
 	Hooks.on("IncomeTick", function(player: Player)
@@ -574,7 +500,6 @@ local function connectHooks()
 		if session and saved and session.AutoCollectEndsAt > 0 then
 			saved.AutoCollectLeft = math.max(0, session.AutoCollectEndsAt - Workspace:GetServerTimeNow())
 		end
-		standByPlayer[player] = nil
 	end)
 end
 
@@ -612,7 +537,6 @@ local function runLoop()
 					MonetizationState.push(player)
 				end
 			end
-			refreshStand(player)
 		end
 		if sinceDelivery >= MonetizationConfig.PendingDeliverySeconds then
 			sinceDelivery = 0

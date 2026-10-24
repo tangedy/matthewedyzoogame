@@ -22,11 +22,12 @@ return {
 
 	ParkOffset = Vector3.new(0, 0, 10), -- from the bay's road entrance; clear of the walk-in lane
 	StartDistance = 90, -- studs up the road the truck appears from; stays on the eight-plot road
-	MaxAnimalLength = 7, -- the animal on the bed is scaled down to fit if longer
+	MaxAnimalLength = 6.2, -- the animal rides sideways on the bed, scaled down to fit between the rails
 
 	Colors = {
 		Cab = Color3.fromRGB(230, 70, 60),
 		Bed = Color3.fromRGB(245, 245, 245),
 		Trim = Color3.fromRGB(255, 205, 40),
+		Beacon = Color3.fromRGB(255, 160, 30), -- roof light, flashes while parked
 	},
 }

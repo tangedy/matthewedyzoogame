@@ -23,7 +23,10 @@ export type State = {
 	Milestones: { [string]: number },
 	OfflineDouble: number, -- welcome-back cash that can still be doubled once
 	RareClock: number, -- play seconds toward the next guaranteed rarer walk-in
+	NewPlayerShown: boolean, -- the new-player Kaiju walk has happened (or this profile was too old for it)
+	NewPlayerBoostEndsAt: number?, -- unix seconds the new-player rarity boost runs until
 	CheckInDay: number?, -- UTC day number of the last check-in claim
+	CheckInAt: number?, -- os.time() of the last check-in claim; the next one opens CooldownHours later
 	CheckInCount: number, -- days claimed in the current seven-day chart (0..7)
 	EarningsBuff: boolean, -- check-in day 4: permanent income multiplier
 	ProWasher: boolean, -- check-in day 6: PRO WASHER chat title
@@ -89,8 +92,13 @@ function Common.state(player: Player): State?
 	raw.PlaySeconds = math.clamp(math.floor(finite(raw.PlaySeconds) or 0), 0, 315360000)
 	raw.OfflineDouble = math.max(0, math.floor(finite(raw.OfflineDouble) or 0))
 	raw.RareClock = math.max(0, math.floor(finite(raw.RareClock) or 0))
+	raw.NewPlayerShown = raw.NewPlayerShown == true
+	local boostEnds = finite(raw.NewPlayerBoostEndsAt)
+	raw.NewPlayerBoostEndsAt = if boostEnds and boostEnds > 0 then math.floor(boostEnds) else nil
 	local checkInDay = finite(raw.CheckInDay)
 	raw.CheckInDay = if checkInDay and checkInDay > 0 then math.floor(checkInDay) else nil
+	local checkInAt = finite(raw.CheckInAt)
+	raw.CheckInAt = if checkInAt and checkInAt > 0 then math.floor(checkInAt) else nil
 	raw.CheckInCount = math.clamp(math.floor(finite(raw.CheckInCount) or 0), 0, 7)
 	raw.EarningsBuff = raw.EarningsBuff == true
 	raw.ProWasher = raw.ProWasher == true

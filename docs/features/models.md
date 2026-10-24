@@ -6,12 +6,12 @@ Block-built showpiece models for the rarest animals. Everything lives in `src/se
 
 | Key | Display name | Tier | Income/s | Hose tier | Spawn weight | Wash time × | Look |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `Griffon` | Griffon | Legendary | 90 | 3 | 1.5 | 2.3 | White eagle head with a hooked gold beak and crest, lion body, eagle forelegs with talons, lion paws behind, wings folded on the back with gold edges, tufted tail |
-| `Phoenix` | Phoenix | Mythic | 280 | 4 | 0.5 | 2.2 | Two-legged crimson bird, gold beak and bib, glowing eyes, neon flame crest, raised V wings edged with neon flame feathers, five drooping flame tail feathers, fire particles |
-| `Kitsune` | Kitsune | Mythic | 300 | 4 | 0.5 | 2.4 | White nine-tailed fox: red-lined ears, shrine-fox face markings, blue gem, glowing slit eyes, red rope collar with a gold bell, nine tails fanned behind with white tips and blue fox-fire wisps, two hovering fox-fire orbs |
-| `Axolotl` | Axolotl | Mythic (Limited) | 400 | 1 | 0 | 1.2 | Pink, wide smiling head, six frilly glowing gill stalks, bead eyes, blush, paddle tail with a see-through fin, bubbles |
-| `Dragon` | Dragon | Zoo God | 1200 | 5 | 0.12 | 4.2 | Crimson, gold belly plates, tilted neck, swept-back horns, open jaws glowing with fire, fire-breath and ember particles plus nostril smoke, membrane wings with finger spars, spines, tail ending in a spade |
-| `Kaiju` | Kaiju | Secret | 5000 | 5 | 0.02 | 5.0 | Upright charcoal giant lizard: three columns of glowing cyan dorsal plates up the back and along the tail, glowing jaws with atomic breath, burning slit eyes, heavy brows, arms, huge thighs |
+| `Griffon` | Griffon | Legendary | 72 | 3 | 1.5 | 2.3 | White eagle head with a hooked gold beak and crest, lion body, eagle forelegs with talons, lion paws behind, wings folded on the back with gold edges, tufted tail |
+| `Phoenix` | Phoenix | Mythic | 224 | 4 | 0.5 | 2.2 | Two-legged crimson bird, gold beak and bib, glowing eyes, neon flame crest, raised V wings edged with neon flame feathers, five drooping flame tail feathers, fire particles |
+| `Kitsune` | Kitsune | Mythic | 240 | 4 | 0.5 | 2.4 | White nine-tailed fox: red-lined ears, shrine-fox face markings, blue gem, glowing slit eyes, red rope collar with a gold bell, nine tails fanned behind with white tips and blue fox-fire wisps, two hovering fox-fire orbs |
+| `Axolotl` | Axolotl | Mythic (Limited) | 320 | 1 | 0 | 1.2 | Pink, wide smiling head, six frilly glowing gill stalks, bead eyes, blush, paddle tail with a see-through fin, bubbles |
+| `Dragon` | Dragon | Zoo God | 960 | 5 | 0.12 | 4.2 | Crimson, gold belly plates, tilted neck, swept-back horns, open jaws glowing with fire, fire-breath and ember particles plus nostril smoke, membrane wings with finger spars, spines, tail ending in a spade |
+| `Kaiju` | Kaiju | Secret | 4000 | 5 | 0.02 | 5.0 | Upright charcoal giant lizard: three columns of glowing cyan dorsal plates up the back and along the tail, glowing jaws with atomic breath, burning slit eyes, heavy brows, arms, huge thighs |
 
 `Axolotl` has `Limited = true` and `SpawnWeight = 0`, so it never walks in. The monetization feature sells it (see the cross-feature contract).
 

@@ -66,6 +66,7 @@ function OverflowController.init()
 
 	local keep = button("Keep", 0.03)
 	local sell = button("Sell", 0.51)
+	sell.BackgroundColor3 = Color3.fromRGB(70, 190, 90)
 	janitor:Add(keep.MouseButton1Click:Connect(function()
 		Remotes.event("OverflowChoice"):FireServer("keep")
 	end))

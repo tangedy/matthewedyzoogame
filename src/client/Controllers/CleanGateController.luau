@@ -1,35 +1,45 @@
 -- When the animal in the bay needs more clean power than the hose has (Super Soap included),
--- spraying does nothing. This offers the two ways forward: send it away, or pay to clean it now.
+-- spraying does nothing. This offers the two ways forward: send it away, or pay to wash it now.
+-- The offer floats over the animal and only shows while the cursor is on the animal (or on the
+-- offer itself). Touch and gamepad have no hover, so there it shows the whole time.
+-- Also hides the 🔒 gear line on walk-in nameplates once your gear can already wash them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
-local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.UI)
 local Modals = require(script.Parent.Parent.UI.Modals)
 
 local player = Players.LocalPlayer
 
 local CleanGateController = {}
 
+local HOVER_GRACE = 0.6 -- seconds the offer stays after the cursor leaves, to reach its buttons
+local PANEL_COLOR = Color3.fromRGB(34, 38, 50)
+local LEAVE_COLOR = Color3.fromRGB(74, 80, 96)
+local WASH_COLOR = Color3.fromRGB(70, 175, 100)
+
 local tier = 1
 local soapEndsAt = 0
 local bay: Types.BaySnapshot? = nil
+local blocked = false
+local hoveredAt = -math.huge
 local nextClickAt = 0
 local cleanKey = "CleanNow"
 
 local panel: Frame
 local title: TextLabel
-local body: TextLabel
 local cleanButton: TextButton
-local marker: BillboardGui
 
 local function hosePower(): number
 	local tool = ToolConfig[tier] or ToolConfig[1]
@@ -38,15 +48,19 @@ local function hosePower(): number
 	return tool.CleaningPower * mult
 end
 
-local function animalHead(): BasePart?
+local function canWash(def: AnimalConfig.AnimalDefinition): boolean
+	local soaped = soapEndsAt > Workspace:GetServerTimeNow()
+	return CleanPower.canClean(hosePower(), def.Rarity) and (not def.RequiresSoap or soaped)
+end
+
+local function bayAnimal(): Model?
 	if not bay or not bay.BayName then
 		return nil
 	end
 	local bays = Workspace:FindFirstChild("WashBays")
 	local model = bays and bays:FindFirstChild(bay.BayName)
 	local animal = model and model:FindFirstChild("Animal")
-	local head = animal and animal:FindFirstChild("Head")
-	return if head and head:IsA("BasePart") then head else nil
+	return if animal and animal:IsA("Model") then animal else nil
 end
 
 local function soapOnly(): boolean
@@ -55,70 +69,124 @@ local function soapOnly(): boolean
 	return def ~= nil and def.RequiresSoap == true
 end
 
+-- Nameplates (UIStyle.nameplate) keep the text without the lock line in OpenText.
+local function applyLock(label: TextLabel)
+	local openText = label:GetAttribute("OpenText")
+	local lockText = label:GetAttribute("LockText")
+	local openLines = label:GetAttribute("OpenLines")
+	local lines = label:GetAttribute("Lines")
+	local model = label:FindFirstAncestorWhichIsA("Model")
+	local species = model and model:GetAttribute("AnimalKey")
+	local def = if typeof(species) == "string" then AnimalConfig.Animals[species] else nil
+	if typeof(openText) ~= "string" or typeof(lockText) ~= "string" or not def then
+		return
+	end
+	local open = canWash(def)
+	label.Text = if open then openText else lockText
+	-- The billboard keeps its height; the rows sit at its bottom, on the animal.
+	local share = if open and typeof(openLines) == "number" and typeof(lines) == "number" then openLines / lines else 1
+	label.AnchorPoint = Vector2.new(0, 1)
+	label.Position = UDim2.fromScale(0, 1)
+	label.Size = UDim2.fromScale(1, share)
+end
+
+local function applyAllLocks()
+	local bays = Workspace:FindFirstChild("WashBays")
+	if not bays then
+		return
+	end
+	for _, item in bays:GetDescendants() do
+		if item:IsA("TextLabel") and item:GetAttribute("OpenText") ~= nil then
+			applyLock(item)
+		end
+	end
+end
+
 local function refresh()
 	local rarityKey = bay and bay.Rarity
 	local soaped = soapEndsAt > Workspace:GetServerTimeNow()
 	local needsSoap = soapOnly() and not soaped
-	local blocked = bay ~= nil
+	blocked = bay ~= nil
 		and bay.State == "Washing"
 		and typeof(rarityKey) == "string"
 		and (not CleanPower.canClean(hosePower(), rarityKey) or needsSoap)
 	player:SetAttribute("CleanBlocked", blocked)
-	panel.Visible = blocked
-	local head = if blocked then animalHead() else nil
-	marker.Adornee = head
-	marker.Enabled = head ~= nil
-	if head then
-		UIStyle.overhead(marker, head, UIStyle.Overhead.Callout)
-	end
 	if not blocked or typeof(rarityKey) ~= "string" then
+		panel.Visible = false
 		return
 	end
-	local rarity = RarityConfig.ByKey[rarityKey]
-	local name = if rarity then rarity.DisplayName else rarityKey
-	title.Text = `{name} is too dirty!`
-	title.TextColor3 = if not rarity
-			or rarity.Key == "Secret"
-			or rarity.Rainbow
-		then Color3.new(1, 1, 1)
-		else rarity.Color
+	-- Kept short: what's wrong, then the two buttons (let it go / wash now for R$).
 	if needsSoap and CleanPower.canClean(hosePower(), rarityKey) then
-		cleanKey = MonetizationConfig.ProductsByKey.CleanNow.Key
 		local offer = MonetizationConfig.ProductsByKey.CleanNow
-		title.Text = `{bay and bay.AnimalName or "This animal"} needs Super Soap!`
-		cleanButton.Text = `Clean Now · {offer.Robux} R$`
-		body.Text =
-			"Magic mud: no hose gets it off alone. Turn on Super Soap from the shop, let it go, or clean it now."
+		cleanKey = offer.Key
+		title.Text = "Needs Super Soap"
+		cleanButton.Text = `Wash now · {offer.Robux} R$`
 		return
 	end
-	local have = hosePower()
-	local need = CleanPower.required(rarityKey)
-	local hose = CleanPower.hoseName(rarityKey)
-	local steps = CleanPower.stepsAbove(have, rarityKey) or 0
+	local steps = CleanPower.stepsAbove(hosePower(), rarityKey) or 0
 	local offer = MonetizationConfig.productForCleanSteps(steps) or MonetizationConfig.ProductsByKey.CleanNow
 	cleanKey = offer.Key
-	cleanButton.Text = `Clean Now · {offer.Robux} R$`
-	local powerLine = `Needs {CleanPower.format(need)} clean power. Your hose has {CleanPower.format(have)}.`
-	local above = if steps == 1 then "1 rarity above" else `{steps} rarities above`
-	local priceLine = if steps > 0 then `\n{above} the next one you can't wash, so this is {offer.Robux} R$.` else ""
-	if hose then
-		body.Text = `{powerLine}\nThe {hose} can wash this. Let it go, or clean it now.{priceLine}`
-	else
-		body.Text = `{powerLine}\nNo hose can wash this yet. Let it go, or clean it now.{priceLine}`
-	end
+	title.Text = "Too dirty!"
+	cleanButton.Text = `Wash now · {offer.Robux} R$`
 end
 
-local function button(text: string, color: Color3, textColor: Color3, x: number): TextButton
+local function overPanel(point: Vector2): boolean
+	if not panel.Visible then
+		return false
+	end
+	local from, size = panel.AbsolutePosition, panel.AbsoluteSize
+	return point.X >= from.X and point.X <= from.X + size.X and point.Y >= from.Y and point.Y <= from.Y + size.Y
+end
+
+local function overAnimal(point: Vector2, animal: Model): boolean
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return false
+	end
+	local ray = camera:ViewportPointToRay(point.X, point.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { animal }
+	return Workspace:Raycast(ray.Origin, ray.Direction * 500, params) ~= nil
+end
+
+-- Every frame while blocked: follow the animal on screen, and show only while hovered.
+local function follow()
+	local animal = if blocked then bayAnimal() else nil
+	local head = animal and animal:FindFirstChild("Head")
+	local camera = Workspace.CurrentCamera
+	if not animal or not head or not head:IsA("BasePart") or not camera then
+		panel.Visible = false
+		return
+	end
+	local point = UserInputService:GetMouseLocation()
+	local hoverless = UIPlatform.get().inputMode ~= "KeyboardMouse"
+	if hoverless or overAnimal(point, animal) or overPanel(point) then
+		hoveredAt = os.clock()
+	end
+	local screen, onScreen = camera:WorldToViewportPoint(head.Position + Vector3.new(0, head.Size.Y, 0))
+	local show = onScreen and os.clock() - hoveredAt < HOVER_GRACE
+	if show then
+		local viewport = camera.ViewportSize
+		local half = panel.AbsoluteSize / 2
+		local x = math.clamp(screen.X, half.X + 8, viewport.X - half.X - 8)
+		local y = math.clamp(screen.Y, panel.AbsoluteSize.Y + 8, viewport.Y - 8)
+		panel.Position = UDim2.fromOffset(x, y)
+	end
+	panel.Visible = show
+end
+
+local function button(text: string, color: Color3, x: number): TextButton
 	local created = Instance.new("TextButton")
 	created.AnchorPoint = Vector2.new(0.5, 1)
-	created.Position = UDim2.new(x, 0, 1, -12)
-	created.Size = UDim2.fromOffset(188, 42)
+	created.Position = UDim2.new(x, 0, 1, -10)
+	created.Size = UDim2.new(0.5, -15, 0, 36)
 	created.BackgroundColor3 = color
 	created.Text = text
 	created.AutoButtonColor = true
 	created.Parent = panel
-	UIStyle.text(created, textColor, nil, 2.5)
-	UIStyle.border(created, 3)
+	UIStyle.text(created, Color3.new(1, 1, 1), Color3.fromRGB(20, 22, 30), 1.5)
+	UIStyle.border(created, 2)
 	return created
 end
 
@@ -126,39 +194,32 @@ local function build()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "CleanGate"
 	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true -- so panel pixels match GetMouseLocation
 	gui.DisplayOrder = 6
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	panel = Instance.new("Frame")
 	panel.Name = "Prompt"
 	panel.AnchorPoint = Vector2.new(0.5, 1)
-	panel.Position = UDim2.new(0.5, 0, 1, -16)
-	panel.Size = UDim2.fromOffset(440, 196)
-	panel.BackgroundColor3 = Color3.fromRGB(28, 32, 48)
+	panel.Size = UDim2.fromOffset(320, 88)
+	panel.BackgroundColor3 = PANEL_COLOR
+	panel.BackgroundTransparency = 0.08
 	panel.Visible = false
 	panel.Parent = gui
 	Modals.holdCursor(panel)
-	UIStyle.border(panel, 4)
+	UIStyle.border(panel, 2)
 
 	title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(16, 10)
-	title.Size = UDim2.new(1, -32, 0, 36)
+	title.Position = UDim2.fromOffset(12, 8)
+	title.Size = UDim2.new(1, -24, 0, 26)
 	title.Parent = panel
-	UIStyle.text(title, Color3.new(1, 1, 1), nil, 3)
+	UIStyle.text(title, Color3.fromRGB(240, 242, 248), Color3.fromRGB(20, 22, 30), 1.5)
 
-	body = Instance.new("TextLabel")
-	body.BackgroundTransparency = 1
-	body.Position = UDim2.fromOffset(16, 48)
-	body.Size = UDim2.new(1, -32, 0, 78)
-	body.TextWrapped = true
-	body.Parent = panel
-	UIStyle.text(body, Color3.fromRGB(230, 236, 255), nil, 2)
-	body.TextScaled = false
-	body.TextSize = 18
-
-	local leave = button("Let it go", Color3.fromRGB(88, 98, 120), Color3.new(1, 1, 1), 0.27)
-	cleanButton = button("Clean Now", Color3.fromRGB(255, 196, 48), Color3.fromRGB(40, 28, 8), 0.73)
+	local leave = button("Let it go", LEAVE_COLOR, 0.25)
+	leave.Position = UDim2.new(0.25, 2, 1, -10)
+	cleanButton = button("Wash now", WASH_COLOR, 0.75)
+	cleanButton.Position = UDim2.new(0.75, -2, 1, -10)
 	leave.Activated:Connect(function()
 		if os.clock() < nextClickAt then
 			return
@@ -173,20 +234,6 @@ local function build()
 		nextClickAt = os.clock() + 0.5
 		Remotes.event("MonetizationBuy"):FireServer(cleanKey)
 	end)
-
-	marker = Instance.new("BillboardGui")
-	marker.Name = "TooDirty"
-	marker.Size = UDim2.fromOffset(180, 48)
-	marker.AlwaysOnTop = true
-	marker.Enabled = false
-	marker.ResetOnSpawn = false
-	marker.Parent = player:WaitForChild("PlayerGui")
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Text = "TOO DIRTY!"
-	label.Parent = marker
-	UIStyle.text(label, Color3.fromRGB(255, 80, 80), nil, 3)
 end
 
 function CleanGateController.init(initial: Types.InitialState)
@@ -194,6 +241,15 @@ function CleanGateController.init(initial: Types.InitialState)
 	build()
 	bay = initial.Bay
 	refresh()
+	RunService.RenderStepped:Connect(follow)
+
+	local bays = Workspace:WaitForChild("WashBays")
+	applyAllLocks()
+	bays.DescendantAdded:Connect(function(item)
+		if item:IsA("TextLabel") and item:GetAttribute("OpenText") ~= nil then
+			applyLock(item)
+		end
+	end)
 
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(function(snapshot: Types.BaySnapshot)
 		bay = snapshot
@@ -202,11 +258,13 @@ function CleanGateController.init(initial: Types.InitialState)
 	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number)
 		tier = value
 		refresh()
+		applyAllLocks()
 	end)
 	Remotes.event("MonetizationState").OnClientEvent:Connect(function(state)
 		if typeof(state) == "table" and typeof(state.SoapEndsAt) == "number" then
 			soapEndsAt = state.SoapEndsAt
 			refresh()
+			applyAllLocks()
 		end
 	end)
 end

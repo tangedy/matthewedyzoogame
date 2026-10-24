@@ -32,6 +32,11 @@ local folder: Folder
 
 local FLOOR_Y = 0.5
 local WOOD = Color3.fromRGB(150, 110, 70)
+-- The drive animals walk in on, and the darker dirt of the cache arm where washed ones wait.
+local PATH_DIRT = Color3.fromRGB(176, 132, 86)
+local PATH_EDGE = Color3.fromRGB(140, 102, 66)
+local CACHE_DIRT = Color3.fromRGB(118, 84, 54)
+local CACHE_EDGE = Color3.fromRGB(92, 64, 40)
 
 -- Depths measured from the road edge, away from the street.
 -- A U driveway: the left arm is the wash queue, the right arm is the cache, and a
@@ -845,42 +850,44 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 end
 
 local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
-	local drive = Color3.fromRGB(176, 176, 184)
-	local curb = Color3.fromRGB(92, 96, 104)
 	local armW = 12
 	local armStart = 0
-	local armSpan = YARD_D - armStart
-	local function arm(name: string, lateral: number)
+	-- The arms stop where the cross piece starts instead of running under it: overlapping
+	-- slabs with the same top height flicker (z-fight) at the two corners.
+	local edgeSpan = YARD_D - (armW + 1.6) / 2 - armStart
+	local paveSpan = YARD_D - armW / 2 - (armStart + 0.5)
+	local function arm(name: string, lateral: number, dirt: Color3, edge: Color3)
 		makePart({
 			Name = name,
-			Size = Vector3.new(armSpan, 0.35, armW + 1.6),
-			Position = PlotLayout.point(plot, armStart + armSpan / 2, lateral, 0.12),
-			Color = curb,
-			Material = Enum.Material.Basalt,
+			Size = Vector3.new(edgeSpan, 0.35, armW + 1.6),
+			Position = PlotLayout.point(plot, armStart + edgeSpan / 2, lateral, 0.12),
+			Color = edge,
+			Material = Enum.Material.Ground,
 			CanQuery = false,
 			CanCollide = false,
 			Parent = bay,
 		})
 		makePart({
 			Name = name .. "Pave",
-			Size = Vector3.new(armSpan - 1, 0.28, armW),
-			Position = PlotLayout.point(plot, armStart + armSpan / 2, lateral, 0.28),
-			Color = drive,
-			Material = Enum.Material.Cobblestone,
+			Size = Vector3.new(paveSpan, 0.28, armW),
+			Position = PlotLayout.point(plot, armStart + 0.5 + paveSpan / 2, lateral, 0.28),
+			Color = dirt,
+			Material = Enum.Material.Ground,
 			CanQuery = false,
 			CanCollide = false,
 			Parent = bay,
 		})
 	end
-	arm("WashArm", WASH_LAT)
-	arm("CacheArm", CACHE_LAT)
+	-- Animals walk in on a dirt path. The cache arm, where washed ones wait, is darker dirt.
+	arm("WashArm", WASH_LAT, PATH_DIRT, PATH_EDGE)
+	arm("CacheArm", CACHE_LAT, CACHE_DIRT, CACHE_EDGE)
 	local spanLat = (CACHE_LAT - WASH_LAT) + armW
 	makePart({
 		Name = "DriveCross",
 		Size = Vector3.new(armW + 1.6, 0.35, spanLat + 1.6),
 		Position = PlotLayout.point(plot, YARD_D, 0, 0.12),
-		Color = curb,
-		Material = Enum.Material.Basalt,
+		Color = PATH_EDGE,
+		Material = Enum.Material.Ground,
 		CanQuery = false,
 		CanCollide = false,
 		Parent = bay,
@@ -889,8 +896,8 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		Name = "DriveCrossPave",
 		Size = Vector3.new(armW, 0.28, spanLat),
 		Position = PlotLayout.point(plot, YARD_D, 0, 0.28),
-		Color = drive,
-		Material = Enum.Material.Cobblestone,
+		Color = PATH_DIRT,
+		Material = Enum.Material.Ground,
 		CanQuery = false,
 		CanCollide = false,
 		Parent = bay,
@@ -900,8 +907,8 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		Name = "DriveApron",
 		Size = Vector3.new(6, 0.3, spanLat),
 		Position = PlotLayout.point(plot, -1, 0, 0.2),
-		Color = drive,
-		Material = Enum.Material.Cobblestone,
+		Color = PATH_DIRT,
+		Material = Enum.Material.Ground,
 		CanQuery = false,
 		CanCollide = false,
 		Parent = bay,
@@ -957,7 +964,8 @@ local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
 	makePart({
 		Name = "Sidewalk",
 		Size = Vector3.new(to - WALK_START, 0.35, GameConfig.SidewalkWidth),
-		Position = PlotLayout.point(plot, (WALK_START + to) / 2, 0, 0.19),
+		-- Clear of the plaza's top where the two overlap, so the join does not flicker.
+		Position = PlotLayout.point(plot, (WALK_START + to) / 2, 0, 0.22),
 		Color = paving,
 		Material = Enum.Material.Cobblestone,
 		CanQuery = false,
@@ -991,11 +999,13 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 		CanQuery = false,
 		Parent = model,
 	})
+	-- Corner posts stand a little proud of the plinth's sides and clear of the cloth top, so
+	-- no two faces share a plane (they flickered when flush).
 	for _, x in { -1, 1 } do
 		for _, z in { -1, 1 } do
 			makePart({
 				Name = "Corner",
-				Size = Vector3.new(1.4, 2.4, 1.4),
+				Size = Vector3.new(1.5, 2.4, 1.5),
 				CFrame = frame * CFrame.new(x * 7.3, 1.2, z * 7.3),
 				Color = Color3.fromRGB(255, 200, 70),
 				Material = Enum.Material.Metal,
@@ -1050,9 +1060,15 @@ function WorldBuilder.buildBay(index: number): Model
 	spawn.Duration = 0
 	spawn.Size = Vector3.new(6, 0.2, 6)
 	spawn.CFrame = CFrame.lookAt(spawnPos, washPos)
-	spawn.Color = Color3.fromRGB(120, 190, 255)
-	spawn.Material = Enum.Material.SmoothPlastic
+	-- Players land on the plaza; the pad itself is never seen.
+	spawn.Transparency = 1
 	spawn.CanCollide = false
+	spawn.CanQuery = false
+	for _, child in spawn:GetChildren() do
+		if child:IsA("Decal") then
+			child:Destroy()
+		end
+	end
 	spawn.Parent = bay
 
 	WorldBuilder.setYardShown(bay, false)

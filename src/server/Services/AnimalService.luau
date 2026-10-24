@@ -13,6 +13,9 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
+local RarityFanfare = require(ReplicatedStorage.Shared.RarityFanfare)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local SpawnCurve = require(ReplicatedStorage.Shared.SpawnCurve)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 local CleanGateService = require(script.Parent.CleanGateService)
@@ -77,13 +80,15 @@ function AnimalService.randomOfRarity(rarityKey: string): string
 end
 
 -- Walk-ins come from the weighted pool of species the player's hose has the clean power to
--- wash. Rarities that still need Clean Now are mixed in by CleanGateService, with their
+-- wash. Each tier's share comes from SpawnCurve, split inside the tier by SpawnWeight.
+-- Rarities that still need Clean Now are mixed in by CleanGateService, with their
 -- chance taken from Common.
 function AnimalService.pickNext(toolTier: number, player: Player?): string
 	local tool = ToolConfig[toolTier]
 	local base = if tool then tool.CleaningPower else 0
 	local power = if player then CleanGateService.washPower(player, toolTier) else base
-	local weights: { [string]: number } = {}
+	local washable: { string } = {}
+	local tierWeight: { [number]: number } = {}
 	for key, def in AnimalConfig.Animals do
 		-- Tool tier is the usual gate. Super Soap can also wash the next tier, and those
 		-- animals join the normal pool instead of the Clean Now chances.
@@ -94,9 +99,22 @@ function AnimalService.pickNext(toolTier: number, player: Player?): string
 			and not def.Limited
 			and AnimalBuilder.has(def.TemplateName)
 		then
-			local weight = def.SpawnWeight
-			weights[key] = if player then math.max(0, Hooks.apply("SpawnWeight", weight, player, key)) else weight
+			table.insert(washable, key)
+			local order = RarityConfig.ByKey[def.Rarity].Order
+			tierWeight[order] = (tierWeight[order] or 0) + def.SpawnWeight
 		end
+	end
+	local orders = {}
+	for order in tierWeight do
+		table.insert(orders, order)
+	end
+	local shares = SpawnCurve.shares(orders)
+	local weights: { [string]: number } = {}
+	for _, key in washable do
+		local def = AnimalConfig.Animals[key]
+		local order = RarityConfig.ByKey[def.Rarity].Order
+		local weight = shares[order] * def.SpawnWeight / tierWeight[order]
+		weights[key] = if player then math.max(0, Hooks.apply("SpawnWeight", weight, player, key)) else weight
 	end
 	if player then
 		weights = CleanGateService.mix(player, weights, power)
@@ -191,9 +209,8 @@ function AnimalService.buildZooAnimal(animalKey: string, mutationKey: string): M
 	return model
 end
 
--- The animal in the player's left hand at full size, tipped nose-up at Cache.CarryTilt degrees,
--- its rear resting at the hand. Welded to the root part (not the hand) so the walk animation
--- doesn't swing a cow around.
+-- The animal held over the player's head at full size. Welded to the root part (not the hand)
+-- so the walk animation doesn't swing a cow around.
 function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, hand: BasePart): Model
 	local model = AnimalService.buildZooAnimal(animalKey, mutationKey)
 	model.Name = "CarriedAnimal"
@@ -208,12 +225,15 @@ function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, h
 	local anchor = (character:FindFirstChild("HumanoidRootPart") or hand) :: BasePart
 	local root = model.PrimaryPart :: BasePart
 
+	-- Held level and centred over the head, facing the same way as the player.
 	local boxCFrame, size = model:GetBoundingBox()
 	local center = model:GetPivot():PointToObjectSpace(boxCFrame.Position)
-	local rear = center + Vector3.new(0, -size.Y / 2, size.Z / 2) -- rear-bottom, model space (faces -Z)
-	local grip = anchor.CFrame * CFrame.new(-1.6, -0.6, -1.2) -- where the left hand holds it
-	local tilt = CFrame.Angles(math.rad(GameConfig.Cache.CarryTilt), 0, 0)
-	model:PivotTo(CFrame.new(grip.Position) * anchor.CFrame.Rotation * tilt * CFrame.new(-rear))
+	local bottom = center - Vector3.new(0, size.Y / 2, 0) -- bottom-centre, model space
+	local head = character:FindFirstChild("Head") :: BasePart?
+	local headTop = if head then head.Position.Y + head.Size.Y / 2 else anchor.Position.Y + 2.5
+	local lift = headTop - anchor.Position.Y + 0.4
+	local grip = anchor.CFrame * CFrame.new(0, lift, 0)
+	model:PivotTo(CFrame.new(grip.Position) * anchor.CFrame.Rotation * CFrame.new(-bottom))
 
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") then
@@ -259,7 +279,7 @@ function AnimalService.poof(model: Model)
 	model:Destroy()
 end
 
--- Cash burst and chime when a collect pad pays out.
+-- Cash burst and a cash-register ca-ching when a collect pad pays out.
 function AnimalService.collectEffect(pad: BasePart)
 	local attachment = Instance.new("Attachment")
 	attachment.WorldPosition = pad.Position
@@ -274,14 +294,13 @@ function AnimalService.collectEffect(pad: BasePart)
 	emitter.Color = ColorSequence.new(UIStyle.CashColor)
 	emitter.Parent = attachment
 	local sound = Instance.new("Sound")
-	sound.SoundId = GameConfig.Sounds.Complete
-	sound.PlaybackSpeed = 1.4
-	sound.Volume = 0.5
+	sound.SoundId = GameConfig.Sounds.Collect
+	sound.Volume = 0.55
 	sound.Parent = attachment
 	attachment.Parent = Workspace.Terrain
 	emitter:Emit(18)
 	sound:Play()
-	Debris:AddItem(attachment, 1.5)
+	Debris:AddItem(attachment, 2.5)
 end
 
 function AnimalService.spawn(
@@ -332,13 +351,19 @@ function AnimalService.spawn(
 	if rarity.Order > 2 or mutated then
 		sparkle.Color = ColorSequence.new(rarity.Color) -- the completion sparkle keeps this colour too
 		sparkle:Emit(10 * rarity.Order)
-		local reveal = Instance.new("Sound")
-		reveal.SoundId = GameConfig.Sounds.Complete
-		reveal.PlaybackSpeed = 0.8 + rarity.Order * 0.1
-		reveal.Volume = 0.7
-		reveal.Parent = model:FindFirstChild("Body")
-		reveal:Play()
-		Debris:AddItem(reveal, 3)
+		if RarityFanfare.style(def.Rarity) then
+			-- Legendary and rarer: every client plays the full reveal (beam, rings, fanfare),
+			-- and the owner also gets the screen stamp and camera shake (RareReveal).
+			Remotes.event("RareArrival"):FireAllClients(model, def.Rarity, mutationKey, parent)
+		else
+			local reveal = Instance.new("Sound")
+			reveal.SoundId = GameConfig.Sounds.Complete
+			reveal.PlaybackSpeed = 0.8 + rarity.Order * 0.1
+			reveal.Volume = 0.7
+			reveal.Parent = model:FindFirstChild("Body")
+			reveal:Play()
+			Debris:AddItem(reveal, 3)
+		end
 	end
 	return model, patches
 end
@@ -634,18 +659,59 @@ local function easeOutBack(t: number): number
 	return 1 + (c + 1) * (t - 1) ^ 3 + c * (t - 1) ^ 2
 end
 
+-- Legendary and rarer land harder: the tier's fanfare, extra shockwaves in the tier colour
+-- and a burst of tier sparkles straight up.
+local function rareLanding(model: Model, ground: Vector3)
+	local key = model:GetAttribute("AnimalKey")
+	local def = if typeof(key) == "string" then AnimalConfig.Animals[key] else nil
+	local style = def and RarityFanfare.style(def.Rarity)
+	local body = model:FindFirstChild("Body")
+	if not style or not body then
+		return
+	end
+	for i = 1, style.Rings do
+		task.delay(i * 0.12, function()
+			local color = if style.Rainbow then Color3.fromHSV((i / style.Rings) % 1, 0.6, 1) else style.Color
+			shockwave(ground + Vector3.new(0, 0.2 + i * 0.05, 0), color)
+		end)
+	end
+	burst(body, {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = if style.Rainbow then CONFETTI else ColorSequence.new(style.Glow, style.Color),
+		Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.6),
+			NumberSequenceKeypoint.new(0.4, 1.4),
+			NumberSequenceKeypoint.new(1, 0),
+		}),
+		Lifetime = NumberRange.new(1, 1.6),
+		Speed = NumberRange.new(14, 24),
+		SpreadAngle = Vector2.new(25, 25),
+		EmissionDirection = Enum.NormalId.Top,
+		Acceleration = Vector3.new(0, -12, 0),
+		Drag = 1,
+		LightEmission = 1,
+	}, style.Particles)
+end
+
 -- Squash, spinning hop with a size pop, confetti at the top, shockwave and bubbles on the
 -- landing, a smaller bounce, then a settle. Yields for GameConfig.CelebrationDuration.
 function AnimalService.celebrate(model: Model)
 	local body = model:FindFirstChild("Body")
 	local sparkleColor = ColorSequence.new(Color3.fromRGB(150, 230, 255))
+	local key = model:GetAttribute("AnimalKey")
+	local def = if typeof(key) == "string" then AnimalConfig.Animals[key] else nil
+	local rare = def ~= nil and RarityFanfare.style(def.Rarity) ~= nil
 	if body then
 		local sparkle = body:FindFirstChild("Sparkle") :: ParticleEmitter?
 		if sparkle then
 			sparkleColor = sparkle.Color
 			sparkle:Emit(70)
 		end
-		chime(body)
+		if rare and def then
+			RarityFanfare.play(body, def.Rarity)
+		else
+			chime(body)
+		end
 	end
 
 	-- White glint that fades as the animal shows off its clean coat.
@@ -736,6 +802,9 @@ function AnimalService.celebrate(model: Model)
 			if not landDone then
 				landDone = true
 				shockwave(ground + Vector3.new(0, 0.15, 0), Color3.fromRGB(150, 230, 255))
+				if rare then
+					rareLanding(model, ground)
+				end
 				if body then
 					burst(body, {
 						Color = sparkleColor,

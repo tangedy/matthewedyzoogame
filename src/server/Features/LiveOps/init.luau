@@ -2,6 +2,7 @@
 --   MudStorm      scheduled server-wide Mud Storm (+ developer start/stop)
 --   VariantEvents rotating Gold Rush / Rainbow Rush / ... (odds in DevParams.json)
 --   RareGuarantee every 5 minutes of play, a walk-in one rarity above what the hose can wash
+--   NewPlayer     once, in the first five minutes: a Kaiju walks the road, then a rarity boost
 --   Daily         Daily Dirty Animal (one guaranteed Rare+ walk-in per UTC day)
 --   CheckIn       seven-day check-in chart (cash, animals, a permanent buff and chat title)
 --   Offline      offline earnings onto the pen pads + the WELCOME BACK popup
@@ -22,6 +23,7 @@ local MODULES = {
 	"MudStorm",
 	"VariantEvents",
 	"RareGuarantee",
+	"NewPlayer",
 	"Daily",
 	"CheckIn",
 	"Offline",
