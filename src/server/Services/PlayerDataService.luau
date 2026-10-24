@@ -20,6 +20,7 @@ local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Hooks = require(script.Parent.Hooks)
+local MutationPayout = require(script.Parent.MutationPayout)
 local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 
 -- v1: coins, tool tier, counters. v2 added the zoo and the index (keyed by a rolled rarity).
@@ -34,7 +35,10 @@ local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 -- v8: the two flex road pastures became four cages (large, medium, medium, large).
 -- v9: the four road cages open together as the Pasture barn upgrade (Extra.RoadCages.Open).
 --     A v8 save that had any of them open by Robux, the Axolotl or cash gets all four.
-local SCHEMA_VERSION = 9
+-- v10: the barn tier bought (BarnTier) is saved instead of trusting ZooSize. Pen numbers are
+--     positions only; older saves map their ZooSize onto the barn they paid for.
+local SCHEMA_VERSION = 10
+local MAX_OVERFLOW = 8
 
 export type CachedAnimal = {
 	Id: string,
@@ -75,6 +79,9 @@ export type SavedData = {
 	-- Completed washes since an unwashable animal last walked in.
 	-- Each one adds ChancePerWash to the next rarity this hose cannot wash.
 	WashesSinceUnwashable: number,
+	-- Barns bought: 0 is the starting stalls, n is GameConfig.Zoo.Expansions[n]. This is what
+	-- persists. ZooSize (pens open) is worked out from it on every load.
+	BarnTier: number,
 	ZooSize: number,
 	Animals: { OwnedAnimal },
 	Cache: { CachedAnimal },
@@ -122,6 +129,7 @@ local function defaults(): SavedData
 		TeaseOrder = 4,
 		AnimalsUntilTease = 0,
 		WashesSinceUnwashable = 0,
+		BarnTier = 0,
 		ZooSize = GameConfig.Zoo.StartPens,
 		Animals = {},
 		Cache = {},
@@ -153,16 +161,31 @@ local function validMutation(raw: any, version: number): string?
 	return if key and MutationConfig.ByKey[key] then key else nil
 end
 
-local function isValidZooSize(size: number): boolean
-	if size == GameConfig.Zoo.StartPens then
-		return true
+-- Pens open at a barn tier: 0 is the starting stalls, n is GameConfig.Zoo.Expansions[n] bought.
+function PlayerDataService.pensForTier(tier: number): number
+	local step = GameConfig.Zoo.Expansions[tier]
+	return if step and step.Pens then step.Pens else GameConfig.Zoo.StartPens
+end
+
+-- Before v10 the save kept ZooSize (pens open) instead of the barn bought. Every ladder up to
+-- v9 sold the same barns in the same order at these sizes: Small 10, Medium 14, Large 17,
+-- Gargantuan 19 or 22, Mega 24. Mega is gone, so it keeps the top barn.
+local LEGACY_BARN_PENS = { 10, 14, 17, 19 }
+
+local function legacyBarnTier(zooSize: number): number
+	-- 8 and 12 only exist in the v9 build of this layout (no old ladder stopped there).
+	if zooSize == 8 then
+		return 1
+	elseif zooSize == 12 then
+		return 3
 	end
-	for _, step in GameConfig.Zoo.Expansions do
-		if step.Pens == size then
-			return true
+	local tier = 0
+	for index, pens in LEGACY_BARN_PENS do
+		if zooSize >= pens then
+			tier = index
 		end
 	end
-	return false
+	return math.min(tier, #GameConfig.Zoo.Expansions)
 end
 
 -- True when this profile has already spent Robux, so the medium road cages stay open.
@@ -299,28 +322,20 @@ local function sanitize(raw: any): SavedData
 	data.ToolUpgrade = math.min(cleanCount(raw.ToolUpgrade), GearLadder.upgradeCount(data.ToolTier))
 
 	local version = cleanCount(raw.SchemaVersion)
-	-- v4 replaced the 4/6/8 pen row with face stalls (6) and a small barn (10).
-	local zooSize = cleanCount(raw.ZooSize)
-	-- The gargantuan yard used to stop at 19. It now includes the three medium barns.
-	if zooSize == 19 then
-		zooSize = 22
-	end
-	if version < 4 then
-		if zooSize == 4 then
-			zooSize = 6
-		elseif zooSize == 6 or zooSize == 8 then
+	-- The barn bought is what's saved; the pens it opens come from the current layout.
+	local barnTier: number
+	if version >= 10 then
+		barnTier = math.min(cleanCount(raw.BarnTier), #GameConfig.Zoo.Expansions)
+	else
+		local zooSize = cleanCount(raw.ZooSize)
+		-- v4 replaced the 4/6/8 pen row with face stalls (6) and a small barn (10).
+		if version < 4 and (zooSize == 6 or zooSize == 8) then
 			zooSize = 10
 		end
+		barnTier = legacyBarnTier(zooSize)
 	end
-	-- Pen counts from older layouts drop to the largest step this layout still has.
-	local validSize = GameConfig.Zoo.StartPens
-	for size = math.min(zooSize, GameConfig.Zoo.MaxPens), GameConfig.Zoo.StartPens, -1 do
-		if isValidZooSize(size) then
-			validSize = size
-			break
-		end
-	end
-	data.ZooSize = validSize
+	data.BarnTier = barnTier
+	data.ZooSize = PlayerDataService.pensForTier(barnTier)
 	data.NextAnimalId = math.max(cleanCount(raw.NextAnimalId), 1)
 
 	if typeof(raw.Index) == "table" then
@@ -359,6 +374,7 @@ local function sanitize(raw: any): SavedData
 		local oldLeft = GameConfig.Zoo.MaxPens + 1
 		local oldRight = oldLeft + 1
 		local held = {}
+		local displaced = {}
 		-- Before v9 each road cage opened on its own; any one of them open opens all four.
 		local function ownedBefore(cage: any, offset: number): boolean
 			local mon = raw.Extra
@@ -420,11 +436,16 @@ local function sanitize(raw: any): SavedData
 			end
 			local cage = GameConfig.Zoo.RoadCages[pen - GameConfig.Zoo.MaxPens]
 			local inZoo = pen >= 1 and pen <= data.ZooSize
-			if cage then
-				if not ownsRoad() or usedSlots[pen] then
-					continue
-				end
-			elseif not inZoo or usedSlots[pen] then
+			-- A pen this layout no longer has (a bigger old zoo, a removed road cage) or a
+			-- doubled-up pen: rehomed below instead of dropped.
+			if (cage and (not ownsRoad() or usedSlots[pen])) or (not cage and (not inZoo or usedSlots[pen])) then
+				table.insert(displaced, {
+					Id = animal.Id,
+					Species = species,
+					Mutation = mutation,
+					Pending = cleanCount(animal.Pending),
+					Paid = if animal.Paid == true then true else nil,
+				})
 				continue
 			end
 			usedSlots[pen] = 1
@@ -464,14 +485,12 @@ local function sanitize(raw: any): SavedData
 			end
 			local function parkSpare(entry)
 				data.Coins += entry.Pending
-				if #data.Overflow < 8 then
-					table.insert(data.Overflow, {
-						Id = entry.Id,
-						Species = entry.Species,
-						Mutation = entry.Mutation,
-						Paid = if entry.Paid then true else nil,
-					})
-				end
+				table.insert(data.Overflow, {
+					Id = entry.Id,
+					Species = entry.Species,
+					Mutation = entry.Mutation,
+					Paid = if entry.Paid then true else nil,
+				})
 			end
 			local mediumCount = 0
 			local anyRobux = spent or sideOpen
@@ -520,14 +539,37 @@ local function sanitize(raw: any): SavedData
 			end
 			if not moved then
 				data.Coins += animal.Pending
-				if #data.Overflow < 8 then
-					table.insert(data.Overflow, {
-						Id = animal.Id,
-						Species = animal.Species,
-						Mutation = animal.Mutation,
-						Paid = animal.Paid,
-					})
+				table.insert(data.Overflow, {
+					Id = animal.Id,
+					Species = animal.Species,
+					Mutation = animal.Mutation,
+					Paid = animal.Paid,
+				})
+			end
+		end
+
+		-- Displaced animals take the free pens first, then wait in overflow. Pad cash is paid out.
+		for _, entry in displaced do
+			data.Index[PlayerDataService.indexKey(entry.Species, entry.Mutation)] = true
+			data.Coins += entry.Pending
+			local free: number? = nil
+			for pen = 1, data.ZooSize do
+				if not usedSlots[pen] then
+					free = pen
+					break
 				end
+			end
+			if free then
+				usedSlots[free] = 1
+				entry.Pending = 0
+				pushAnimal(entry, entry.Species, entry.Mutation, free)
+			else
+				table.insert(data.Overflow, {
+					Id = entry.Id,
+					Species = entry.Species,
+					Mutation = entry.Mutation,
+					Paid = entry.Paid,
+				})
 			end
 		end
 	end
@@ -552,9 +594,6 @@ local function sanitize(raw: any): SavedData
 
 	if typeof(raw.Overflow) == "table" then
 		for _, animal in raw.Overflow do
-			if #data.Overflow >= 8 then
-				break
-			end
 			local species, mutation = validAnimal(animal)
 			if species and mutation then
 				table.insert(data.Overflow, {
@@ -565,6 +604,19 @@ local function sanitize(raw: any): SavedData
 				})
 			end
 		end
+	end
+
+	-- Overflow holds at most MAX_OVERFLOW. Extras are sold at their sell value (newest unpaid
+	-- first) rather than dropped; Robux animals are always kept.
+	local index = #data.Overflow
+	while #data.Overflow > MAX_OVERFLOW and index >= 1 do
+		local animal = data.Overflow[index]
+		if not animal.Paid then
+			local income = AnimalConfig.Animals[animal.Species].Income * MutationPayout.multiplier(animal.Mutation)
+			data.Coins += math.floor(income * GameConfig.SellValueSeconds)
+			table.remove(data.Overflow, index)
+		end
+		index -= 1
 	end
 
 	-- The opening lesson is the wash only. Pickup, place, and the hose stand are no longer

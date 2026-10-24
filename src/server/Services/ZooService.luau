@@ -155,15 +155,9 @@ end
 
 type Expansion = { Pens: number?, RoadCages: boolean?, Price: number, Barn: string }
 
--- The first step along the walkway not bought yet.
+-- The first step along the walkway not bought yet: the barn after the saved tier.
 local function nextExpansion(data: PlayerDataService.SavedData): Expansion?
-	for _, step in GameConfig.Zoo.Expansions do
-		local done = if step.RoadCages then roadCagesOpen(data) else (step.Pens or 0) <= data.ZooSize
-		if not done then
-			return step
-		end
-	end
-	return nil
+	return GameConfig.Zoo.Expansions[data.BarnTier + 1]
 end
 
 local function findCached(data: PlayerDataService.SavedData, id: string): (CachedAnimal?, number?)
@@ -1081,9 +1075,9 @@ local function expand(player: Player)
 	end
 	if step.RoadCages then
 		openRoadCages(data)
-	else
-		data.ZooSize = step.Pens or data.ZooSize
 	end
+	data.BarnTier += 1
+	data.ZooSize = PlayerDataService.pensForTier(data.BarnTier)
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
 	Hooks.fire("ZooExpanded", player, data.ZooSize, step.Price, step.Barn)
