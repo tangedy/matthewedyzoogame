@@ -59,11 +59,7 @@ local function floatingText(counter: Counter, text: string, color: Color3, big: 
 	fade.Completed:Once(function()
 		billboard:Destroy()
 	end)
-	fade:Play()
-	local stroke = label:FindFirstChildOfClass("UIStroke")
-	if stroke then
-		TweenService:Create(stroke, info, { Transparency = 1 }):Play()
-	end
+	fade:Play() -- the outline follows the fade (UIStyle.text)
 end
 
 local function bounce(counter: Counter, size: number)

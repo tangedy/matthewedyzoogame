@@ -985,7 +985,9 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		return CFrame.lookAt(pos, pos + plot.Right)
 	end
 	makeMarker("Approach", alongRoad(ROAD_D, WASH_LAT - 22), bay)
-	local turn = PlotLayout.point(plot, 1, WASH_LAT, FLOOR_Y)
+	-- On the street in line with the wash arm, at the same depth as Approach: arrivals walk
+	-- along the road, turn here, and go straight up the arm instead of cutting the corner.
+	local turn = PlotLayout.point(plot, ROAD_D, WASH_LAT, FLOOR_Y)
 	makeMarker("TurnIn", CFrame.lookAt(turn, turn + plot.Back), bay)
 	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], WASH_LAT, FLOOR_Y), bay)
 	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], WASH_LAT, FLOOR_Y), bay)

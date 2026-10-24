@@ -306,6 +306,21 @@ local function runOneJob(bay: Bay, owner: Player)
 	if bay.Owner ~= owner or not front or not front.Model.Parent then
 		return
 	end
+	-- A walk-in that is still on its way (a short opening line doesn't wait for it) becomes
+	-- washable only once it stands on the wash spot. Otherwise it could finish mid-walk and
+	-- leave from the middle of the arm while its walk-in keeps pulling at it.
+	local spot = bay.WashPosition.Position
+	local waited = 0
+	while waited < 8 and bay.Owner == owner and front.Model.Parent do
+		local here = front.Model:GetPivot().Position
+		if Vector2.new(here.X - spot.X, here.Z - spot.Z).Magnitude < 0.5 then
+			break
+		end
+		waited += task.wait(0.1)
+	end
+	if bay.Owner ~= owner or not front.Model.Parent then
+		return
+	end
 	-- The client finds the animal being washed by this name. The two behind stay queued.
 	front.Model.Name = "Animal"
 	local animalKey = front.AnimalKey

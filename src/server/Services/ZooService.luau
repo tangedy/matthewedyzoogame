@@ -1111,7 +1111,10 @@ function ZooService.fromWash(bay: Instance, points: { CFrame }): { CFrame }
 	if not turn or not turn:IsA("BasePart") then
 		return points
 	end
-	local route = { turn.CFrame }
+	-- Back onto the wash spot first: a lunge or squirm can leave the animal off it, and the
+	-- cross piece only lines up from there. walkCorners skips it when already in place.
+	local wash = bay:FindFirstChild("WashPosition")
+	local route = if wash and wash:IsA("BasePart") then { wash.CFrame, turn.CFrame } else { turn.CFrame }
 	for _, point in points do
 		table.insert(route, point)
 	end

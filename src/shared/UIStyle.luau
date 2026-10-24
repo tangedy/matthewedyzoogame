@@ -49,14 +49,19 @@ function UIStyle.text(target: TextLabel | TextButton, color: Color3?, stroke: Co
 	outline.LineJoinMode = Enum.LineJoinMode.Round
 	outline.Parent = label
 	-- The outline follows the text, so a fade (a tween on TextTransparency) takes both
-	-- together instead of leaving a hollow black outline behind.
-	outline.Transparency = label.TextTransparency
+	-- instead of leaving a hollow black outline behind. It runs ahead of the fill (square
+	-- root): a half-faded fill over a still-solid stroke reads as a dark ring.
+	local function follow(ring: UIStroke)
+		local t = math.clamp(label.TextTransparency, 0, 1)
+		ring.Transparency = math.sqrt(t)
+	end
+	follow(outline)
 	if not label:GetAttribute("StrokeFollowsText") then
 		label:SetAttribute("StrokeFollowsText", true)
 		label:GetPropertyChangedSignal("TextTransparency"):Connect(function()
 			local current = label:FindFirstChildOfClass("UIStroke")
 			if current then
-				current.Transparency = label.TextTransparency
+				follow(current)
 			end
 		end)
 	end
