@@ -139,6 +139,8 @@ function EconomyService.init()
 	Remotes.event("PurchaseToolUpgrade").OnServerEvent:Connect(function(player)
 		local now = os.clock()
 		if lastPurchaseAt[player] and now - lastPurchaseAt[player] < 0.5 then
+			-- Always answer: the shop waits for a result before it re-enables Buy.
+			purchaseResult:FireClient(player, false, "")
 			return
 		end
 		lastPurchaseAt[player] = now

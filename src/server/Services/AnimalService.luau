@@ -197,6 +197,13 @@ end
 function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, hand: BasePart): Model
 	local model = AnimalService.buildZooAnimal(animalKey, mutationKey)
 	model.Name = "CarriedAnimal"
+	-- The rarity aura's ground ring belongs on the ground, not tipped up in a hand.
+	for _, name in { "AuraRing", "AuraBase" } do
+		local part = model:FindFirstChild(name)
+		if part then
+			part:Destroy()
+		end
+	end
 	local character = hand.Parent :: Model
 	local anchor = (character:FindFirstChild("HumanoidRootPart") or hand) :: BasePart
 	local root = model.PrimaryPart :: BasePart
@@ -362,9 +369,13 @@ local function gaitOf(model: Model): Gait?
 	if #legs == 0 then
 		return nil
 	end
+	-- Hooves, feet, paws, toes and socks: anything tagged LegPart, plus the older names.
 	local feet: { BasePart } = {}
 	for _, child in model:GetChildren() do
-		if (child.Name == "Hoof" or child.Name == "Foot") and child:IsA("BasePart") then
+		if
+			child:IsA("BasePart")
+			and (child:GetAttribute("LegPart") == true or child.Name == "Hoof" or child.Name == "Foot")
+		then
 			table.insert(feet, child)
 		end
 	end
@@ -378,20 +389,24 @@ local function gaitOf(model: Model): Gait?
 		local left = rest.Position.X < 0
 		local phase = if #legs == 2 then (if left then 0 else math.pi) elseif front == left then 0 else math.pi
 		local pose: LegPose = { Parts = { leg }, Rest = { rest }, Hip = hip, Phase = phase }
-		-- The hoof or foot closest under this leg swings with it.
-		local best, bestDist = nil, math.huge
-		for _, foot in feet do
-			local offset = pivot:ToObjectSpace(foot.CFrame).Position - rest.Position
+		table.insert(poses, pose)
+	end
+	-- Each foot part swings with the leg it is closest to.
+	for _, foot in feet do
+		local footRest = pivot:ToObjectSpace(foot.CFrame)
+		local best: LegPose? = nil
+		local bestDist = math.huge
+		for _, pose in poses do
+			local offset = footRest.Position - pose.Rest[1].Position
 			local dist = Vector2.new(offset.X, offset.Z).Magnitude
-			if dist < bestDist and dist < math.max(leg.Size.X, leg.Size.Z) * 2 then
-				best, bestDist = foot, dist
+			if dist < bestDist then
+				best, bestDist = pose, dist
 			end
 		end
-		if best then
-			table.insert(pose.Parts, best)
-			table.insert(pose.Rest, pivot:ToObjectSpace(best.CFrame))
+		if best and bestDist < math.max(best.Parts[1].Size.X, best.Parts[1].Size.Z) * 2.5 then
+			table.insert(best.Parts, foot)
+			table.insert(best.Rest, footRest)
 		end
-		table.insert(poses, pose)
 	end
 	local key = model:GetAttribute("AnimalKey")
 	local def = if typeof(key) == "string" then AnimalConfig.Animals[key] else nil

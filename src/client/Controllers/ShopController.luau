@@ -35,6 +35,7 @@ local coins = 0
 local tier = 1
 local openStation: BasePart? = nil
 local awaitingResult = false
+local lastSentAt = 0
 
 local panel: Frame
 local currentLabel: TextLabel
@@ -251,14 +252,19 @@ local function buildGui()
 		if not nextTool or awaitingResult then
 			return
 		end
-		if coins < nextTool.Price then
-			-- Instant feedback; the server would reject it anyway.
-			setMessage(`Not enough cash. You need {UIStyle.formatMoney(nextTool.Price - coins)} more.`, false)
-			return
-		end
+		-- The server owns the balance and always answers, so even a stale local balance
+		-- can't block a purchase. The timeout re-enables Buy if a reply is ever lost.
 		awaitingResult = true
 		refresh()
 		purchaseRemote:FireServer()
+		local sentAt = os.clock()
+		lastSentAt = sentAt
+		task.delay(3, function()
+			if awaitingResult and lastSentAt == sentAt then
+				awaitingResult = false
+				refresh()
+			end
+		end)
 	end)
 	robuxButton.Activated:Connect(function()
 		local nextTool = ToolConfig[tier + 1]

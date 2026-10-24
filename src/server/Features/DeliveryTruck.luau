@@ -199,7 +199,7 @@ local function visit(player: Player, bay: Model)
 	prompt.Name = "TruckPrompt"
 	prompt.ActionText = `Buy ({robux} ROBUX)`
 	prompt.ObjectText = (if mutation == MutationConfig.Default then "" else mutation .. " ") .. def.DisplayName
-	prompt.HoldDuration = 0.3
+	prompt.HoldDuration = 0 -- the Robux dialog is the confirmation
 	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
 	prompt.Enabled = false

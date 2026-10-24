@@ -50,8 +50,9 @@ local GameConfig = {
 	ArriveDuration = 3.5, -- from the road (x -54) to the wash spot
 	DepartDuration = 2,
 	CelebrationDuration = 1.5,
-	StartingCoins = 90, -- a new player's cash, $10 short of the Scrub Brush
+	StartingCoins = 0, -- a new player's cash; the opening washes pay for the first upgrade
 	NextAnimalDelay = 0.5,
+	StepUpDelay = 0.35, -- after a wash's hop ends, before the line steps forward behind it
 
 	-- Persistence. ProfileService owns the live store. The older DataStore names stay so a
 	-- profile's first load can copy a save from before that switch. Studio uses its own

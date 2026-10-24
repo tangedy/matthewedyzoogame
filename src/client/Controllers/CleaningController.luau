@@ -31,6 +31,140 @@ local DROP_GRAVITY = 1100 -- px/s²
 local RETICLE_IDLE = Color3.fromRGB(255, 255, 255)
 local RETICLE_ON_TARGET = Color3.fromRGB(120, 255, 140)
 
+-- How each tier feels to wash with. The sponge and brush are hand tools: no jet, just suds
+-- (and bristle flecks) where they scrub, with squelch / scratch sounds. The hoses get
+-- stronger from there: a limp, dribbling garden hose, a tight hissing power washer, a wide
+-- foam jet, and a thick roaring fire hose that shakes the camera.
+type SoundLayer = { Id: string, Speed: number, Volume: number }
+type Feel = {
+	Beam: boolean,
+	Width0: number,
+	Width1: number,
+	Transparency: number, -- beam transparency at the nozzle
+	Color: Color3,
+	Splash: number, -- splash speed multiplier
+	SplashRate: number,
+	Mist: number, -- mist rate while on target
+	Foam: number, -- foam rate while on target
+	Drops: number, -- screen droplet multiplier
+	Dribble: boolean, -- water falling straight off the nozzle
+	Bristles: boolean,
+	Shake: number, -- camera shake in degrees while spraying
+	Loops: { SoundLayer },
+	Tick: (SoundLayer & { Every: number })?,
+}
+
+local SOUND = "rbxasset://sounds/"
+local FEEL: { [number]: Feel } = {
+	{
+		Beam = false,
+		Width0 = 0,
+		Width1 = 0,
+		Transparency = 1,
+		Color = Color3.fromRGB(240, 250, 255),
+		Splash = 0.35,
+		SplashRate = 25,
+		Mist = 0,
+		Foam = 40,
+		Drops = 0.25,
+		Dribble = false,
+		Bristles = false,
+		Shake = 0,
+		Loops = { { Id = SOUND .. "action_swim.mp3", Speed = 1.25, Volume = 0.12 } },
+		Tick = { Id = SOUND .. "splat.wav", Speed = 1.4, Volume = 0.25, Every = 0.32 },
+	},
+	{
+		Beam = false,
+		Width0 = 0,
+		Width1 = 0,
+		Transparency = 1,
+		Color = Color3.fromRGB(240, 250, 255),
+		Splash = 0.45,
+		SplashRate = 35,
+		Mist = 0,
+		Foam = 30,
+		Drops = 0.35,
+		Dribble = false,
+		Bristles = true,
+		Shake = 0,
+		Loops = { { Id = SOUND .. "action_footsteps_plastic.mp3", Speed = 1.9, Volume = 0.4 } },
+		Tick = { Id = SOUND .. "grass.mp3", Speed = 1.5, Volume = 0.18, Every = 0.22 },
+	},
+	{
+		Beam = true,
+		Width0 = 0.18,
+		Width1 = 0.45,
+		Transparency = 0.35,
+		Color = Color3.fromRGB(170, 225, 255),
+		Splash = 0.6,
+		SplashRate = 45,
+		Mist = 20,
+		Foam = 10,
+		Drops = 0.6,
+		Dribble = true,
+		Bristles = false,
+		Shake = 0,
+		Loops = { { Id = SOUND .. "impact_water.mp3", Speed = 0.8, Volume = 0.22 } },
+	},
+	{
+		Beam = true,
+		Width0 = 0.22,
+		Width1 = 0.7,
+		Transparency = 0.05,
+		Color = Color3.fromRGB(200, 240, 255),
+		Splash = 1.3,
+		SplashRate = 120,
+		Mist = 70,
+		Foam = 14,
+		Drops = 1,
+		Dribble = false,
+		Bristles = false,
+		Shake = 0.15,
+		Loops = {
+			{ Id = SOUND .. "impact_water.mp3", Speed = 1.25, Volume = 0.3 },
+			{ Id = SOUND .. "Rocket whoosh 01.wav", Speed = 1.6, Volume = 0.18 },
+		},
+	},
+	{
+		Beam = true,
+		Width0 = 0.5,
+		Width1 = 2.2,
+		Transparency = 0.1,
+		Color = Color3.fromRGB(255, 225, 245),
+		Splash = 1.1,
+		SplashRate = 90,
+		Mist = 60,
+		Foam = 70,
+		Drops = 1.2,
+		Dribble = false,
+		Bristles = false,
+		Shake = 0.2,
+		Loops = {
+			{ Id = SOUND .. "action_swim.mp3", Speed = 0.85, Volume = 0.35 },
+			{ Id = SOUND .. "Rocket whoosh 01.wav", Speed = 1.0, Volume = 0.22 },
+		},
+	},
+	{
+		Beam = true,
+		Width0 = 0.75,
+		Width1 = 2.6,
+		Transparency = 0,
+		Color = Color3.fromRGB(185, 230, 255),
+		Splash = 1.8,
+		SplashRate = 180,
+		Mist = 130,
+		Foam = 20,
+		Drops = 1.6,
+		Dribble = false,
+		Bristles = false,
+		Shake = 0.45,
+		Loops = {
+			{ Id = SOUND .. "impact_water.mp3", Speed = 0.6, Volume = 0.5 },
+			{ Id = SOUND .. "action_falling.mp3", Speed = 0.7, Volume = 0.45 },
+		},
+	},
+}
+
 local cleaningIntent = Remotes.event("CleaningIntent")
 
 local jobId: string? = nil
@@ -51,6 +185,13 @@ local foam: ParticleEmitter
 local mist: ParticleEmitter
 local beam: Beam
 local spraySound: Sound
+local loopSounds: { Sound } = {}
+local tickSound: Sound
+local nextTickAt = 0
+local feel: Feel = FEEL[1]
+local dribble: ParticleEmitter
+local bristles: ParticleEmitter
+local dribbleAttachment: Attachment?
 local fallbackNozzle: Attachment? = nil
 local reticle: Frame
 
@@ -335,6 +476,66 @@ local function buildEffects()
 	spraySound.Looped = true
 	spraySound.Volume = 0.35
 	spraySound.Parent = SoundService
+	table.insert(loopSounds, spraySound)
+	local second = spraySound:Clone()
+	second.Name = "SprayLayer"
+	second.Parent = SoundService
+	table.insert(loopSounds, second)
+	tickSound = Instance.new("Sound")
+	tickSound.Name = "ScrubTick"
+	tickSound.Parent = SoundService
+
+	-- Brush tier: little bristle and grime flecks thrown off where it scrubs.
+	bristles = Instance.new("ParticleEmitter")
+	bristles.Enabled = false
+	bristles.Rate = 30
+	bristles.Lifetime = NumberRange.new(0.3, 0.6)
+	bristles.Speed = NumberRange.new(3, 6)
+	bristles.SpreadAngle = Vector2.new(80, 80)
+	bristles.Acceleration = Vector3.new(0, -25, 0)
+	bristles.Size = NumberSequence.new(0.18, 0.05)
+	bristles.Color = ColorSequence.new(Color3.fromRGB(150, 110, 70), Color3.fromRGB(245, 240, 225))
+	bristles.Parent = impactAttachment
+
+	-- Garden hose tier: water that just drips off the nozzle, so the hose feels weak.
+	dribble = Instance.new("ParticleEmitter")
+	dribble.Enabled = false
+	dribble.Rate = 24
+	dribble.Lifetime = NumberRange.new(0.4, 0.6)
+	dribble.Speed = NumberRange.new(0.5, 1.5)
+	dribble.SpreadAngle = Vector2.new(15, 15)
+	dribble.Acceleration = Vector3.new(0, -40, 0)
+	dribble.Size = NumberSequence.new(0.16, 0.08)
+	dribble.Transparency = NumberSequence.new(0.2, 0.8)
+	dribble.Color = ColorSequence.new(SPRAY_COLOR)
+end
+
+-- Sounds and look for this tier's spray. The beam itself is set in applyTier.
+local function setSprayAudio(playing: boolean)
+	for index, sound in loopSounds do
+		local layer = feel.Loops[index]
+		if playing and layer then
+			if sound.SoundId ~= layer.Id then
+				sound:Stop()
+				sound.SoundId = layer.Id
+			end
+			sound.PlaybackSpeed = layer.Speed
+			sound.Volume = layer.Volume
+			if not sound.IsPlaying then
+				sound:Play()
+			end
+		elseif sound.IsPlaying then
+			sound:Stop()
+		end
+	end
+	local tick = feel.Tick
+	if playing and tick and os.clock() >= nextTickAt then
+		nextTickAt = os.clock() + tick.Every * (0.8 + random:NextNumber() * 0.4)
+		tickSound.SoundId = tick.Id
+		tickSound.PlaybackSpeed = tick.Speed * (0.9 + random:NextNumber() * 0.2)
+		tickSound.Volume = tick.Volume
+		tickSound:Play()
+	end
 end
 
 local function onSpray(state: Enum.UserInputState, input: InputObject?)
@@ -426,7 +627,7 @@ end
 
 local function updateDrops(dt: number)
 	if sprayActive then
-		dropCarry += dt * (if sprayOnTarget then DROP_RATE_ON_TARGET else DROP_RATE_IDLE)
+		dropCarry += dt * (if sprayOnTarget then DROP_RATE_ON_TARGET else DROP_RATE_IDLE) * feel.Drops
 		while dropCarry >= 1 do
 			dropCarry -= 1
 			spawnDrop()
@@ -468,6 +669,9 @@ end
 local function stopEffects()
 	beam.Enabled = false
 	splash.Enabled = false
+	bristles.Enabled = false
+	dribble.Enabled = false
+	setSprayAudio(false)
 	foam.Enabled = false
 	mist.Enabled = false
 	sprayActive = false
@@ -587,18 +791,25 @@ local function onHeartbeat()
 	end
 
 	impactPart.CFrame = CFrame.new(impact)
-	beam.Attachment0 = getNozzle(root)
-	beam.Enabled = true
+	local nozzle = getNozzle(root)
+	beam.Attachment0 = nozzle
+	beam.Enabled = feel.Beam
 	splash.Enabled = sprayHit ~= nil or onTarget
-	foam.Enabled = onTarget
-	mist.Enabled = onTarget
-	splash.Rate = if onTarget then 110 else 60
+	splash.Rate = if onTarget then feel.SplashRate else feel.SplashRate * 0.5
+	foam.Enabled = onTarget and feel.Foam > 0
+	foam.Rate = feel.Foam
+	mist.Enabled = onTarget and feel.Mist > 0
+	mist.Rate = feel.Mist
+	bristles.Enabled = onTarget and feel.Bristles
+	if dribbleAttachment ~= nozzle then
+		dribbleAttachment = nozzle
+		dribble.Parent = nozzle
+	end
+	dribble.Enabled = feel.Dribble
 	sprayActive = true
 	sprayOnTarget = onTarget
 	sprayScreenPoint = screenPoint
-	if not spraySound.IsPlaying then
-		spraySound:Play()
-	end
+	setSprayAudio(true)
 
 	local now = os.clock()
 	local sendId = if helping then aimJob else jobId
@@ -624,14 +835,36 @@ local function applyBay(bay: Types.BaySnapshot?)
 	end
 end
 
--- Range drives aiming; higher tiers also get a visibly thicker spray.
+-- Range drives aiming; the tier's feel sets the jet, particles and sounds.
 local function applyTier(tier: number)
 	local tool = ToolConfig[tier] or ToolConfig[1]
 	range = tool.Range
+	feel = FEEL[tool.Tier] or FEEL[1]
 	if beam then
-		beam.Width1 = 0.9 + 0.35 * (tool.Tier - 1)
-		beam.Width0 = 0.25 + 0.1 * (tool.Tier - 1)
+		beam.Width0 = feel.Width0
+		beam.Width1 = feel.Width1
+		beam.Color = ColorSequence.new(feel.Color)
+		beam.Transparency = NumberSequence.new(feel.Transparency, math.min(1, feel.Transparency + 0.4))
+		splash.Speed = NumberRange.new(5 * feel.Splash, 9 * feel.Splash)
+		mist.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), feel.Color)
 	end
+	for _, sound in loopSounds do
+		sound:Stop()
+	end
+end
+
+-- A small shake while the stronger hoses are spraying, after the camera has moved.
+local function shakeCamera()
+	if not sprayActive or feel.Shake <= 0 then
+		return
+	end
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local amount = math.rad(feel.Shake) * (if sprayOnTarget then 1 else 0.6)
+	local t = os.clock() * 40
+	camera.CFrame *= CFrame.Angles(math.sin(t) * amount, math.cos(t * 1.3) * amount, 0)
 end
 
 function CleaningController.init(initial: Types.InitialState)
@@ -651,6 +884,7 @@ function CleaningController.init(initial: Types.InitialState)
 		end)
 	RunService.Heartbeat:Connect(onHeartbeat)
 	RunService.RenderStepped:Connect(updateDrops)
+	RunService:BindToRenderStep("SprayShake", Enum.RenderPriority.Camera.Value + 1, shakeCamera)
 end
 
 return CleaningController

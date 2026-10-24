@@ -18,6 +18,7 @@ local CleanGateController = require(Controllers.CleanGateController)
 local ZooController = require(Controllers.ZooController)
 local IndexController = require(Controllers.IndexController)
 local PenCashController = require(Controllers.PenCashController)
+local PromptController = require(Controllers.PromptController)
 
 local ok, initial = pcall(function()
 	return Remotes.func("RequestInitialState"):InvokeServer()
@@ -49,6 +50,7 @@ CleanGateController.init(initial)
 ZooController.init(initial)
 IndexController.init(initial)
 PenCashController.init()
+PromptController.init()
 DevController.init()
 
 -- Feature controllers (src/client/Features): each is required and init(initial) called.

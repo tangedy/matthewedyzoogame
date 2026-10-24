@@ -325,24 +325,72 @@ local function showAnnouncement(text: string, rarityKey: string)
 	end)
 end
 
-local function playPayout(reward: number, discoveryBonus: number)
-	if discoveryBonus > 0 then
-		local wash = reward - discoveryBonus
-		payout.Text = `+{UIStyle.formatMoney(wash)} WASH\n+{UIStyle.formatMoney(discoveryBonus)} NEW`
-	else
-		payout.Text = "+" .. UIStyle.formatMoney(reward)
+-- The washed animal with this job, while it is still in a bay.
+local function washedAnimal(jobId: string): Model?
+	local bays = Workspace:FindFirstChild("WashBays")
+	if not bays then
+		return nil
 	end
-	payout.Visible = true
-	payout.TextTransparency = 0
-	payout.Position = UDim2.fromScale(0.5, 0.42)
-	local info = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	local tween = TweenService:Create(payout, info, { Position = UDim2.fromScale(0.5, 0.32), TextTransparency = 1 })
-	tween.Completed:Once(function(state)
-		if state == Enum.PlaybackState.Completed then
-			payout.Visible = false
+	for _, model in bays:GetDescendants() do
+		if model:IsA("Model") and model:GetAttribute("JobId") == jobId then
+			return model
 		end
+	end
+	return nil
+end
+
+-- "+$12" pops over the washed animal, above its Squeaky clean! banner, then rises and fades.
+-- Falls back to the middle of the screen if the animal is already gone.
+local function playPayout(jobId: string, reward: number, discoveryBonus: number)
+	local text = if discoveryBonus > 0
+		then `+{UIStyle.formatMoney(reward - discoveryBonus)} WASH\n+{UIStyle.formatMoney(discoveryBonus)} NEW`
+		else "+" .. UIStyle.formatMoney(reward)
+	local animal = washedAnimal(jobId)
+	local head = animal and animal:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then
+		payout.Text = text
+		payout.Visible = true
+		payout.TextTransparency = 0
+		payout.Position = UDim2.fromScale(0.5, 0.42)
+		local info = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local tween = TweenService:Create(payout, info, { Position = UDim2.fromScale(0.5, 0.32), TextTransparency = 1 })
+		tween.Completed:Once(function(state)
+			if state == Enum.PlaybackState.Completed then
+				payout.Visible = false
+			end
+		end)
+		tween:Play()
+		return
+	end
+	local board = Instance.new("BillboardGui")
+	board.Name = "WashPayout"
+	board.Size = UDim2.fromOffset(240, if discoveryBonus > 0 then 70 else 48)
+	board.MaxDistance = 120
+	board.AlwaysOnTop = true
+	board.ResetOnSpawn = false
+	board.Adornee = head
+	UIStyle.overhead(board, head, UIStyle.Overhead.Payout)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.Parent = board
+	UIStyle.text(label, UIStyle.CashColor, nil, 3)
+	label.Text = text
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.4
+	scale.Parent = label
+	board.Parent = player:WaitForChild("PlayerGui")
+	TweenService:Create(scale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+		:Play()
+	local rise = board.SizeOffset + Vector2.new(0, 40 / board.Size.Y.Offset)
+	local info = TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(board, info, { SizeOffset = rise }):Play()
+	task.delay(0.7, function()
+		local fade = TweenService:Create(label, TweenInfo.new(0.9), { TextTransparency = 1 })
+		fade.Completed:Once(function()
+			board:Destroy()
+		end)
+		fade:Play()
 	end)
-	tween:Play()
 end
 
 -- Persistent warning: the doc requires explaining when progress can't be saved.
@@ -449,7 +497,7 @@ function HUDController.init(initial: Types.InitialState)
 			end
 			tutorialCompleted = true
 			cashLabel.Text = UIStyle.formatMoney(coins)
-			playPayout(reward, discoveryBonus or 0)
+			playPayout(jobId, reward, discoveryBonus or 0)
 			refreshToast()
 		end)
 end

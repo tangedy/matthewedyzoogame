@@ -354,7 +354,7 @@ local function refreshPens(player: Player)
 			target.ObjectText = ZooService.label(occupant.Species, occupant.Mutation)
 			target.ActionText =
 				`Sell ({UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))})`
-			target.HoldDuration = 1
+			target.HoldDuration = 0 -- a tap sells; no hold
 		end
 		if not carried and not animal then
 			prompt.Enabled = false
@@ -1152,12 +1152,14 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 	if #waitingRecords(zoo, data) >= GameConfig.Cache.Slots then
 		local soldModel = takeOldestUnpaid(player)
 		if soldModel then
-			local soldSpot = zoo.Bay:FindFirstChild("SoldSpot")
-			if soldSpot and soldSpot:IsA("BasePart") and soldModel.Parent then
-				AnimalService.walkCorners(soldModel, { soldSpot.CFrame }, 0.55)
-			end
+			-- The sale and the shuffle up run alongside, so the washed animal leaves the
+			-- wash spot right after its hop instead of waiting for them.
 			local leaving = soldModel
 			task.spawn(function()
+				local soldSpot = zoo.Bay:FindFirstChild("SoldSpot")
+				if soldSpot and soldSpot:IsA("BasePart") and leaving.Parent then
+					AnimalService.walkCorners(leaving, { soldSpot.CFrame }, 0.55)
+				end
 				if leaving.Parent then
 					AnimalService.sold(leaving)
 				end
@@ -1175,7 +1177,7 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 					local cached = zoo.CacheModels[waiting.Id]
 					local slotPart = cacheSlot(zoo, index)
 					if cached and slotPart and cached.Parent then
-						AnimalService.walkCorners(cached, { slotPart.CFrame }, 0.6)
+						task.spawn(AnimalService.walkCorners, cached, { slotPart.CFrame }, 0.6)
 					end
 				end
 				refreshCache(player)

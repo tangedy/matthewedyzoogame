@@ -291,8 +291,18 @@ end
 
 -- Celebrate, then hand the animal to the zoo: intro animals auto-sell, a free cache slot
 -- takes the next one, and a full cache keeps the animal as an overflow instead of deleting it.
-local function departToCache(bay: Bay, owner: Player, model: Model, animalKey: string, mutationKey: string)
+-- Celebrates, then walks off at once. onCelebrated fires the moment the hop ends, so the
+-- line can step up behind the animal as it leaves instead of into it.
+local function departToCache(
+	bay: Bay,
+	owner: Player,
+	model: Model,
+	animalKey: string,
+	mutationKey: string,
+	onCelebrated: () -> ()
+)
 	AnimalService.celebrate(model)
+	onCelebrated()
 	if bay.Owner ~= owner or not model.Parent then
 		AnimalService.destroy(model)
 		return
@@ -434,9 +444,16 @@ local function runOneJob(bay: Bay, owner: Player)
 	if bay.Line[1] == front then
 		table.remove(bay.Line, 1)
 	end
-	task.spawn(departToCache, bay, owner, model, animalKey, mutationKey)
-	-- Give the hop a head start so the next animal doesn't step into it.
-	task.wait(GameConfig.CelebrationDuration * 0.6)
+	local celebrated = false
+	task.spawn(departToCache, bay, owner, model, animalKey, mutationKey, function()
+		celebrated = true
+	end)
+	-- The next animal steps up once the hop is over and this one has started walking off.
+	local hopWait = 0
+	while not celebrated and hopWait < GameConfig.CelebrationDuration + 1 and bay.Owner == owner do
+		hopWait += task.wait()
+	end
+	task.wait(GameConfig.StepUpDelay)
 	disposeJob(bay)
 	stepLine(bay, owner)
 	task.wait(GameConfig.NextAnimalDelay)

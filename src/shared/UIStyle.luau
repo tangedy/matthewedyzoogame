@@ -14,6 +14,7 @@ UIStyle.Font = Enum.Font.LuckiestGuy
 UIStyle.CashColor = Color3.fromRGB(90, 255, 90)
 UIStyle.PanelColor = Color3.fromRGB(30, 30, 40)
 UIStyle.RainbowTag = "RainbowGradient" -- the client animates every gradient with this tag
+UIStyle.RainbowRingTag = "RainbowAuraRing" -- Farm God aura rings; clients cycle their hue
 
 local SUFFIXES = { "", "K", "M", "B", "T", "Qd" }
 
@@ -153,27 +154,57 @@ local function escapeRich(text: string): string
 	return text
 end
 
--- Everything drawn over an animal hangs from the nameplate's anchor and is stacked in
--- pixels, so the rows never overlap at any distance. Values are each row's bottom edge,
--- in pixels above the nameplate's resting centre (a 4-line nameplate reaches 48).
--- While washing, top to bottom: name / mutation / rarity / $/s, then the clean % bar and
--- the patience row. The nameplate lifts to make room for the meter under it.
+-- Everything drawn over an animal hangs from one anchor above its head and is stacked in
+-- pixels, so the rows never overlap at any distance. The resting nameplate's bottom edge
+-- sits on the anchor, and its real height (3 to 5 lines) is stored on the head as
+-- PlateHeight, so every row above it clears it by the same small gap.
+-- While washing, bottom to top: clean % bar and patience row, the lifted nameplate, then
+-- the daily tag and callouts. After a wash: nameplate, Squeaky clean!, the rising payout;
+-- the chat bubble follows once the banner is gone.
 UIStyle.Overhead = {
-	Meter = -36, -- clean bar + patience row, where the nameplate's bottom rests
-	Name = 24, -- the lifted nameplate, just above the meter
-	Banner = 56, -- Squeaky clean! (meter gone, nameplate resting)
-	Tag = 136, -- DAILY DIRTY ANIMAL
-	Callout = 176, -- Wash me! / TOO DIRTY! / !
+	Meter = "Meter", -- clean bar + patience row, on the anchor
+	Name = "Name", -- the lifted nameplate, just above the meter
+	Banner = "Banner", -- Squeaky clean! (meter gone, nameplate resting)
+	Payout = "Payout", -- +$ rising above the banner
+	Bubble = "Bubble", -- the washed animal's chat line, right above the resting nameplate
+	Tag = "Tag", -- DAILY DIRTY ANIMAL, above the lifted nameplate
+	Callout = "Callout", -- Wash me! / TOO DIRTY! / !, above the tag row
 }
 
+local GAP = 6
+local METER_ROOM = 60 -- the clean meter billboard (56) plus a gap
+local BANNER_ROOM = 56 + GAP
+local TAG_ROOM = 34 + GAP
+local DEFAULT_PLATE = 72
+
 local function overheadLift(head: BasePart): number
-	return head.Size.Y / 2 + 2.6
+	return head.Size.Y / 2 + 1.2
 end
 
--- Places a pixel-sized billboard so its bottom edge sits `bottom` pixels above the nameplate.
--- `bob` nudges it up and down in pixels.
-function UIStyle.overhead(billboard: BillboardGui, head: BasePart, bottom: number, bob: number?)
+local function slotBottom(head: BasePart, slot: string): number
+	local plate = head:GetAttribute("PlateHeight")
+	local h = if typeof(plate) == "number" then plate else DEFAULT_PLATE
+	if slot == "Meter" then
+		return 0
+	elseif slot == "Rest" then
+		return 0
+	elseif slot == "Name" then
+		return METER_ROOM
+	elseif slot == "Banner" or slot == "Bubble" then
+		return h + GAP
+	elseif slot == "Payout" then
+		return h + GAP + BANNER_ROOM
+	elseif slot == "Tag" then
+		return METER_ROOM + h + GAP
+	end
+	return METER_ROOM + h + GAP + TAG_ROOM -- Callout
+end
+
+-- Places a pixel-sized billboard so its bottom edge sits in `slot` (UIStyle.Overhead) of the
+-- stack above this head. `bob` nudges it up and down in pixels.
+function UIStyle.overhead(billboard: BillboardGui, head: BasePart, slot: string, bob: number?)
 	local height = math.max(1, billboard.Size.Y.Offset)
+	local bottom = slotBottom(head, slot)
 	billboard.StudsOffset = Vector3.new(0, overheadLift(head), 0)
 	billboard.SizeOffset = Vector2.new(0, (bottom + (bob or 0) + height / 2) / height)
 end
@@ -187,7 +218,7 @@ function UIStyle.liftNameplate(head: BasePart, lifted: boolean)
 	if lifted then
 		UIStyle.overhead(plate, head, UIStyle.Overhead.Name)
 	else
-		plate.SizeOffset = Vector2.zero
+		UIStyle.overhead(plate, head, "Rest")
 	end
 end
 
@@ -202,7 +233,9 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
 	billboard.Size = UDim2.fromOffset(if info.Needs then 260 else 220, lines * 24)
-	billboard.StudsOffset = Vector3.new(0, overheadLift(adornee), 0)
+	-- Rows stacked above (UIStyle.overhead) read this height so they sit just clear of it.
+	adornee:SetAttribute("PlateHeight", lines * 24)
+	UIStyle.overhead(billboard, adornee, "Rest")
 	billboard.MaxDistance = maxDistance
 	billboard.Parent = adornee
 

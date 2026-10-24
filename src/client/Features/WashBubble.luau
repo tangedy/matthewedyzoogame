@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -77,7 +78,7 @@ local function show(model: Model)
 	board.MaxDistance = 2000
 	board.ResetOnSpawn = false
 	board.Adornee = head
-	UIStyle.overhead(board, head, UIStyle.Overhead.Callout)
+	UIStyle.overhead(board, head, UIStyle.Overhead.Bubble)
 
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0
@@ -143,7 +144,8 @@ function WashBubble.init(_initial: Types.InitialState)
 		if not model then
 			return
 		end
-		task.delay(0.25, function()
+		-- After the Squeaky clean! banner, which uses the same row above the nameplate.
+		task.delay(GameConfig.CelebrationDuration, function()
 			if model.Parent then
 				show(model)
 			end

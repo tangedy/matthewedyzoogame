@@ -117,7 +117,7 @@ local function ensureStand(bay: Model): Model?
 		created.Name = promptName
 		created.ActionText = `Buy ({price})`
 		created.ObjectText = title
-		created.HoldDuration = 0.4
+		created.HoldDuration = 0 -- the Robux dialog is the confirmation
 		created.MaxActivationDistance = 8
 		created.RequiresLineOfSight = false
 		created.KeyboardKeyCode = Enum.KeyCode.E

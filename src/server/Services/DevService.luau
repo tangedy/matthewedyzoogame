@@ -87,6 +87,8 @@ local function buildGallery(): (Model, CFrame)
 		for _, key in keys do
 			local ok, animal = pcall(AnimalService.buildZooAnimal, key, MutationConfig.Default)
 			if ok then
+				-- At pen size, so the gallery shows each animal the way players see it.
+				AnimalService.resize(animal, AnimalService.bodyScale(key))
 				local _, size = animal:GetBoundingBox()
 				table.insert(row, { key = key, animal = animal, width = size.X, depth = size.Z })
 				rowWidth += size.X + GALLERY_GAP
@@ -147,9 +149,11 @@ local function toggleGallery(player: Player)
 		character:PivotTo(back)
 		return
 	end
-	if not gallery or not gallery.Parent then
-		gallery, galleryStart = buildGallery()
+	-- Rebuilt on every visit, so it always shows the current models (AnimalBuilder).
+	if gallery then
+		gallery:Destroy()
 	end
+	gallery, galleryStart = buildGallery()
 	returnTo[player] = root.CFrame
 	character:PivotTo(galleryStart :: CFrame)
 end

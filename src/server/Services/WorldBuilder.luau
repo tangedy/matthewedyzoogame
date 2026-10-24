@@ -249,21 +249,23 @@ local function ensureGround()
 	})
 end
 
--- The gear shop: a little booth just outside the wash arm, between the road cages, with its
--- counter facing the animal being washed and the shopkeeper behind it. Gear for the player's
--- tier stands at GearSpot (StationProps), behind the wash, and the fire truck parks at
--- TruckSpot past the left cages.
-local SHOP_DEPTH = 38
-local SHOP_LAT = WASH_LAT - 16
-local GEAR_DEPTH = 47
-local GEAR_LAT = WASH_LAT - 8.5
+-- The gear shop: a little booth just behind the wash arm, beside the first stall row and
+-- clear of the left Robux pasture (depth 36-52), its counter turned toward the animal being
+-- washed and the shopkeeper behind it. Gear for the player's tier stands at GearSpot
+-- (StationProps), between the booth and the wash, and the fire truck parks at TruckSpot past
+-- the left cages.
+local SHOP_DEPTH = 58
+local SHOP_LAT = WASH_LAT - 13
+local GEAR_DEPTH = 46
+local GEAR_LAT = WASH_LAT - 8
 
 local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local station = Instance.new("Model")
 	station.Name = "UpgradeStation"
 	local base = PlotLayout.point(plot, SHOP_DEPTH, SHOP_LAT, 0)
-	-- Local -Z faces the wash; local X runs along the plot depth.
-	local frame = CFrame.lookAt(base, base + plot.Right)
+	-- Local -Z faces the wash spot, so the counter is what you see from the animal.
+	local washSpot = PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_LAT, 0)
+	local frame = CFrame.lookAt(base, washSpot)
 	local function block(name: string, size: Vector3, offset: CFrame, color: Color3, props: { [string]: any }?): Part
 		local fields: { [string]: any } = {
 			Name = name,
@@ -393,7 +395,7 @@ local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 		local slot = makeMarker("Slot" .. index, CFrame.lookAt(pos, pos + plot.Look), cache)
 		slot:SetAttribute("SlotIndex", index)
 		makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false
-		local sell = makePrompt("SellPrompt", "Sell", 1.5, slot, Enum.KeyCode.F)
+		local sell = makePrompt("SellPrompt", "Sell", 0, slot, Enum.KeyCode.F)
 		sell.UIOffset = Vector2.new(0, -110)
 		sell.GamepadKeyCode = Enum.KeyCode.ButtonY
 		sell.Enabled = false
@@ -421,7 +423,7 @@ local function addPenPrompts(
 		Color = Color3.fromRGB(240, 240, 240),
 		Parent = pen,
 	})
-	makePrompt("PenPrompt", "Sell", 1, post).Enabled = false
+	makePrompt("PenPrompt", "Sell", 0, post).Enabled = false
 	local pet = makePrompt("PetPrompt", "Set pet", 0.4, post, Enum.KeyCode.R)
 	pet.UIOffset = Vector2.new(0, 72)
 	pet.GamepadKeyCode = Enum.KeyCode.ButtonX
