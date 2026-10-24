@@ -36,36 +36,43 @@ local ROAD_D = -8
 local QUEUE_DEPTH = { 40, 28, 16 } -- 1 is the wash, furthest in; 3 is the back of the queue
 local CACHE_LAT = 18
 local SOLD_LAT = CACHE_LAT + 10 -- forward of the cache, still facing along the wash road
-local WALK_START = 58
-local STALL_DEPTH = 8 -- half the old 16; every larger pen is a multiple of this
-local STALL_LAT = 7
-local STALL_PITCH = 14
-local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + STALL_LAT / 2
-local WALK_END = WALK_START + 8 + STALL_DEPTH / 2 + 2 * STALL_PITCH + STALL_DEPTH / 2 + 8
+-- The path starts right behind the wash road (depth 32-48), so the stalls are a few steps
+-- from the cache. The six stalls sit three a side with their gates on the path.
+local WALK_START = 50
+local STALL_DEPTH = 10
+local STALL_LAT = 10
+local STALL_PITCH = 12
+local STALL_FIRST = WALK_START + 2 + STALL_DEPTH / 2
+local STALL_LATERAL = GameConfig.SidewalkWidth / 2 + 1 + STALL_LAT / 2
+local WALK_END = STALL_FIRST + 2 * STALL_PITCH + STALL_DEPTH / 2 + 4
 
--- Two pens the size of a large pasture. They used to sit behind the six stalls.
--- The barn ladder still starts from that old spot. The cages themselves move to the
--- road (FLEX_CENTER) so a walk down the street sees them first.
-local FLEX_DEPTH = 24
-local FLEX_LAT_SIZE = 42
-local FLEX_LATERAL = GameConfig.SidewalkWidth / 2 + 4 + FLEX_LAT_SIZE / 2
-local BARN_ANCHOR = (WALK_END - 8) + 4 + FLEX_DEPTH / 2
+-- Two pens the size of a large pasture, at the road (FLEX_CENTER) so a walk down the
+-- street sees them first.
+-- Their inner edge clears the exit road (lateral 23-33), so sold animals never walk
+-- through a fence.
+local FLEX_DEPTH = 20
+local FLEX_LAT_SIZE = 28
+local FLEX_LATERAL = 34 + FLEX_LAT_SIZE / 2
 -- Depth 16 is in front of the wash lane (that lane starts at depth 32) and behind the sign.
 local FLEX_CENTER = 16
 
--- Lanes beside the path. Large is 1.5x the small pen, giant 3x, gargantuan 8x.
-local LARGE_DEPTH = STALL_DEPTH * 1.5
-local LARGE_LAT = STALL_LAT * 1.5
-local GIANT_DEPTH = STALL_DEPTH * 3
-local GIANT_LAT = STALL_LAT * 3
-local GARG_DEPTH = STALL_DEPTH * 8
-local GARG_LAT = STALL_LAT * 8
+-- Larger lanes are multiples of the original 8-by-7 stall: large 1.5x, giant 3x,
+-- gargantuan 8x.
+local BASE_DEPTH = 8
+local BASE_LAT = 7
+local LARGE_DEPTH = BASE_DEPTH * 1.5
+local LARGE_LAT = BASE_LAT * 1.5
+local GIANT_DEPTH = BASE_DEPTH * 3
+local GIANT_LAT = BASE_LAT * 3
+local GARG_DEPTH = BASE_DEPTH * 8
+local GARG_LAT = BASE_LAT * 8
 
 local ROOF_OVER = 1 -- roof and posts sit just outside the pen
 local LANE_GAP = 4
 local ROW_GAP = 3
 
-local BARN_FRONT = BARN_ANCHOR + FLEX_DEPTH / 2 + 8
+-- The barn ladder starts just past the stalls; the barn counter stands in the gap.
+local BARN_FRONT = WALK_END + 4
 local ROW_PITCH = LARGE_DEPTH + ROW_GAP
 local ROW_DEPTH = {
 	BARN_FRONT + ROOF_OVER + LARGE_DEPTH / 2,
@@ -236,30 +243,96 @@ local function ensureGround()
 	})
 end
 
+-- The gear shop: a little booth beside the wash, on the opposite side from the cache, with its
+-- counter facing the animal being washed. Gear for the player's tier stands just in front of
+-- it at GearSpot (StationProps), and the fire truck parks at TruckSpot behind it.
+local SHOP_DEPTH = 44
+local SHOP_LAT = -20
+local GEAR_DEPTH = 33
+local GEAR_LAT = -19
+
 local function buildUpgradeStation(plot: PlotLayout.PlotFrame, parent: Instance)
 	local station = Instance.new("Model")
 	station.Name = "UpgradeStation"
-	-- Beside the path, behind the road cages and in front of the stalls, so it isn't inside a pen.
-	local base = PlotLayout.point(plot, 46, -48, 0)
-	local counter = makePart({
-		Name = "Counter",
-		Size = Vector3.new(3, 3, 6),
-		Position = base + Vector3.new(0, 1.5, 0),
-		Color = Color3.fromRGB(60, 150, 230),
-		Material = Enum.Material.SmoothPlastic,
-		Parent = station,
-	})
-	makePart({
-		Name = "Awning",
-		Size = Vector3.new(4, 0.4, 7),
-		Position = base + Vector3.new(0, 6.5, 0),
-		Color = Color3.fromRGB(255, 210, 70),
+	local base = PlotLayout.point(plot, SHOP_DEPTH, SHOP_LAT, 0)
+	-- Local -Z faces the wash; local X runs along the plot depth.
+	local frame = CFrame.lookAt(base, base + plot.Right)
+	local function block(name: string, size: Vector3, offset: CFrame, color: Color3, props: { [string]: any }?): Part
+		local fields: { [string]: any } = {
+			Name = name,
+			Size = size,
+			CFrame = frame * offset,
+			Color = color,
+			Parent = station,
+		}
+		for key, value in props or {} do
+			fields[key] = value
+		end
+		return makePart(fields)
+	end
+	local blue = Color3.fromRGB(60, 150, 230)
+	local white = Color3.fromRGB(245, 245, 240)
+	local wood = Color3.fromRGB(200, 150, 95)
+	block("Deck", Vector3.new(9, 0.4, 7), CFrame.new(0, 0.2, 0.5), wood, { Material = Enum.Material.WoodPlanks })
+	local counter = block("Counter", Vector3.new(8, 3.2, 1.6), CFrame.new(0, 2, -2.2), blue)
+	block("CounterTop", Vector3.new(8.6, 0.3, 2.2), CFrame.new(0, 3.75, -2.2), white, { CanQuery = false })
+	block("BackWall", Vector3.new(9, 9, 0.6), CFrame.new(0, 4.7, 3.7), wood, { Material = Enum.Material.WoodPlanks })
+	for _, side in { -1, 1 } do
+		block("Post", Vector3.new(0.6, 8.6, 0.6), CFrame.new(side * 4.2, 4.5, -2.9), white, { CanQuery = false })
+	end
+	-- Striped awning, sloping down toward the wash.
+	for i = 0, 5 do
+		block(
+			"Awning",
+			Vector3.new(1.5, 0.25, 7.6),
+			CFrame.new(-3.75 + i * 1.5, 9.1, 0) * CFrame.Angles(math.rad(-12), 0, 0),
+			if i % 2 == 0 then Color3.fromRGB(230, 60, 60) else white,
+			{ CanQuery = false }
+		)
+	end
+	local sign = block("Sign", Vector3.new(8, 2.2, 0.4), CFrame.new(0, 11.2, -0.6), Color3.fromRGB(255, 210, 70), {
 		CanQuery = false,
-		Parent = station,
 	})
-	local prompt = makePrompt("UpgradePrompt", "Upgrade Hose", 0, counter)
-	prompt.ObjectText = "Hose Shop"
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.Parent = sign
+	local text = Instance.new("TextLabel")
+	text.Size = UDim2.fromScale(1, 1)
+	text.BackgroundTransparency = 1
+	text.Text = "GEAR SHOP"
+	text.Parent = gui
+	UIStyle.text(text, Color3.fromRGB(60, 40, 20), Color3.new(1, 1, 1), 2)
+	-- Upgrades hang on the back wall: a sponge, a brush, a nozzle.
+	block(
+		"Hook1",
+		Vector3.new(1.2, 0.8, 0.4),
+		CFrame.new(-2.6, 6, 3.3),
+		Color3.fromRGB(255, 220, 70),
+		{ CanQuery = false }
+	)
+	block("Hook2", Vector3.new(0.3, 2, 0.4), CFrame.new(0, 6, 3.3), Color3.fromRGB(170, 115, 60), { CanQuery = false })
+	block(
+		"Hook3",
+		Vector3.new(0.5, 0.5, 1.6),
+		CFrame.new(2.6, 6, 3.1),
+		Color3.fromRGB(220, 40, 40),
+		{ CanQuery = false }
+	)
+	local prompt = makePrompt("UpgradePrompt", "Upgrade Gear", 0, counter)
+	prompt.ObjectText = "Gear Shop"
+	prompt.MaxActivationDistance = 12
 	station.Parent = parent
+
+	local gearPos = PlotLayout.point(plot, GEAR_DEPTH, GEAR_LAT, FLOOR_Y - 0.5)
+	makeMarker("GearSpot", CFrame.lookAt(gearPos, gearPos + plot.Right), parent)
+	-- Nose toward the road, parked behind the booth.
+	local truckPos = PlotLayout.point(plot, 40, -34, 0)
+	makeMarker("TruckSpot", CFrame.lookAt(truckPos, truckPos + plot.Look), parent)
+	-- The auto-collect kiosk (Monetization): past the cache, beside the first stalls.
+	local kioskPos = PlotLayout.point(plot, 54, 25, 0)
+	makeMarker("KioskSpot", CFrame.lookAt(kioskPos, kioskPos - plot.Right), parent)
 end
 
 local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
@@ -476,7 +549,9 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		pen:SetAttribute("PenClass", class)
 		local look = lookAt
 		if not look then
-			look = if class == "Giant" or class == "Gargantuan" or class == "Large"
+			look = if class == "Giant"
+					or class == "Gargantuan"
+					or class == "Large"
 				then if math.abs(lateral) < 1 then plot.Look else inwardLook(plot, lateral)
 				else inwardLook(plot, lateral)
 		end
@@ -487,15 +562,14 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		end
 	end
 
-	-- Six cages, three on each side of the path, pulled up behind the wash lane.
-	-- Gates face the road. The Robux pastures in front of them are what the street sees first.
-	local stallDepth0 = 60
+	-- Six stalls, three on each side of the path, right behind the wash. Gates open onto the
+	-- path, so walking down it passes every animal and every collect pad.
 	for row = 0, 2 do
-		local depth = stallDepth0 + row * STALL_PITCH
+		local depth = STALL_FIRST + row * STALL_PITCH
 		local left = row * 2 + 1
 		local right = left + 1
-		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", plot.Look)
-		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard", plot.Look)
+		addPen(left, depth, -STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
+		addPen(right, depth, STALL_LATERAL, STALL_DEPTH, STALL_LAT, "Standard")
 	end
 
 	-- Small barn: two standard pens each side of the path. Medium adds an outer lane
@@ -537,7 +611,13 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		local built = zoo:FindFirstChild("Pen" .. index)
 		local builtFloor = built and built:FindFirstChild("Floor")
 		if builtFloor and builtFloor:IsA("BasePart") then
-			local classLabel = billboardLabel(builtFloor, "2 MEDIUM\nOR 1 LARGE", Vector3.new(0, 8, 0), Vector2.new(240, 80), flexColor)
+			local classLabel = billboardLabel(
+				builtFloor,
+				"2 MEDIUM\nOR 1 LARGE",
+				Vector3.new(0, 8, 0),
+				Vector2.new(240, 80),
+				flexColor
+			)
 			classLabel.Name = "ClassLabel"
 			classLabel.TextWrapped = true
 		end
@@ -563,7 +643,8 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 			Material = Enum.Material.Wood,
 			Parent = lock,
 		})
-		local lockLabel = billboardLabel(bar, lockText, Vector3.new(0, 6.5, 0), Vector2.new(240, 80), Color3.fromRGB(255, 230, 120))
+		local lockLabel =
+			billboardLabel(bar, lockText, Vector3.new(0, 6.5, 0), Vector2.new(240, 80), Color3.fromRGB(255, 230, 120))
 		lockLabel.Name = "LockLabel"
 		lockLabel.TextWrapped = true
 		local lockGui = lockLabel.Parent :: BillboardGui
@@ -603,8 +684,8 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 	flexPen(flexLeft, FLEX_LATERAL, "Left", "SPEND ANY ROBUX")
 	flexPen(flexLeft + 1, -FLEX_LATERAL, "Right", "99 ROBUX\nOR AXOLOTL")
 
-	-- Barn upgrade, beside the mouth of the sidewalk.
-	local stand = PlotLayout.point(plot, WALK_START, -(GameConfig.SidewalkWidth / 2 + 7), 0)
+	-- Barn upgrade, at the far end of the path where the barns will go.
+	local stand = PlotLayout.point(plot, WALK_END + 0.5, -(GameConfig.SidewalkWidth / 2 + 4), 0)
 	local counter = makePart({
 		Name = "ExpandCounter",
 		Size = Vector3.new(3, 3, 5),
@@ -621,7 +702,7 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		Parent = zoo,
 	})
 	billboardLabel(counter, "BARN", Vector3.new(0, 4.2, 0), Vector2.new(160, 36))
-	makePrompt("ExpandPrompt", "Expand Zoo", 0.5, counter).ObjectText = "Barn Upgrade"
+	makePrompt("ExpandPrompt", "Expand Farm", 0.5, counter).ObjectText = "Barn Upgrade"
 
 	buildBarns(plot, zoo)
 	zoo.Parent = bay
@@ -874,17 +955,29 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 	makeMarker("Exit", CFrame.lookAt(back, back + plot.Look), bay)
 end
 
+-- The path runs past the six stalls. Its barn stretch is part of the BarnAisle shell, so it
+-- only appears once there is a barn to walk to.
 local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
-	local span = BARN_AISLE_END - WALK_START
-	makePart({
-		Name = "Sidewalk",
-		Size = Vector3.new(span, 0.35, GameConfig.SidewalkWidth),
-		Position = PlotLayout.point(plot, (WALK_START + BARN_AISLE_END) / 2, 0, 0.18),
-		Color = Color3.fromRGB(190, 175, 150),
-		Material = Enum.Material.Cobblestone,
-		CanQuery = false,
-		Parent = bay,
-	})
+	local function stretch(name: string, from: number, to: number, parent: Instance)
+		makePart({
+			Name = name,
+			Size = Vector3.new(to - from, 0.35, GameConfig.SidewalkWidth),
+			Position = PlotLayout.point(plot, (from + to) / 2, 0, 0.18),
+			Color = Color3.fromRGB(190, 175, 150),
+			Material = Enum.Material.Cobblestone,
+			CanQuery = false,
+			Parent = parent,
+		})
+	end
+	stretch("Sidewalk", WALK_START, WALK_END, bay)
+	local zoo = bay:FindFirstChild("Zoo")
+	if zoo then
+		local aisle = Instance.new("Model")
+		aisle.Name = "BarnAisle"
+		stretch("Sidewalk", WALK_END, BARN_AISLE_END, aisle)
+		aisle.Parent = zoo
+		WorldBuilder.setShown(aisle, false)
+	end
 end
 
 function WorldBuilder.buildBay(index: number): Model
@@ -894,11 +987,12 @@ function WorldBuilder.buildBay(index: number): Model
 
 	buildWash(plot, bay)
 	buildCache(plot, bay)
-	buildSidewalk(plot, bay)
 	buildUpgradeStation(plot, bay)
 	buildZoo(plot, bay)
+	buildSidewalk(plot, bay)
 
-	local spawnPos = PlotLayout.point(plot, 50, -22, FLOOR_Y)
+	-- At the head of the path, facing the wash, a few steps from the gear shop.
+	local spawnPos = PlotLayout.point(plot, 54, -2, FLOOR_Y)
 	local washPos = PlotLayout.point(plot, QUEUE_DEPTH[1], 0, FLOOR_Y)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"

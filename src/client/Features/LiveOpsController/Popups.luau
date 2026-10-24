@@ -104,7 +104,7 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	textLabel(panel, {
 		Position = UDim2.fromOffset(16, 64),
 		Size = UDim2.new(1, -32, 0, 24),
-		Text = `Your zoo earned while you were away ({formatAway(away)}):`,
+		Text = `Your farm earned while you were away ({formatAway(away)}):`,
 	})
 	local cash = textLabel(panel, {
 		Position = UDim2.fromOffset(16, 88),
@@ -148,24 +148,30 @@ function Popups.welcomeBack(amount: any, seconds: any)
 	TweenService:Create(scale, BOUNCE, { Scale = 1 }):Play()
 	playSound("rbxasset://sounds/electronicpingshort.wav", 0.7)
 	-- The cash counts up for a bit of juice.
-	janitor:Add(task.spawn(function()
-		local steps = 20
-		for i = 1, steps do
-			if not cash.Parent then
-				return
+	janitor:Add(
+		task.spawn(function()
+			local steps = 20
+			for i = 1, steps do
+				if not cash.Parent then
+					return
+				end
+				cash.Text = UIStyle.formatMoney(amount * i / steps)
+				task.wait(0.03)
 			end
-			cash.Text = UIStyle.formatMoney(amount * i / steps)
-			task.wait(0.03)
-		end
-	end), true)
-	janitor:Add(task.spawn(function()
-		while button.Parent do
-			TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1.06 }):Play()
-			task.wait(0.5)
-			TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1 }):Play()
-			task.wait(0.5)
-		end
-	end), true)
+		end),
+		true
+	)
+	janitor:Add(
+		task.spawn(function()
+			while button.Parent do
+				TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1.06 }):Play()
+				task.wait(0.5)
+				TweenService:Create(buttonScale, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Scale = 1 }):Play()
+				task.wait(0.5)
+			end
+		end),
+		true
+	)
 
 	doubleButton.Activated:Connect(function()
 		if not product or not doubleButton.Active then

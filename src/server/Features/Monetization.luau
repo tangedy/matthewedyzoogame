@@ -59,7 +59,8 @@ local function clock(seconds: number): string
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
--- One kiosk just left of pen 1. It sells timed auto-collect only; there is no forever pass.
+-- One kiosk at the plot's KioskSpot, past the cache. It sells timed auto-collect only; there
+-- is no forever pass.
 local function ensureStand(bay: Model): Model?
 	local zoo = bay:FindFirstChild("Zoo")
 	local existing = zoo and zoo:FindFirstChild("AutoCollectStand")
@@ -73,15 +74,14 @@ local function ensureStand(bay: Model): Model?
 	if existing then
 		existing:Destroy()
 	end
-	local pen = zoo and zoo:FindFirstChild("Pen1")
-	local floor = pen and pen:FindFirstChild("Floor")
-	if not zoo or not floor or not floor:IsA("BasePart") then
+	local spot = bay:FindFirstChild("KioskSpot")
+	if not zoo or not spot or not spot:IsA("BasePart") then
 		return nil
 	end
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	local stand = Instance.new("Model")
 	stand.Name = "AutoCollectStand"
-	local base = floor.Position + Vector3.new(-floor.Size.X / 2 - 6, floor.Size.Y / 2 + 1.6, floor.Size.Z / 2)
+	local base = spot.Position + Vector3.new(0, 1.6, 0)
 
 	local function kiosk(
 		name: string,
@@ -125,14 +125,7 @@ local function ensureStand(bay: Model): Model?
 		return counter
 	end
 
-	kiosk(
-		"TimedCounter",
-		"TimedPrompt",
-		"2 HOURS",
-		`{product.Robux} ROBUX`,
-		Color3.fromRGB(70, 190, 90),
-		Vector3.zero
-	)
+	kiosk("TimedCounter", "TimedPrompt", "2 HOURS", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.zero)
 	stand.Parent = zoo
 	return stand
 end
@@ -463,6 +456,10 @@ local function connectHooks()
 			return power * MonetizationConfig.SuperSoap.PowerMultiplier
 		end
 		return power
+	end)
+
+	Hooks.modify("SoapActive", function(active: boolean, player: Player)
+		return active or MonetizationState.soapActive(player)
 	end)
 
 	Hooks.modify("IncomeMultiplier", function(mult: number, player: Player)

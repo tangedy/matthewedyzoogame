@@ -39,8 +39,9 @@ local ARM_YAW = math.rad(34)
 -- Tip meets on -Z, which is the LookVector, so each mark points at the destination.
 local LEFT_ARM = CFrame.new(0.87, 0, 0.94) * CFrame.Angles(0, ARM_YAW, 0)
 local RIGHT_ARM = CFrame.new(-0.87, 0, 0.94) * CFrame.Angles(0, -ARM_YAW, 0)
--- Clearance above the floor so the marks sit on the path instead of in it.
-local APRON_SURFACE = 0.25
+-- Clearance above the floor so the marks sit on the path instead of in it. The dirt roads
+-- are not queryable, so the probe lands on the grass under them; this clears their top.
+local APRON_SURFACE = 0.55
 -- Each mark looks down from this high above the player's floor. Anything it lands on more
 -- than MAX_STEP_UP above the floor is a fence, an animal or a prop, so that mark is skipped
 -- rather than drawn on top of it (a gap reads better than an arrow on a fence).
@@ -166,13 +167,14 @@ local function guideTarget(): (BasePart?, string?)
 		end
 		return partNamed(bay, "WashPosition"), nil
 	end
-	-- The wash lesson is the only guided step. Afterwards, point at a truck or an affordable hose.
+	-- The wash lesson is the only guided step. Afterwards, point at a truck or affordable gear.
+	-- The truck gets the trail only: no text over the screen while it drives by.
 	local truck = truckTarget()
 	if truck then
-		return truck, "A DELIVERY TRUCK IS HERE! CHECK IT OUT!"
+		return truck, nil
 	end
 	if upgradeAffordable() and not shopVisitedForTier[tier] then
-		return upgradeCounter(), "YOU CAN AFFORD A HOSE UPGRADE!"
+		return upgradeCounter(), "YOU CAN AFFORD A GEAR UPGRADE!"
 	end
 	return nil, nil
 end

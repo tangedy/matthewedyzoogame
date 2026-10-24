@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local WashTool = require(ReplicatedStorage.Shared.WashTool)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Services = script.Parent.Parent.Services
 local AnimalService = require(Services.AnimalService)
@@ -176,7 +177,7 @@ local function clearCosmetic(character: Model)
 	if trail then
 		trail:Destroy()
 	end
-	local hose = character:FindFirstChild("Hose")
+	local hose = WashTool.find(character)
 	if not hose then
 		return
 	end
@@ -225,8 +226,8 @@ local function applyCosmetic(player: Player)
 		emitter.Color = ColorSequence.new(tier.Color)
 		emitter.Parent = attachment
 	end
-	local hose = character:FindFirstChild("Hose")
-	if hose and hose:IsA("BasePart") then
+	local hose = WashTool.find(character)
+	if hose then
 		local light = Instance.new("PointLight")
 		light.Name = "FlexGlow"
 		light.Color = tier.Color
@@ -375,7 +376,8 @@ local function step(dt: number)
 			local lateral = (index - (count + 1) / 2) * math.max(4.5, size.X * 0.55)
 			local back = math.max(6, size.Z * 0.5 + 3)
 			local goal = (root.CFrame * CFrame.new(lateral, 0, back)).Position
-			local hit = Workspace:Raycast(Vector3.new(goal.X, root.Position.Y + 6, goal.Z), Vector3.new(0, -40, 0), params)
+			local hit =
+				Workspace:Raycast(Vector3.new(goal.X, root.Position.Y + 6, goal.Z), Vector3.new(0, -40, 0), params)
 			local y = if hit then hit.Position.Y else root.Position.Y - 3
 			local desired = Vector3.new(goal.X, y, goal.Z)
 			local nextPos = model:GetPivot().Position:Lerp(desired, math.clamp(dt * 6, 0, 1))
@@ -409,7 +411,7 @@ local function watch(player: Player, character: Model)
 	applyCosmetic(player)
 	rebuild(player)
 	character.ChildAdded:Connect(function(child)
-		if child.Name == "Hose" and player.Character == character then
+		if child:IsA("Tool") and child:GetAttribute(WashTool.ATTRIBUTE) == true and player.Character == character then
 			task.defer(applyCosmetic, player)
 		end
 	end)

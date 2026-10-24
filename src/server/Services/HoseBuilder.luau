@@ -1,9 +1,14 @@
--- Builds the hose model in the player's right hand, one look per tool tier, so upgrades are
--- felt: a garden hose, an orange spray hose, a brass-ringed strong hose, a yellow pressure-washer gun, a foam
--- cannon with a bubble bottle, and a fire-hose rig with a tank on the back.
+-- Builds the cleaning tool in the player's right hand, one look per tier, so upgrades are
+-- felt: a sponge, a scrub brush, a garden hose, a yellow pressure-washer gun, a foam cannon
+-- with a bubble bottle, and a fire-hose nozzle.
 --
--- The main part is always named "Hose" (the server's "has a tool" check) and carries the
--- "Nozzle" attachment the client draws the spray from. Everything else is welded to it.
+-- Players get a real Tool (see WashTool.find). Its Handle carries the "Nozzle" attachment the
+-- client draws the spray from and a "Feed" attachment the station's hose clips onto.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local WashTool = require(ReplicatedStorage.Shared.WashTool)
 
 local HoseBuilder = {}
 
@@ -77,33 +82,60 @@ local BRASS = Color3.fromRGB(230, 180, 60)
 local STEEL = Color3.fromRGB(190, 195, 205)
 
 local DESIGNS: { [number]: Design } = {
-	-- 1: Basic Hose, a green garden hose with a yellow spray tip
+	-- 1: Sponge, a yellow kitchen sponge with a green scrub pad on top
 	{
-		BodySize = Vector3.new(0.35, 0.35, 1.6),
-		BodyColor = Color3.fromRGB(60, 170, 80),
-		NozzleZ = -1.05,
+		BodySize = Vector3.new(1.1, 0.75, 1.5),
+		BodyColor = Color3.fromRGB(255, 220, 70),
+		NozzleZ = -0.8,
 		Decorate = function(body)
-			tube("Tip", 0.35, 0.45, -0.9, Color3.fromRGB(255, 210, 60), body)
+			body.Material = Enum.Material.Sand
+			piece("ScrubPad", Vector3.new(1.1, 0.2, 1.5), CFrame.new(0, 0.47, 0), Color3.fromRGB(60, 170, 80), body).Material =
+				Enum.Material.Fabric
+			local suds = piece(
+				"Suds",
+				Vector3.new(0.5, 0.5, 0.5),
+				CFrame.new(0.3, 0.2, -0.6),
+				Color3.new(1, 1, 1),
+				body,
+				Enum.PartType.Ball
+			)
+			suds.Transparency = 0.3
+			glint(body, Color3.fromRGB(220, 245, 255))
 		end,
 	},
-	-- 2: Spray Hose, an orange garden hose with a chunky green spray head
+	-- 2: Scrub Brush, a wooden handle with a wide brush head and white bristles
 	{
-		BodySize = Vector3.new(0.38, 0.38, 1.7),
-		BodyColor = Color3.fromRGB(240, 130, 40),
-		NozzleZ = -1.2,
+		BodySize = Vector3.new(0.3, 0.3, 1.6),
+		BodyColor = Color3.fromRGB(170, 115, 60),
+		NozzleZ = -1.35,
 		Decorate = function(body)
-			tube("Tip", 0.45, 0.55, -1.0, Color3.fromRGB(80, 200, 90), body)
+			body.Material = Enum.Material.Wood
+			piece(
+				"BrushHead",
+				Vector3.new(1.1, 0.35, 0.8),
+				CFrame.new(0, -0.05, -1.05),
+				Color3.fromRGB(200, 60, 50),
+				body
+			)
+			piece(
+				"Bristles",
+				Vector3.new(1.0, 0.35, 0.7),
+				CFrame.new(0, -0.38, -1.05),
+				Color3.fromRGB(245, 240, 225),
+				body
+			).Material =
+				Enum.Material.Fabric
 		end,
 	},
-	-- 3: Strong Hose, blue with brass rings and a steel nozzle
+	-- 3: Garden Hose, green with brass rings and a yellow spray gun; a hose runs back to the reel
 	{
 		BodySize = Vector3.new(0.42, 0.42, 1.9),
-		BodyColor = Color3.fromRGB(60, 120, 230),
+		BodyColor = Color3.fromRGB(60, 170, 80),
 		NozzleZ = -1.45,
 		Decorate = function(body)
 			tube("RingBack", 0.15, 0.55, 0.5, BRASS, body)
 			tube("RingFront", 0.15, 0.55, -0.6, BRASS, body)
-			tube("Tip", 0.55, 0.4, -1.15, STEEL, body)
+			tube("Tip", 0.55, 0.5, -1.15, Color3.fromRGB(255, 210, 60), body)
 		end,
 	},
 	-- 4: Power Washer, yellow gun with a red trigger and a long steel lance
@@ -150,54 +182,35 @@ local DESIGNS: { [number]: Design } = {
 			glint(bottle, Color3.fromRGB(255, 220, 250))
 		end,
 	},
-	-- 6: Fire-Hose Rig, big red nozzle with a brass tip and a tank on the back
+	-- 6: Fire Hose, big red nozzle with a brass tip; the hose runs back to the fire truck
 	{
 		BodySize = Vector3.new(0.7, 0.7, 2.0),
 		BodyColor = Color3.fromRGB(220, 40, 40),
 		NozzleZ = -1.75,
-		Decorate = function(body, character)
+		Decorate = function(body)
 			tube("BrassTip", 0.6, 0.85, -1.25, BRASS, body)
 			tube("Grip", 0.25, 0.9, 0.3, Color3.fromRGB(40, 40, 45), body)
 			glint(body, BRASS)
-			local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
-			if torso and torso:IsA("BasePart") then
-				local tank = piece(
-					"HoseTank",
-					Vector3.new(2.0, 1.1, 1.1),
-					CFrame.new(0, 0.1, torso.Size.Z / 2 + 0.55) * CFrame.Angles(0, 0, math.rad(90)),
-					Color3.fromRGB(220, 40, 40),
-					torso,
-					Enum.PartType.Cylinder
-				)
-				tank.Name = "HoseTank"
-				tube("TankBand", 0.2, 1.2, 0, BRASS, tank)
-			end
 		end,
 	},
 }
 
 local function removeOld(character: Model)
-	local old = character:FindFirstChild("Hose")
+	local old = WashTool.find(character)
 	if old then
-		old:Destroy()
-	end
-	for _, d in character:GetDescendants() do
-		if d.Name == "HoseTank" then
-			d:Destroy()
+		local tool = old.Parent
+		if tool and tool:IsA("Tool") then
+			tool:Destroy()
+		else
+			old:Destroy()
 		end
 	end
 end
 
-function HoseBuilder.equip(character: Model, tier: number)
-	local hand = character:WaitForChild("RightHand", 5) or character:FindFirstChild("Right Arm")
-	if not hand or not hand:IsA("BasePart") or not character.Parent then
-		return
-	end
-	removeOld(character)
+local function build(tier: number, name: string, cframe: CFrame?): (BasePart, Design)
 	local design = DESIGNS[tier] or DESIGNS[1]
-
 	local body = Instance.new("Part")
-	body.Name = "Hose"
+	body.Name = name
 	body.Size = design.BodySize
 	body.Color = design.BodyColor
 	body.Material = Enum.Material.SmoothPlastic
@@ -205,20 +218,82 @@ function HoseBuilder.equip(character: Model, tier: number)
 	body.CanQuery = false
 	body.CanTouch = false
 	body.Massless = true
-	body.CFrame = hand.CFrame * CFrame.new(0, -0.2, -0.6)
+	if cframe then
+		body.CFrame = cframe
+	end
 	body:SetAttribute("Tier", tier)
 
 	local nozzle = Instance.new("Attachment")
 	nozzle.Name = "Nozzle"
 	nozzle.Position = Vector3.new(0, if tier == 4 then 0.15 else 0, design.NozzleZ)
 	nozzle.Parent = body
+	-- Where the station's hose (StationProps) clips onto the tool.
+	local feed = Instance.new("Attachment")
+	feed.Name = "Feed"
+	feed.Position = Vector3.new(0, -0.1, design.BodySize.Z / 2)
+	feed.Parent = body
+	return body, design
+end
 
+-- The cutscene avatar: no backpack, so the tool is welded straight to the hand.
+function HoseBuilder.equip(character: Model, tier: number)
+	local hand = character:WaitForChild("RightHand", 5) or character:FindFirstChild("Right Arm")
+	if not hand or not hand:IsA("BasePart") or not character.Parent then
+		return
+	end
+	removeOld(character)
+	local body, design = build(tier, "Hose", hand.CFrame * CFrame.new(0, -0.2, -0.6))
 	local weld = Instance.new("WeldConstraint")
 	weld.Part0 = hand
 	weld.Part1 = body
 	weld.Parent = body
 	design.Decorate(body, character)
 	body.Parent = character
+end
+
+-- A player's cleaning tool: a real Tool named after the tier, so the hotbar shows "Sponge",
+-- "Fire Hose" and so on. It is always equipped; putting it away puts it straight back.
+function HoseBuilder.give(player: Player, character: Model, tier: number)
+	if not character.Parent then
+		return
+	end
+	removeOld(character)
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if backpack then
+		for _, item in backpack:GetChildren() do
+			if item:IsA("Tool") and item:GetAttribute(WashTool.ATTRIBUTE) == true then
+				item:Destroy()
+			end
+		end
+	end
+	local tool = Instance.new("Tool")
+	local info = ToolConfig[tier] or ToolConfig[1]
+	tool.Name = info.Name
+	tool.ToolTip = `Tier {info.Tier} cleaning gear`
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool:SetAttribute(WashTool.ATTRIBUTE, true)
+	tool:SetAttribute("Tier", tier)
+	local body, design = build(tier, "Handle", nil)
+	body.Parent = tool
+	-- Decorations weld to the handle where it is built, before the grip moves it.
+	body.CFrame = CFrame.new()
+	design.Decorate(body, character)
+	tool.Unequipped:Connect(function()
+		task.defer(function()
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if
+				tool.Parent
+				and tool.Parent ~= character
+				and player.Character == character
+				and humanoid
+				and humanoid.Health > 0
+			then
+				humanoid:EquipTool(tool)
+			end
+		end)
+	end)
+	tool.Parent = character
 end
 
 return HoseBuilder

@@ -18,6 +18,7 @@ local DevService = require(Services.DevService)
 local ZooService = require(Services.ZooService)
 local Hooks = require(Services.Hooks)
 local CutsceneService = require(Services.CutsceneService)
+local StationProps = require(Services.StationProps)
 
 EnvironmentBuilder.build()
 WorldBuilder.init()
@@ -26,6 +27,7 @@ ZooService.init()
 PlayerDataService.init()
 EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getTool })
+StationProps.init()
 DevService.init()
 
 -- Feature modules (src/server/Features): each is required and its init() called once the

@@ -14,7 +14,6 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
-local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local TruckConfig = require(ReplicatedStorage.Shared.FeatureConfig.TruckConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -149,10 +148,6 @@ local function buildTruck(): (Model, BasePart)
 	return model, bed
 end
 
-local function announce(player: Player, text: string, rarity: string)
-	Remotes.event("Announcement"):FireClient(player, text, rarity)
-end
-
 local function driveTo(model: Model, from: CFrame, to: CFrame, seconds: number)
 	local elapsed = 0
 	while elapsed < seconds and model.Parent do
@@ -233,12 +228,7 @@ local function visit(player: Player, bay: Model)
 	end
 	prompt.Enabled = true
 	truck.LeaveAt = os.clock() + TruckConfig.ParkSeconds
-	local rarity = def.Rarity
-	announce(
-		player,
-		`A delivery truck brought a {RarityConfig.ByKey[rarity].DisplayName} {prompt.ObjectText}! {robux} ROBUX`,
-		rarity
-	)
+	-- No screen banner: the truck's own sign and the guide trail point the player at it.
 	while os.clock() < truck.LeaveAt and model.Parent do
 		local left = math.max(0, math.ceil(truck.LeaveAt - os.clock()))
 		timer.Text = if truck.Animal then `DELIVERY! 0:{string.format("%02d", left)}` else "SOLD!"

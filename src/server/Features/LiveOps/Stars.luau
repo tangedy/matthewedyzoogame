@@ -100,7 +100,7 @@ local function update(player: Player)
 		-- The first measurement of a session only records the rating; later gains are news.
 		if previous ~= nil then
 			local noun = if stars == 1 then "STAR" else "STARS"
-			Common.announce(`{player.DisplayName}'s zoo is now {stars} {noun}!`, "Legendary")
+			Common.announce(`{player.DisplayName}'s farm is now {stars} {noun}!`, "Legendary")
 		end
 		state.BestStars = stars
 		PlayerDataService.markDirty(player)

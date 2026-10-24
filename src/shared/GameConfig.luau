@@ -12,7 +12,7 @@ local GameConfig = {
 	-- so a barn can expand backward without crossing the street or a neighbor.
 	RoadX = 0,
 	RoadWidth = 45, -- five times the old 9-stud road
-	SidewalkWidth = 27, -- three times the old 9-stud road; cages sit off this path
+	SidewalkWidth = 14, -- the path behind the wash; the six stalls open onto it from both sides
 	-- Mega pens reach 60 studs from the plot centre. Half of 126 leaves a 3-stud margin.
 	PlotWidth = 126,
 	-- From the road edge through the mega barn, plus a short pasture. The old 490 included
@@ -50,7 +50,7 @@ local GameConfig = {
 	ArriveDuration = 3.5, -- from the road (x -54) to the wash spot
 	DepartDuration = 2,
 	CelebrationDuration = 1.5,
-	StartingCoins = 90, -- a new player's cash, $10 short of the Spray Hose
+	StartingCoins = 90, -- a new player's cash, $10 short of the Scrub Brush
 	NextAnimalDelay = 0.5,
 
 	-- Persistence. ProfileService owns the live store. The older DataStore names stay so a
@@ -102,6 +102,18 @@ local GameConfig = {
 		},
 	},
 
+	-- Display size by body class, applied at the wash and in pens. The placeholder models are
+	-- all built to fit a stall, so the big ones are scaled up here to look the part. Each
+	-- class still fits the smallest pen it can go in (see AnimalConfig.fits). The cache,
+	-- overflow, pets and carrying keep animals at their built size (CacheMaxLength caps it).
+	BodyScale = {
+		Standard = 1,
+		Large = 1,
+		ExtraLarge = 1.12,
+		Giant = 1.6,
+		Gargantuan = 3.2,
+	},
+
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
 	-- (carries to a pen) or auto-sells.
@@ -109,16 +121,19 @@ local GameConfig = {
 		Slots = 1,
 		SlotSpacing = 7,
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
+		MaxLength = 10, -- studs: a bigger animal shrinks to this while it waits in the cache
 	},
 
-	-- A new player's first animals are ordinary pigs. They auto-sell, and the pens stay
-	-- hidden until these three washes are done. Payout matches a pig's income.
+	-- A new player's opening washes. The first ones are random commons that auto-sell, with
+	-- the pens hidden. The last one is a keeper, a Showcase-rarity animal with the Showcase
+	-- mutation, and finishing it reveals the pens so it can be carried into one.
+	-- AutoSellCount counts every opening wash, the keeper included (saved as IntroWashesLeft).
 	Intro = {
 		AutoSellCount = 3,
-		Species = "Pig",
-		DisplayName = "Pig",
 		WashTimeMultiplier = 1,
-		PayoutIncome = 3,
+		PayoutIncome = 3, -- what an auto-sold opener pays, whatever common it was
+		ShowcaseRarity = "Rare",
+		ShowcaseMutation = "Diamond",
 	},
 
 	-- Unskippable spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator;

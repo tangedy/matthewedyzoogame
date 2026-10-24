@@ -15,6 +15,7 @@ export type AnimalDefinition = {
 	RequiredToolTier: number,
 	WashTimeMultiplier: number,
 	Limited: boolean?, -- sold, never spawns (SpawnWeight 0); see the monetization feature
+	RequiresSoap: boolean?, -- only takes dirt while Super Soap is running, on top of the hose gate
 	-- Which pens can hold this animal. Standard fits a face stall. Larger classes need a
 	-- barn pen built for them (see AnimalConfig.fits).
 	BodyClass: "Standard" | "Large" | "ExtraLarge" | "Giant" | "Gargantuan",
@@ -47,7 +48,7 @@ local function limited(def: AnimalDefinition): AnimalDefinition
 end
 
 local AnimalConfig = {
-	FirstAnimal = "Pig", -- first walk-in after the three intro pigs (GameConfig.Intro)
+	FallbackAnimal = "Pig", -- only when nothing else can be picked
 
 	Animals = {
 		-- Common
@@ -88,6 +89,8 @@ local AnimalConfig = {
 	} :: { [string]: AnimalDefinition },
 }
 AnimalConfig.Animals.TRex.TemplateName = "TRex"
+-- A magic fox: no hose alone gets the mud off. It needs the Foam Cannon and Super Soap.
+AnimalConfig.Animals.Kitsune.RequiresSoap = true
 
 local BODY: { [string]: string } = {
 	Cow = "Large",

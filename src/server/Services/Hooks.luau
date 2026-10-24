@@ -18,6 +18,7 @@
 -- Modifiers (Hooks.modify / Hooks.apply): each registered function receives the current value
 -- plus context and returns the new value. Applied in registration order.
 --   "CleaningPower"      (power, player)                    -> number
+--   "SoapActive"         (false, player)                    -> boolean  Super Soap is running (soap-only animals)
 --   "WashTimeMultiplier" (mult, player, species, mutation)  -> number (more mud = higher)
 --   "SpawnWeight"        (weight, player, species)          -> number
 --   "MutationWeight"     (weight, player, mutation)         -> number

@@ -48,6 +48,18 @@ function UIStyle.text(target: TextLabel | TextButton, color: Color3?, stroke: Co
 	outline.Thickness = thickness or 2.5
 	outline.LineJoinMode = Enum.LineJoinMode.Round
 	outline.Parent = label
+	-- The outline follows the text, so a fade (a tween on TextTransparency) takes both
+	-- together instead of leaving a hollow black outline behind.
+	outline.Transparency = label.TextTransparency
+	if not label:GetAttribute("StrokeFollowsText") then
+		label:SetAttribute("StrokeFollowsText", true)
+		label:GetPropertyChangedSignal("TextTransparency"):Connect(function()
+			local current = label:FindFirstChildOfClass("UIStroke")
+			if current then
+				current.Transparency = label.TextTransparency
+			end
+		end)
+	end
 end
 
 -- Black outline around a frame or button (the "cartoon panel" look).
@@ -100,6 +112,7 @@ export type NameplateInfo = {
 	Rarity: string,
 	Mutation: string,
 	IncomePerSecond: number,
+	Needs: string?, -- gear it takes to wash this animal (walk-ins only)
 }
 
 local function hex(color: Color3): string
@@ -162,11 +175,11 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	local mutation = MutationConfig.ByKey[info.Mutation] or MutationConfig.ByKey.Normal
 	local mutated = info.Mutation ~= MutationConfig.Default
 	local rainbowLabel = rarity.Rainbow or (mutated and mutation.Rainbow)
-	local lines = if mutated then 4 else 3
+	local lines = (if mutated then 4 else 3) + (if info.Needs then 1 else 0)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Nameplate"
-	billboard.Size = UDim2.fromOffset(220, lines * 24)
+	billboard.Size = UDim2.fromOffset(if info.Needs then 260 else 220, lines * 24)
 	billboard.StudsOffset = Vector3.new(0, overheadLift(adornee), 0)
 	billboard.MaxDistance = maxDistance
 	billboard.Parent = adornee
@@ -193,6 +206,9 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	end
 	table.insert(rows, span(rarity.Color, rarity.DisplayName))
 	table.insert(rows, span(UIStyle.CashColor, UIStyle.formatMoney(info.IncomePerSecond) .. "/s"))
+	if info.Needs then
+		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `🔒 {info.Needs}`))
+	end
 	label.Text = table.concat(rows, "\n")
 	if rainbowLabel then
 		rainbow(label)

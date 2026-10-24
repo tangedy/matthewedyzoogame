@@ -64,7 +64,7 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- Rarities this hose can wash that the previous one could not.
+-- Rarities this gear can wash that the previous one could not, with the animals in them.
 local function unlocksText(toolTier: number): string
 	local tool = ToolConfig[toolTier]
 	local prev = ToolConfig[toolTier - 1]
@@ -72,19 +72,23 @@ local function unlocksText(toolTier: number): string
 		return ""
 	end
 	local prevPower = if prev then prev.CleaningPower else 0
-	local names = {}
+	local groups = {}
 	for _, rarity in RarityConfig.List do
 		local need = rarity.RequiredCleaningPower
 		if need > prevPower + 1e-4 and CleanPower.canClean(tool.CleaningPower, rarity.Key) then
+			local animals = {}
 			for _, def in AnimalConfig.Animals do
 				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
-					table.insert(names, rarity.DisplayName)
-					break
+					table.insert(animals, def.DisplayName)
 				end
+			end
+			if #animals > 0 then
+				table.sort(animals)
+				table.insert(groups, `{rarity.DisplayName} ({table.concat(animals, ", ")})`)
 			end
 		end
 	end
-	return if #names > 0 then `, unlocks {table.concat(names, " & ")} animals` else ""
+	return if #groups > 0 then `\nUnlocks {table.concat(groups, " & ")}` else ""
 end
 
 local function refresh()
@@ -97,13 +101,16 @@ local function refresh()
 	if nextTool then
 		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextTool.Name}`
+		local reach = if nextTool.Range > current.Range
+			then `, reach {current.Range} → {nextTool.Range} studs`
+			else ""
 		gainLabel.Text =
-			`Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){unlocksText(nextTool.Tier)}`
+			`Clean power {CleanPower.format(nextTool.CleaningPower)} (+{gain}%){reach}{unlocksText(nextTool.Tier)}`
 		buyButton.Visible = true
 		buyButton.Text = `Buy for {UIStyle.formatMoney(nextTool.Price)}`
 		local affordable = coins >= nextTool.Price
 		buyButton.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
-		-- Robux buys exactly the next hose. The Fire-Hose Rig has no product, so it stays cash-only.
+		-- Robux buys exactly the next hose. The Fire Hose has no product, so it stays cash-only.
 		local robux = MonetizationConfig.productForHoseTier(nextTool.Tier)
 		local showRobux = robux ~= nil and not affordable
 		robuxButton.Visible = showRobux
@@ -111,7 +118,7 @@ local function refresh()
 			robuxButton.Text = `Buy with Robux ({robux.Robux})`
 		end
 	else
-		nextLabel.Text = "Your hose is fully upgraded!"
+		nextLabel.Text = "Your gear is fully upgraded!"
 		gainLabel.Text = ""
 		buyButton.Visible = false
 		robuxButton.Visible = false
@@ -173,7 +180,7 @@ local function buildGui()
 	label({
 		Position = UDim2.fromOffset(18, 12),
 		Size = UDim2.new(1, -70, 0, 34),
-		Text = "Hose Upgrades",
+		Text = "Gear Shop",
 		TextColor3 = Color3.fromRGB(255, 220, 90),
 		Parent = panel,
 	})

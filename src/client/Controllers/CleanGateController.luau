@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
@@ -48,12 +49,20 @@ local function animalHead(): BasePart?
 	return if head and head:IsA("BasePart") then head else nil
 end
 
+local function soapOnly(): boolean
+	local species = bay and bay.Species
+	local def = if typeof(species) == "string" then AnimalConfig.Animals[species] else nil
+	return def ~= nil and def.RequiresSoap == true
+end
+
 local function refresh()
 	local rarityKey = bay and bay.Rarity
+	local soaped = soapEndsAt > Workspace:GetServerTimeNow()
+	local needsSoap = soapOnly() and not soaped
 	local blocked = bay ~= nil
 		and bay.State == "Washing"
 		and typeof(rarityKey) == "string"
-		and not CleanPower.canClean(hosePower(), rarityKey)
+		and (not CleanPower.canClean(hosePower(), rarityKey) or needsSoap)
 	player:SetAttribute("CleanBlocked", blocked)
 	panel.Visible = blocked
 	local head = if blocked then animalHead() else nil
@@ -73,6 +82,15 @@ local function refresh()
 			or rarity.Rainbow
 		then Color3.new(1, 1, 1)
 		else rarity.Color
+	if needsSoap and CleanPower.canClean(hosePower(), rarityKey) then
+		cleanKey = MonetizationConfig.ProductsByKey.CleanNow.Key
+		local offer = MonetizationConfig.ProductsByKey.CleanNow
+		title.Text = `{bay and bay.AnimalName or "This animal"} needs Super Soap!`
+		cleanButton.Text = `Clean Now · {offer.Robux} R$`
+		body.Text =
+			"Magic mud: no hose gets it off alone. Turn on Super Soap from the shop, let it go, or clean it now."
+		return
+	end
 	local have = hosePower()
 	local need = CleanPower.required(rarityKey)
 	local hose = CleanPower.hoseName(rarityKey)

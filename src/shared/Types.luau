@@ -15,6 +15,7 @@ export type BaySnapshot = {
 	State: BayState,
 	JobId: string?,
 	AnimalName: string?,
+	Species: string?, -- AnimalConfig key
 	Rarity: string?,
 	Mutation: string?,
 	Reward: number?,

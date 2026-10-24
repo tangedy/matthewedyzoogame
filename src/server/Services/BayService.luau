@@ -39,7 +39,7 @@ type Job = {
 	WaitingThread: thread?,
 	Abandoned: boolean?, -- set by abandonWash: the animal walks off unpaid
 	NeedsPurchase: boolean?, -- rarity this hose cannot wash; Clean Now or let it go
-	Scripted: boolean?, -- one of the three opening pigs: it auto-sells instead of entering the cache
+	Scripted: boolean?, -- an opening common: it auto-sells instead of entering the cache
 }
 
 -- An animal standing on the U. Token bumps whenever a new walk starts, so an older walk stops.
@@ -51,6 +51,7 @@ type Arrival = {
 	Patches: { AnimalBuilder.PatchInfo },
 	Token: number,
 	Scripted: boolean,
+	Showcase: boolean, -- the last opening wash: a keeper that reveals the pens when done
 }
 
 type Bay = {
@@ -95,7 +96,8 @@ local function snapshot(bay: Bay): Types.BaySnapshot
 		BayName = bay.Name,
 		State = bay.State,
 		JobId = job and job.Id,
-		AnimalName = if scripted then GameConfig.Intro.DisplayName else def and def.DisplayName,
+		AnimalName = def and def.DisplayName,
+		Species = job and job.AnimalKey,
 		Rarity = if scripted then "Common" else def and def.Rarity,
 		Mutation = job and job.Mutation,
 		Reward = job and job.Reward,
@@ -152,25 +154,32 @@ local function lineCap(owner: Player): number
 end
 
 local function rollArrival(bay: Bay, owner: Player): Arrival
-	local intro = ZooService.introRemaining(owner) > 0
+	local introLeft = ZooService.introRemaining(owner)
+	-- The opening washes: random commons that auto-sell, then one keeper (GameConfig.Intro).
+	local showcase = introLeft == 1
+	local intro = introLeft > 1
 	local profile = EconomyService.getProfile(owner)
 	local tier = if profile then profile.ToolTier else 1
-	-- The opening washes are ordinary pigs. FirstAnimal is the first walk-in after those.
-	local isFirst = not intro and not bay.FirstAnimalGiven
-	if not intro then
+	local isFirst = introLeft <= 0 and not bay.FirstAnimalGiven
+	if introLeft <= 0 then
 		bay.FirstAnimalGiven = true
 	end
 	local animalKey: string
 	local mutationKey: string
 	local look: AnimalService.SpawnLook? = nil
 	if intro then
-		animalKey = GameConfig.Intro.Species
+		animalKey = AnimalService.randomOfRarity("Common")
 		mutationKey = MutationConfig.Default
 		look = {
 			Income = GameConfig.Intro.PayoutIncome,
 		}
+	elseif showcase then
+		animalKey = AnimalService.randomOfRarity(GameConfig.Intro.ShowcaseRarity)
+		mutationKey = if MutationConfig.ByKey[GameConfig.Intro.ShowcaseMutation]
+			then GameConfig.Intro.ShowcaseMutation
+			else MutationConfig.Default
 	else
-		animalKey = AnimalService.pickNext(isFirst, tier, owner)
+		animalKey = AnimalService.pickNext(tier, owner)
 		mutationKey = AnimalService.pickMutation(isFirst, owner)
 		local override = Hooks.apply("NextAnimal", nil, owner, isFirst)
 		if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
@@ -196,6 +205,7 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 		Patches = patches,
 		Token = 0,
 		Scripted = intro,
+		Showcase = showcase,
 	}
 end
 
@@ -340,6 +350,7 @@ local function runOneJob(bay: Bay, owner: Player)
 		),
 		Rarity = if front.Scripted then "Common" else def.Rarity,
 		BodyClass = def.BodyClass,
+		RequiresSoap = not front.Scripted and def.RequiresSoap == true,
 		OnComplete = function()
 			onJobComplete(bay, job)
 		end,
@@ -360,8 +371,11 @@ local function runOneJob(bay: Bay, owner: Player)
 		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
 		setState(bay, "Departing")
 		front.Token += 1
+		-- Along the wash road to the exit road, then down it to the street. Never across the grass.
 		local back = bay.RoadReturn.CFrame
-		AnimalService.walkCorners(model, { bay.Model.Cache.Slot1.CFrame, back }, GameConfig.DepartDuration)
+		local sold = bay.Model:FindFirstChild("SoldSpot") :: BasePart?
+		local route = if sold then { sold.CFrame, back } else { bay.Model.Cache.Slot1.CFrame, back }
+		AnimalService.walkCorners(model, route, GameConfig.DepartDuration * 0.6)
 		if bay.Line[1] == front then
 			table.remove(bay.Line, 1)
 		end
@@ -388,7 +402,7 @@ local function runOneJob(bay: Bay, owner: Player)
 		Hooks.fire("WashCompleted", owner, info, job.Reward + bonus)
 		-- Everyone sees the chat bubble. The coin payout above stays on the owner's client.
 		washCelebrated:FireAllClients(front.Id)
-		if front.Scripted then
+		if front.Scripted or front.Showcase then
 			ZooService.noteIntroWash(owner)
 		end
 		GuideService.onWashCompleted(owner)
@@ -502,8 +516,9 @@ function BayService.assign(player: Player): boolean
 	bayBySlot[index] = bay
 	bay.Owner = player
 	bayByOwner[player] = bay
+	bay.Model:SetAttribute("OwnerUserId", player.UserId)
 	if bay.Label then
-		bay.Label.Text = player.DisplayName .. "'s Zoo"
+		bay.Label.Text = player.DisplayName .. "'s Farm"
 	end
 	player.RespawnLocation = bay.Spawn
 	bindSpawn(player)

@@ -63,7 +63,7 @@ function CutsceneController.init(initial: Types.InitialState)
 	caption.AnchorPoint = Vector2.new(0.5, 1)
 	caption.Position = UDim2.new(0.5, 0, 1, -28)
 	caption.Size = UDim2.new(0.6, 0, 0, 22)
-	caption.Text = "This is the zoo you're building"
+	caption.Text = "This is the farm you're building"
 	caption.TextScaled = false
 	caption.TextSize = 16
 	caption.Parent = gui

@@ -1,6 +1,6 @@
 -- Rarity tiers, following Steal a Brainrot's ladder. Each species belongs to one tier
 -- (AnimalConfig); tiers set the nameplate colour and whether a walk-in is announced.
--- "Zoo God" is our Brainrot God: an animated rainbow label. Secret is black with a white edge.
+-- "Farm God" (key ZooGod) is our Brainrot God: an animated rainbow label. Secret is black with a white edge.
 -- RequiredCleaningPower is the hose power (ToolConfig.CleaningPower, after boosts like Super
 -- Soap) needed to wash that tier. A walk-in above the player's power can be let go, or cleaned
 -- with the Clean Now product.
@@ -45,7 +45,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
-		RequiredCleaningPower = 0.85, -- Strong Hose (0.9). Basic and Spray Hoses cannot.
+		RequiredCleaningPower = 0.85, -- Garden Hose (0.9). Sponge and Scrub Brush cannot.
 	},
 	{
 		Key = "Legendary",
@@ -55,7 +55,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = false,
-		RequiredCleaningPower = 1.25, -- Power Washer (1.4). Strong Hose (0.9) cannot.
+		RequiredCleaningPower = 1.25, -- Power Washer (1.4). Garden Hose (0.9) cannot.
 	},
 	{
 		Key = "Mythic",
@@ -70,12 +70,12 @@ local list: { Rarity } = {
 	{
 		Key = "ZooGod",
 		Order = 6,
-		DisplayName = "Zoo God",
+		DisplayName = "Farm God",
 		Color = Color3.fromRGB(255, 255, 255),
 		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = true,
 		Announce = true,
-		RequiredCleaningPower = 3.4, -- Fire-Hose Rig (3.5). Foam Cannon cannot.
+		RequiredCleaningPower = 3.4, -- Fire Hose (3.5). Foam Cannon cannot.
 	},
 	{
 		Key = "Secret",
@@ -85,7 +85,7 @@ local list: { Rarity } = {
 		StrokeColor = Color3.new(1, 1, 1),
 		Rainbow = false,
 		Announce = true,
-		RequiredCleaningPower = 6, -- above the Fire-Hose Rig (3.5); Super Soap on it (7) can
+		RequiredCleaningPower = 6, -- above the Fire Hose (3.5); Super Soap on it (7) can
 	},
 }
 

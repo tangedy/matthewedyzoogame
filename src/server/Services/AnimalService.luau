@@ -56,13 +56,30 @@ local function weightedPick<T>(entries: { T }, weightOf: (T) -> number): T?
 	return last
 end
 
--- First animal of a session is deterministic; later ones come from the weighted pool of
--- species the player's hose has the clean power to wash. Rarities that still need Clean
--- Now are mixed in by CleanGateService, with their chance taken from Common.
-function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Player?): string
-	if isFirst then
-		return AnimalConfig.FirstAnimal
+-- A random walk-in species of one rarity (the opening washes use this). Never a Limited one.
+function AnimalService.randomOfRarity(rarityKey: string): string
+	local pool = {}
+	for key, def in AnimalConfig.Animals do
+		if
+			def.Rarity == rarityKey
+			and def.SpawnWeight > 0
+			and not def.Limited
+			and AnimalBuilder.has(def.TemplateName)
+		then
+			table.insert(pool, key)
+		end
 	end
+	table.sort(pool)
+	if #pool == 0 then
+		return AnimalConfig.FallbackAnimal
+	end
+	return pool[rng:NextInteger(1, #pool)]
+end
+
+-- Walk-ins come from the weighted pool of species the player's hose has the clean power to
+-- wash. Rarities that still need Clean Now are mixed in by CleanGateService, with their
+-- chance taken from Common.
+function AnimalService.pickNext(toolTier: number, player: Player?): string
 	local tool = ToolConfig[toolTier]
 	local base = if tool then tool.CleaningPower else 0
 	local power = if player then CleanGateService.washPower(player, toolTier) else base
@@ -91,7 +108,7 @@ function AnimalService.pickNext(isFirst: boolean, toolTier: number, player: Play
 	table.sort(pool)
 	return weightedPick(pool, function(key)
 		return weights[key]
-	end) or AnimalConfig.FirstAnimal
+	end) or AnimalConfig.FallbackAnimal
 end
 
 -- Weighted mutation roll, then LiveOps may replace it (hidden gold/rainbow odds, events).
@@ -122,7 +139,8 @@ local function addNameplate(
 	animalKey: string,
 	mutationKey: string,
 	maxDistance: number,
-	look: SpawnLook?
+	look: SpawnLook?,
+	needs: string?
 )
 	local head = model:FindFirstChild("Head")
 	if not head or not head:IsA("BasePart") then
@@ -134,7 +152,33 @@ local function addNameplate(
 		Rarity = if look and look.Rarity then look.Rarity else def.Rarity,
 		Mutation = mutationKey,
 		IncomePerSecond = if look and look.Income then look.Income else income(animalKey, mutationKey),
+		Needs = needs,
 	}, maxDistance)
+end
+
+-- Display scale for this species at the wash and in a pen (GameConfig.BodyScale).
+function AnimalService.bodyScale(animalKey: string): number
+	local def = AnimalConfig.Animals[animalKey]
+	local scale = def and GameConfig.BodyScale[def.BodyClass]
+	return if typeof(scale) == "number" and scale > 0 then scale else 1
+end
+
+-- Scales a model to its pen size (penned) or back to its built size, shrinking it further
+-- when it is longer than maxLength (the cache). Records the result as RestScale.
+function AnimalService.resize(model: Model, scale: number, maxLength: number?)
+	model:ScaleTo(1)
+	local target = scale
+	if maxLength then
+		local _, size = model:GetBoundingBox()
+		local length = math.max(size.X, size.Z)
+		if length * target > maxLength then
+			target = maxLength / length
+		end
+	end
+	model:SetAttribute("RestScale", target)
+	if math.abs(target - 1) > 1e-3 then
+		model:ScaleTo(target)
+	end
 end
 
 -- A clean, idle animal for a pen or the cache.
@@ -246,9 +290,10 @@ function AnimalService.spawn(
 	model:SetAttribute("JobId", jobId)
 	model:SetAttribute("AnimalKey", animalKey)
 	DirtRenderer.setGrime(model, 0) -- arrives filthy
-	if look and look.Scale and look.Scale > 0 then
-		model:SetAttribute("RestScale", look.Scale)
-		model:ScaleTo(look.Scale)
+	local scale = if look and look.Scale and look.Scale > 0 then look.Scale else AnimalService.bodyScale(animalKey)
+	if math.abs(scale - 1) > 1e-3 then
+		model:SetAttribute("RestScale", scale)
+		model:ScaleTo(scale)
 	end
 	model:PivotTo(at)
 
@@ -270,7 +315,7 @@ function AnimalService.spawn(
 	sound.Volume = 0.6
 	sound.Parent = model:FindFirstChild("Body")
 
-	addNameplate(model, animalKey, mutationKey, 80, look)
+	addNameplate(model, animalKey, mutationKey, 80, look, CleanPower.gearNeeded(def.Rarity, def.RequiresSoap))
 
 	model.Parent = parent
 
@@ -291,9 +336,110 @@ function AnimalService.spawn(
 	return model, patches
 end
 
--- Right-angle walk. The animal turns in place at each corner, then slides straight to the
+-- Walk cycle. Each leg (and the hoof or foot under it) swings from the hip while the model
+-- moves; diagonal pairs step together, and two-legged animals alternate. Poses are written
+-- relative to the pivot every frame, so nothing drifts, and the rest pose comes back at the end.
+type LegPose = { Parts: { BasePart }, Rest: { CFrame }, Hip: Vector3, Phase: number }
+type Gait = { Legs: { LegPose }, Stride: number, Swing: number, Heavy: boolean, Scale: number }
+
+local BIG_BODIES = { Giant = true, Gargantuan = true }
+-- The rest pose is read once per model and size, so two overlapping walks can't record a
+-- mid-swing leg as the rest pose.
+local gaits: { [Model]: Gait } = setmetatable({}, { __mode = "k" }) :: any
+
+local function gaitOf(model: Model): Gait?
+	local cached = gaits[model]
+	if cached and math.abs(cached.Scale - model:GetScale()) < 1e-4 then
+		return cached
+	end
+	local pivot = model:GetPivot()
+	local legs: { BasePart } = {}
+	for _, child in model:GetChildren() do
+		if child.Name == "Leg" and child:IsA("BasePart") then
+			table.insert(legs, child)
+		end
+	end
+	if #legs == 0 then
+		return nil
+	end
+	local feet: { BasePart } = {}
+	for _, child in model:GetChildren() do
+		if (child.Name == "Hoof" or child.Name == "Foot") and child:IsA("BasePart") then
+			table.insert(feet, child)
+		end
+	end
+	local poses: { LegPose } = {}
+	local legLength = 0
+	for _, leg in legs do
+		local rest = pivot:ToObjectSpace(leg.CFrame)
+		local hip = (rest * CFrame.new(0, leg.Size.Y / 2, 0)).Position
+		legLength = math.max(legLength, leg.Size.Y)
+		local front = rest.Position.Z < 0
+		local left = rest.Position.X < 0
+		local phase = if #legs == 2 then (if left then 0 else math.pi) elseif front == left then 0 else math.pi
+		local pose: LegPose = { Parts = { leg }, Rest = { rest }, Hip = hip, Phase = phase }
+		-- The hoof or foot closest under this leg swings with it.
+		local best, bestDist = nil, math.huge
+		for _, foot in feet do
+			local offset = pivot:ToObjectSpace(foot.CFrame).Position - rest.Position
+			local dist = Vector2.new(offset.X, offset.Z).Magnitude
+			if dist < bestDist and dist < math.max(leg.Size.X, leg.Size.Z) * 2 then
+				best, bestDist = foot, dist
+			end
+		end
+		if best then
+			table.insert(pose.Parts, best)
+			table.insert(pose.Rest, pivot:ToObjectSpace(best.CFrame))
+		end
+		table.insert(poses, pose)
+	end
+	local key = model:GetAttribute("AnimalKey")
+	local def = if typeof(key) == "string" then AnimalConfig.Animals[key] else nil
+	local gait: Gait = {
+		Legs = poses,
+		Stride = math.max(legLength * 2.2, 1.2),
+		Swing = math.rad(32),
+		Heavy = def ~= nil and BIG_BODIES[def.BodyClass] == true,
+		Scale = model:GetScale(),
+	}
+	gaits[model] = gait
+	return gait
+end
+
+local function poseLegs(model: Model, gait: Gait, travelled: number)
+	local pivot = model:GetPivot()
+	local cycle = travelled / gait.Stride * math.pi * 2
+	for _, leg in gait.Legs do
+		local angle = math.sin(cycle + leg.Phase) * gait.Swing
+		local swing = CFrame.new(leg.Hip) * CFrame.Angles(angle, 0, 0) * CFrame.new(-leg.Hip)
+		for i, part in leg.Parts do
+			part.CFrame = pivot * swing * leg.Rest[i]
+		end
+	end
+end
+
+local function restLegs(model: Model, gait: Gait)
+	local pivot = model:GetPivot()
+	for _, leg in gait.Legs do
+		for i, part in leg.Parts do
+			part.CFrame = pivot * leg.Rest[i]
+		end
+	end
+end
+
+-- Big animals bob slowly and heavily: a thud per step instead of a hop.
+local function stepBob(gait: Gait?, travelled: number, amplitude: number): number
+	if gait and gait.Heavy then
+		return math.abs(math.sin(travelled / gait.Stride * math.pi * 2)) * amplitude * 2
+	end
+	return 0
+end
+
+-- Right-angle walk. The animal turns in place at each corner, then walks straight to the
 -- next point without spinning on the way. Yields until the last point.
 function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach: number, bobHeight: number?)
+	local gait = gaitOf(model)
+	local travelled = 0
 	for _, target in points do
 		if not model.Parent then
 			return
@@ -315,17 +461,28 @@ function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach
 		local bobAmp = bobHeight or 0.25
 		local startPos = model:GetPivot().Position
 		local goal = Vector3.new(target.Position.X, startPos.Y, target.Position.Z)
+		local span = (goal - startPos).Magnitude
+		local startTravel = travelled
 		elapsed = 0
 		while elapsed < secondsEach and model.Parent do
 			elapsed += task.wait()
 			local t = math.min(elapsed / secondsEach, 1)
-			local bob = math.abs(math.sin(elapsed * 10)) * bobAmp
+			travelled = startTravel + span * t
+			local bob = if gait and gait.Heavy
+				then stepBob(gait, travelled, bobAmp)
+				else math.abs(math.sin(elapsed * 10)) * bobAmp
 			local pos = startPos:Lerp(goal, t) + Vector3.new(0, bob, 0)
 			model:PivotTo(CFrame.lookAt(pos, pos + dir))
+			if gait then
+				poseLegs(model, gait, travelled)
+			end
 		end
 		if model.Parent then
 			model:PivotTo(CFrame.lookAt(goal, goal + dir))
 		end
+	end
+	if gait and model.Parent then
+		restLegs(model, gait)
 	end
 end
 
@@ -372,16 +529,26 @@ end
 
 -- Linear walk with a small bob. Yields until arrival; always ends exactly at `target`.
 function AnimalService.moveTo(model: Model, target: CFrame, duration: number)
+	local gait = gaitOf(model)
 	local start = model:GetPivot()
+	local span = (target.Position - start.Position).Magnitude
 	local elapsed = 0
 	while elapsed < duration and model.Parent do
 		elapsed += task.wait()
 		local t = math.min(elapsed / duration, 1)
-		local bob = math.abs(math.sin(elapsed * 10)) * 0.25
+		local bob = if gait and gait.Heavy
+			then stepBob(gait, span * t, 0.25)
+			else math.abs(math.sin(elapsed * 10)) * 0.25
 		model:PivotTo(start:Lerp(target, t) + Vector3.new(0, bob, 0))
+		if gait then
+			poseLegs(model, gait, span * t)
+		end
 	end
 	if model.Parent then
 		model:PivotTo(target) -- fallback placement if the walk was cut short
+		if gait then
+			restLegs(model, gait)
+		end
 	end
 end
 

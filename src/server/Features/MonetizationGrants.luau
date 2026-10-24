@@ -426,12 +426,15 @@ function MonetizationGrants.watchSpeed(player: Player)
 		task.spawn(applySpeed, player, player.Character)
 	end
 	local ends = saved.SpeedEndsAt
-	janitor:Add(task.delay(math.max(0, ends - os.time()), function()
-		if speedGeneration[player] ~= generation then
-			return
-		end
-		MonetizationGrants.syncBuffs(player)
-	end), true)
+	janitor:Add(
+		task.delay(math.max(0, ends - os.time()), function()
+			if speedGeneration[player] ~= generation then
+				return
+			end
+			MonetizationGrants.syncBuffs(player)
+		end),
+		true
+	)
 end
 
 -- Zeros expired timestamps, tears the speed boost down, and tells the player once.

@@ -15,11 +15,13 @@ local Workspace = game:GetService("Workspace")
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
+local WashTool = require(ReplicatedStorage.Shared.WashTool)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local DirtRenderer = require(script.Parent.DirtRenderer)
 local Hooks = require(script.Parent.Hooks)
 local HoseBuilder = require(script.Parent.HoseBuilder)
+local StationProps = require(script.Parent.StationProps)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 
 type Patch = Types.DirtPatchState & { Part: BasePart }
@@ -34,6 +36,7 @@ type Job = {
 	TotalWeighted: number,
 	Active: boolean,
 	BodyClass: string,
+	RequiresSoap: boolean, -- only takes dirt while the owner's Super Soap is running
 	Sprayers: { [Player]: number }, -- os.clock() of each player's latest hit
 	OnComplete: () -> (),
 }
@@ -46,6 +49,7 @@ export type JobParams = {
 	WashTimeMultiplier: number,
 	Rarity: string,
 	BodyClass: string,
+	RequiresSoap: boolean?,
 	OnComplete: () -> (),
 }
 
@@ -65,6 +69,7 @@ local getTool: (Player) -> ToolConfig.ToolTier? = function(_player)
 end
 
 local effectivePower: (Player) -> number
+local soapMissing: (Job) -> boolean
 
 local function isFiniteNumber(n: number): boolean
 	return n == n and n ~= math.huge and n ~= -math.huge
@@ -154,7 +159,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	if not character or not humanoid or humanoid.Health <= 0 or not root then
 		return
 	end
-	if not character:FindFirstChild("Hose") then
+	if not WashTool.find(character) then
 		return
 	end
 	local tool = getTool(player)
@@ -200,7 +205,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	-- better hose is the way through; letting it go is handled by BayService.
 	-- The owner's hose is the gate for the whole job: a stronger helper cannot wash an
 	-- animal the owner is not allowed to finish, or the last speck would be stuck.
-	if not CleanPower.canClean(effectivePower(job.Owner), job.Rarity) then
+	if not CleanPower.canClean(effectivePower(job.Owner), job.Rarity) or soapMissing(job) then
 		return
 	end
 	if not CleanPower.canClean(power, job.Rarity) then
@@ -249,7 +254,12 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	DirtRenderer.setGrime(job.Model, progress)
 	local function tell(who: Player, done: boolean)
 		if who.Parent then
-			progressChanged:FireClient(who, job.Id, if done then 1 else progress, (not done) and progress >= GameConfig.HintProgress)
+			progressChanged:FireClient(
+				who,
+				job.Id,
+				if done then 1 else progress,
+				(not done) and progress >= GameConfig.HintProgress
+			)
 		end
 	end
 	if ownerSpray and isComplete(job) then
@@ -283,6 +293,12 @@ function effectivePower(player: Player): number
 	return Hooks.apply("CleaningPower", base, player)
 end
 
+-- Some animals (the Kitsune) only take dirt while the owner has Super Soap running. The
+-- Monetization feature answers "SoapActive"; without it nothing counts as soaped.
+function soapMissing(job: Job): boolean
+	return job.RequiresSoap and Hooks.apply("SoapActive", false, job.Owner) ~= true
+end
+
 -- True while the owner's current wash is a rarity their hose cannot clean.
 function CleaningService.isBlocked(player: Player): boolean
 	return CleaningService.blockedSteps(player) ~= nil
@@ -295,7 +311,11 @@ function CleaningService.blockedSteps(player: Player): number?
 	if not job or not job.Active then
 		return nil
 	end
-	return CleanPower.stepsAbove(effectivePower(player), job.Rarity)
+	local steps = CleanPower.stepsAbove(effectivePower(player), job.Rarity)
+	if steps == nil and soapMissing(job) then
+		return 0
+	end
+	return steps
 end
 
 local function finish(job: Job)
@@ -328,6 +348,7 @@ function CleaningService.beginJob(params: JobParams)
 		TotalWeighted = 0,
 		Active = true,
 		BodyClass = params.BodyClass,
+		RequiresSoap = params.RequiresSoap == true,
 		Sprayers = {},
 		OnComplete = params.OnComplete,
 	}
@@ -467,15 +488,19 @@ function CleaningService.getProgress(jobId: string): number?
 	return job and progressOf(job)
 end
 
--- The hose in the player's hand matches their tool tier (HoseBuilder). Its presence is the
--- "tool equipped" check. Rebuilt on respawn and after an upgrade.
+-- The tool in the player's hand matches their tier (HoseBuilder), and so does the gear parked
+-- at their wash station (StationProps). The tool's presence is the "tool equipped" check.
+-- Rebuilt on respawn and after an upgrade.
 function CleaningService.refreshHose(player: Player)
+	local tool = getTool(player)
+	local tier = if tool then tool.Tier else 1
+	StationProps.refresh(player, tier)
 	local character = player.Character
 	if not character then
 		return
 	end
-	local tool = getTool(player)
-	HoseBuilder.equip(character, if tool then tool.Tier else 1)
+	HoseBuilder.give(player, character, tier)
+	StationProps.link(player)
 end
 
 return CleaningService

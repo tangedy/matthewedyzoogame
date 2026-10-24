@@ -161,14 +161,17 @@ local function syncTimed(key: string, order: number, color: Color3, endsAt: numb
 		buffPills[key] = label
 		janitor:Add(label, "Destroy")
 		local token = endsAt
-		janitor:Add(task.delay(left, function()
-			if buffEnds[key] ~= token then
-				return
-			end
-			buffEnds[key] = nil
-			buffPills[key] = nil
-			janitor:Cleanup()
-		end), true)
+		janitor:Add(
+			task.delay(left, function()
+				if buffEnds[key] ~= token then
+					return
+				end
+				buffEnds[key] = nil
+				buffPills[key] = nil
+				janitor:Cleanup()
+			end),
+			true
+		)
 		pop(label:FindFirstChildOfClass("UIScale") :: UIScale, 0.5, 0.4)
 	end
 	if label then
@@ -197,13 +200,7 @@ local function refreshTimers()
 	)
 	local luckEnds = state.LuckEndsAt or 0
 	local luckLeft = luckEnds - now
-	syncTimed(
-		"Luck",
-		3,
-		Color3.fromRGB(170, 90, 255),
-		luckEnds,
-		if luckLeft > 0 then `LUCK {clock(luckLeft)}` else ""
-	)
+	syncTimed("Luck", 3, Color3.fromRGB(170, 90, 255), luckEnds, if luckLeft > 0 then `LUCK {clock(luckLeft)}` else "")
 	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY: {state.LuckyLeft} LEFT` else nil)
 end
 

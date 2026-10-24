@@ -109,7 +109,7 @@ local function purchaseToolUpgrade(player: Player)
 	end
 	local nextTool = ToolConfig[data.ToolTier + 1]
 	if not nextTool then
-		purchaseResult:FireClient(player, false, "Your hose is already fully upgraded!")
+		purchaseResult:FireClient(player, false, "Your gear is already fully upgraded!")
 		return
 	end
 	if data.Coins < nextTool.Price then

@@ -312,7 +312,11 @@ local function refreshPens(player: Player)
 		if text then
 			if not unlocked then
 				text.Text = ""
-			elseif flex and #occupants == 1 and AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) == 1 then
+			elseif
+				flex
+				and #occupants == 1
+				and AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) == 1
+			then
 				text.Text = "1/2"
 			else
 				text.Text = if animal then "" else "EMPTY"
@@ -361,7 +365,8 @@ local function refreshPens(player: Player)
 		local function armSell(target: ProximityPrompt, occupant: OwnedAnimal)
 			target.Enabled = true
 			target.ObjectText = ZooService.label(occupant.Species, occupant.Mutation)
-			target.ActionText = `Sell ({UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))})`
+			target.ActionText =
+				`Sell ({UIStyle.formatMoney(ZooService.sellValue(occupant.Species, occupant.Mutation))})`
 			target.HoldDuration = 1
 		end
 		if not carried and not animal then
@@ -430,6 +435,7 @@ local function refreshPens(player: Player)
 			WorldBuilder.setShown(shell, shown)
 		end
 	end
+	showBarn("BarnAisle", tier >= 1)
 	showBarn("BarnSmall", tier == 1)
 	showBarn("BarnMedium", tier >= 2)
 	showBarn("BarnLarge", tier >= 3)
@@ -540,6 +546,7 @@ local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model, data: Pla
 	local slot = if pen and data then slotFor(pen, data, animal) else pen and pen:FindFirstChild("Slot") :: BasePart?
 	model.Name = "ZooAnimal"
 	model:SetAttribute("AnimalId", animal.Id)
+	AnimalService.resize(model, AnimalService.bodyScale(animal.Species))
 	if slot then
 		model:PivotTo(slot.CFrame)
 	end
@@ -552,6 +559,7 @@ end
 
 local function buildCacheModel(zoo: Zoo, record: CachedAnimal)
 	local model = AnimalService.buildZooAnimal(record.Species, record.Mutation)
+	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
 	model.Name = "CachedAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model.Parent = zoo.Bay:FindFirstChild("Cache") or zoo.Bay
@@ -918,7 +926,9 @@ local function overflowCFrame(zoo: Zoo, index: number): CFrame?
 	if not slot then
 		return nil
 	end
-	return slot.CFrame * CFrame.new(6 * index, 0, 0)
+	-- In a line in front of the cache, toward the road, on open grass beside the queue lane.
+	-- The slot faces along the wash road, so its -X runs toward the street.
+	return slot.CFrame * CFrame.new(-8 * index, 0, 0)
 end
 
 function fireOverflow(player: Player)
@@ -940,14 +950,23 @@ function fireOverflow(player: Player)
 	})
 end
 
-local function parkOverflow(zoo: Zoo, record: CachedAnimal, model: Model, index: number)
+local function parkOverflow(zoo: Zoo, record: CachedAnimal, model: Model, index: number, walk: boolean?)
 	model.Name = "OverflowAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model:SetAttribute("JobId", nil)
+	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
 	model.Parent = zoo.Bay
 	zoo.OverflowModels[record.Id] = model
 	local at = overflowCFrame(zoo, index)
-	if at then
+	if not at then
+		return
+	end
+	local slot = cacheSlot(zoo, 1)
+	if walk and slot and model.Parent then
+		-- Fresh from the wash: along the wash road to the cache, then out to its spot.
+		AnimalService.walkCorners(model, { slot.CFrame, at }, GameConfig.DepartDuration * 0.6)
+	end
+	if model.Parent then
 		model:PivotTo(at)
 	end
 end
@@ -1009,9 +1028,9 @@ local function pushOverflow(player: Player, species: string, mutation: string, m
 	}
 	data.NextAnimalId += 1
 	table.insert(data.Overflow, record)
-	parkOverflow(zoo, record, model, #data.Overflow)
 	PlayerDataService.markDirty(player)
 	fireOverflow(player)
+	parkOverflow(zoo, record, model, #data.Overflow, true)
 end
 
 local function keepOverflow(player: Player)
@@ -1100,13 +1119,17 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 		Hooks.fire("AnimalSold", player, species, mutation, value)
 		PlayerDataService.markDirty(player)
 		introAutoSold:FireClient(player, value, data.IntroWashesLeft)
+		-- Along the wash road to the exit road, then down it: the same route as a sale.
+		local sold = zoo.Bay:FindFirstChild("SoldSpot")
 		local back = zoo.Bay:FindFirstChild("RoadReturn")
-		if back and back:IsA("BasePart") and model.Parent then
-			AnimalService.walkCorners(model, { back.CFrame }, GameConfig.DepartDuration)
+		if sold and sold:IsA("BasePart") and back and back:IsA("BasePart") and model.Parent then
+			AnimalService.walkCorners(model, { sold.CFrame, back.CFrame }, GameConfig.DepartDuration * 0.6)
 		end
 		AnimalService.destroy(model)
 		return
 	end
+	-- Back to cache size before it walks over, so a washed giant doesn't flatten the yard.
+	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
 	local record, slot = ZooService.addToCache(player, species, mutation)
 	if record and slot then
 		AnimalService.walkCorners(model, { slot }, GameConfig.DepartDuration)
@@ -1240,6 +1263,7 @@ function ZooService.adoptIntoCache(player: Player, record: CachedAnimal, model: 
 	model.Name = "CachedAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model:SetAttribute("JobId", nil)
+	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
 	model.Parent = zoo.Bay:FindFirstChild("Cache") or zoo.Bay
 	zoo.CacheModels[record.Id] = model
 	refreshCache(player)

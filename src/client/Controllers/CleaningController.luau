@@ -11,6 +11,7 @@ local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
+local WashTool = require(ReplicatedStorage.Shared.WashTool)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -70,7 +71,7 @@ end
 
 local function getNozzle(root: BasePart): Attachment
 	local character = player.Character
-	local hose = character and character:FindFirstChild("Hose")
+	local hose = WashTool.find(character)
 	local nozzle = hose and hose:FindFirstChild("Nozzle")
 	if nozzle and nozzle:IsA("Attachment") then
 		return nozzle

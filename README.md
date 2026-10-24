@@ -1,6 +1,6 @@
-# Wash the Zoo
+# Wash The Farm Animals
 
-A Roblox washing-station game: an animal walks into your bay, you walk around it spraying off the mud, finishing pays coins, it leaves, the next one arrives.
+A Roblox washing-station game (working title was Wash the Zoo): an animal walks into your bay, you walk around it scrubbing and spraying off the mud, finishing pays coins, and it joins your farm.
 
 Design sources: `Wash the Zoo — Implementation Design Document.csv` (takes priority) and `Wash the Zoo Game Concept.csv`.
 
@@ -41,7 +41,8 @@ stylua src && selene src
 Server services:
 
 - **EnvironmentBuilder** builds the cozy world (lighting, grass, the dirt road, fences, trees, flower beds, hay, barn, pond, welcome plaza and clouds), kept clear of every bay slot.
-- **HoseBuilder** builds a different hose model for each tool tier, with a tank on the back at tier 5.
+- **HoseBuilder** builds the cleaning tool for each tier (Sponge, Scrub Brush, Garden Hose, Power Washer, Foam Cannon, Fire Hose) as a real backpack Tool that stays equipped.
+- **StationProps** parks each tier's gear at the wash station (bucket, brush caddy, hose reel, pressure-washer cart, foam cart, fire truck) and runs a hose line from it to the tool from tier 3 up.
 - **WorldBuilder** builds the ground, wash bays, and each bay's zoo pens and expansion stand.
 - **AnimalBuilder** builds animals: real models from `ServerStorage.AnimalTemplates` when present (see the contract at the top of the file), otherwise block placeholders. It also applies the rarity looks.
 - **DirtRenderer** handles how dirt looks. It's the only place to change when trying decals or texture masks.

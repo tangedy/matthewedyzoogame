@@ -220,7 +220,7 @@ function Analytics.init()
 		local data = PlayerDataService.get(player)
 		if data and data.ToolTier == 1 then
 			local tool = ToolConfig[1]
-			reach(player, "Hose1", "HoseTier", 1, if tool then tool.Name else "Basic Hose")
+			reach(player, "Hose1", "HoseTier", 1, if tool then tool.Name else "Sponge")
 		end
 		local state = Common.state(player)
 		if not state or not data then
