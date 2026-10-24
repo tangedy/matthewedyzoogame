@@ -537,8 +537,13 @@ local function addPenPrompts(
 		Color = Color3.fromRGB(240, 240, 240),
 		Parent = pen,
 	})
-	makePrompt("PenPrompt", "Sell", 0, post).Enabled = false
-	local pet = makePrompt("PetPrompt", "Set pet", 0.4, post, Enum.KeyCode.R)
+	-- E picks up / places, F sells, R sets the pet.
+	makePrompt("PenPrompt", "Pick up", 0, post).Enabled = false
+	local sell = makePrompt("PenSellPrompt", "Sell", 0, post, Enum.KeyCode.F)
+	sell.UIOffset = Vector2.new(0, 36)
+	sell.GamepadKeyCode = Enum.KeyCode.ButtonY
+	sell.Enabled = false
+	local pet = makePrompt("PetPrompt", "Set pet", 0, post, Enum.KeyCode.R)
 	pet.UIOffset = Vector2.new(0, 72)
 	pet.GamepadKeyCode = Enum.KeyCode.ButtonX
 	pet.Enabled = false
@@ -671,7 +676,7 @@ local function buildFencedPen(
 			})
 		end
 	end
-	local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(80, 18))
+	local status = billboardLabel(floor, "", Vector3.new(0, 4, 0), Vector2.new(96, 36))
 	local stroke = status:FindFirstChildOfClass("UIStroke")
 	if stroke then
 		stroke.Thickness = 1.25
@@ -821,15 +826,13 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 				lockGui.MaxDistance = 40
 				lock.Parent = pen
 				compactBillboards(pen, 0.72)
-				if spec.Unlock == "Cash" then
-					local post = pen:FindFirstChild("GatePost")
-					if post then
-						local price = spec.Price or 500000
-						local unlock = makePrompt("UnlockPrompt", `Unlock ({UIStyle.formatMoney(price)})`, 0.6, post)
-						unlock.ObjectText = "Large cage"
-						unlock.Enabled = false
-						unlock:SetAttribute("RestEnabled", true)
-					end
+				-- Every road cage can be bought with cash at its gate.
+				local post = pen:FindFirstChild("GatePost")
+				if post and typeof(spec.Price) == "number" then
+					local unlock = makePrompt("UnlockPrompt", `Unlock ({UIStyle.formatMoney(spec.Price)})`, 0.6, post)
+					unlock.ObjectText = if large then "Large cage" else "Medium cage"
+					unlock.Enabled = false
+					unlock:SetAttribute("RestEnabled", true)
 				end
 				WorldBuilder.setShown(pen, false)
 			end

@@ -21,26 +21,31 @@ local player = Players.LocalPlayer
 
 local PromptController = {}
 
-local CARD_WIDTH = 230
-local TITLE_HEIGHT = 26
-local BUTTON_HEIGHT = 44
-local BUTTON_GAP = 6
+local CARD_WIDTH = 176
+local TITLE_HEIGHT = 20
+local BUTTON_HEIGHT = 32
+local BUTTON_GAP = 4
+local PAD = 6
 
--- Button colour by what the action does. Anything unlisted is the neutral blue.
-local SELL = Color3.fromRGB(70, 190, 90)
-local BUY = Color3.fromRGB(70, 200, 100)
-local NEUTRAL = Color3.fromRGB(70, 150, 240)
+-- Button colour by what the action does: muted so the card sits quietly over the world.
+-- Anything unlisted is the neutral blue (pick up, place, and other moves).
+local SELL = Color3.fromRGB(56, 158, 92)
+local BUY = Color3.fromRGB(56, 158, 92)
+local PET = Color3.fromRGB(132, 104, 196)
+local NEUTRAL = Color3.fromRGB(58, 118, 196)
+local CARD_COLOR = Color3.fromRGB(26, 30, 40)
+local EDGE_COLOR = Color3.fromRGB(14, 16, 22)
 local COLORS: { [string]: Color3 } = {
 	SellPrompt = SELL,
-	PenPrompt = SELL,
+	PenSellPrompt = SELL,
 	PenPrompt2 = SELL,
-	UpgradePrompt = Color3.fromRGB(255, 190, 40),
-	ExpandPrompt = Color3.fromRGB(120, 200, 80),
+	UpgradePrompt = Color3.fromRGB(212, 160, 52),
+	ExpandPrompt = Color3.fromRGB(96, 160, 76),
 	TruckPrompt = BUY,
 	UnlockPrompt = BUY,
-	RobuxShopPrompt = Color3.fromRGB(0, 140, 255),
-	PetPrompt = Color3.fromRGB(190, 120, 255),
-	PetPrompt2 = Color3.fromRGB(190, 120, 255),
+	RobuxShopPrompt = Color3.fromRGB(40, 120, 210),
+	PetPrompt = PET,
+	PetPrompt2 = PET,
 }
 
 -- Prompts whose object needs no name over the button.
@@ -106,11 +111,11 @@ local function layout(card: Card)
 	end
 	card.Title.Text = title
 	card.Title.Visible = title ~= ""
-	local titleRoom = if title ~= "" then TITLE_HEIGHT + 4 else 0
-	local height = titleRoom + count * BUTTON_HEIGHT + math.max(0, count - 1) * BUTTON_GAP
+	local titleRoom = if title ~= "" then TITLE_HEIGHT + 2 else 0
+	local height = PAD * 2 + titleRoom + count * BUTTON_HEIGHT + math.max(0, count - 1) * BUTTON_GAP
 	card.Gui.Size = UDim2.fromOffset(CARD_WIDTH, math.max(height, 1))
-	card.List.Position = UDim2.fromOffset(0, titleRoom)
-	card.List.Size = UDim2.new(1, 0, 1, -titleRoom)
+	card.List.Position = UDim2.fromOffset(PAD, PAD + titleRoom)
+	card.List.Size = UDim2.new(1, -PAD * 2, 1, -(PAD * 2 + titleRoom))
 end
 
 local function refreshButton(button: Button)
@@ -167,15 +172,33 @@ local function makeCard(parent: Instance): Card
 	scale.Scale = 0.6
 	scale.Parent = board
 
+	-- One dark rounded backing for the whole card, so it reads against any scenery.
+	local back = Instance.new("Frame")
+	back.Name = "Back"
+	back.Size = UDim2.fromScale(1, 1)
+	back.BackgroundColor3 = CARD_COLOR
+	back.BackgroundTransparency = 0.15
+	back.Parent = board
+	local backCorner = Instance.new("UICorner")
+	backCorner.CornerRadius = UDim.new(0, 10)
+	backCorner.Parent = back
+	local backEdge = Instance.new("UIStroke")
+	backEdge.Color = EDGE_COLOR
+	backEdge.Thickness = 1.5
+	backEdge.Parent = back
+
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, 0, 0, TITLE_HEIGHT)
+	title.Position = UDim2.fromOffset(PAD, PAD)
+	title.Size = UDim2.new(1, -PAD * 2, 0, TITLE_HEIGHT)
+	title.ZIndex = 2
 	title.Parent = board
-	UIStyle.text(title, Color3.new(1, 1, 1), nil, 2.5)
+	UIStyle.text(title, Color3.fromRGB(236, 238, 244), EDGE_COLOR, 1.5)
 
 	local list = Instance.new("Frame")
 	list.Name = "Buttons"
 	list.BackgroundTransparency = 1
+	list.ZIndex = 2
 	list.Parent = board
 	local listLayout = Instance.new("UIListLayout")
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -195,11 +218,21 @@ local function makeButton(card: Card, prompt: ProximityPrompt): Button
 	frame.Text = ""
 	frame.AutoButtonColor = true
 	frame.ClipsDescendants = true
+	frame.ZIndex = 2
 	frame.Parent = card.List
-	UIStyle.border(frame, 3)
+	UIStyle.border(frame, 1.5)
+	local edge = frame:FindFirstChildOfClass("UIStroke")
+	if edge then
+		edge.Color = EDGE_COLOR
+	end
+	local round = frame:FindFirstChildOfClass("UICorner")
+	if round then
+		round.CornerRadius = UDim.new(0, 8)
+	end
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
+	fill.ZIndex = 2
 	fill.Size = UDim2.fromScale(0, 1)
 	fill.BackgroundColor3 = Color3.new(1, 1, 1)
 	fill.BackgroundTransparency = 0.65
@@ -209,28 +242,28 @@ local function makeButton(card: Card, prompt: ProximityPrompt): Button
 	local badge = Instance.new("Frame")
 	badge.Name = "Badge"
 	badge.AnchorPoint = Vector2.new(0, 0.5)
-	badge.Position = UDim2.new(0, 7, 0.5, 0)
-	badge.Size = UDim2.fromOffset(40, 30)
-	badge.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-	badge.BackgroundTransparency = 0.15
-	badge.ZIndex = 2
+	badge.Position = UDim2.new(0, 5, 0.5, 0)
+	badge.Size = UDim2.fromOffset(30, 22)
+	badge.BackgroundColor3 = EDGE_COLOR
+	badge.BackgroundTransparency = 0.3
+	badge.ZIndex = 3
 	badge.Parent = frame
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
+	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = badge
 	local key = Instance.new("TextLabel")
 	key.Size = UDim2.fromScale(1, 1)
-	key.ZIndex = 3
+	key.ZIndex = 4
 	key.Parent = badge
-	UIStyle.text(key, Color3.new(1, 1, 1), nil, 1.5)
+	UIStyle.text(key, Color3.new(1, 1, 1), EDGE_COLOR, 1)
 
 	local label = Instance.new("TextLabel")
-	label.Position = UDim2.fromOffset(54, 6)
-	label.Size = UDim2.new(1, -62, 1, -12)
-	label.ZIndex = 2
+	label.Position = UDim2.fromOffset(42, 6)
+	label.Size = UDim2.new(1, -48, 1, -12)
+	label.ZIndex = 3
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Parent = frame
-	UIStyle.text(label, Color3.new(1, 1, 1), nil, 2)
+	UIStyle.text(label, Color3.new(1, 1, 1), EDGE_COLOR, 1.2)
 
 	local button: Button = {
 		Prompt = prompt,

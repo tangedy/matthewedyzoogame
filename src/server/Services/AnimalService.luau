@@ -214,6 +214,8 @@ end
 function AnimalService.buildCarryModel(animalKey: string, mutationKey: string, hand: BasePart): Model
 	local model = AnimalService.buildZooAnimal(animalKey, mutationKey)
 	model.Name = "CarriedAnimal"
+	-- The same size as in the cache and the pen, so picking it up never shrinks it.
+	AnimalService.resize(model, AnimalService.bodyScale(animalKey))
 	-- The rarity aura's ground ring belongs on the ground, not tipped up in a hand.
 	for _, name in { "AuraRing", "AuraBase" } do
 		local part = model:FindFirstChild(name)

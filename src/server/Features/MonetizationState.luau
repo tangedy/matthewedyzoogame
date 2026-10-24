@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -32,7 +33,8 @@ export type Saved = {
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
 	PastureUnlocked: boolean, -- any Robux spend; both medium road cages stay open
 	SidePastureUnlocked: boolean, -- the Axolotl; the first large road cage stays open
-	CashPastureUnlocked: boolean, -- $500K; the last large road cage stays open
+	CashPastureUnlocked: boolean, -- the old single cash cage (the right large); still honoured
+	CashCages: { [string]: boolean }, -- road cages bought with cash, keyed by RoadCages index
 }
 
 export type Session = {
@@ -104,6 +106,7 @@ local function sanitize(raw: any): Saved
 		PastureUnlocked = false,
 		SidePastureUnlocked = false,
 		CashPastureUnlocked = false,
+		CashCages = {},
 	}
 	if typeof(raw) ~= "table" then
 		return saved
@@ -166,6 +169,14 @@ local function sanitize(raw: any): Saved
 	end
 	saved.SidePastureUnlocked = raw.SidePastureUnlocked == true or saved.Once.SidePasture == true or pendingAxolotl
 	saved.CashPastureUnlocked = raw.CashPastureUnlocked == true
+	if typeof(raw.CashCages) == "table" then
+		for key, bought in raw.CashCages do
+			local index = tonumber(key)
+			if bought == true and index and GameConfig.Zoo.RoadCages[index] then
+				saved.CashCages[tostring(index)] = true
+			end
+		end
+	end
 	return saved
 end
 

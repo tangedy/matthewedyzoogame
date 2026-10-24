@@ -137,9 +137,18 @@ local function sidePastureUnlocked(data: PlayerDataService.SavedData): boolean
 	return mon ~= nil and mon.SidePastureUnlocked == true
 end
 
-local function cashPastureUnlocked(data: PlayerDataService.SavedData): boolean
+-- Bought at its gate. The old single cash cage flag still counts for the right large.
+local function cageBought(data: PlayerDataService.SavedData, index: number): boolean
 	local mon = monetization(data)
-	return mon ~= nil and mon.CashPastureUnlocked == true
+	if not mon then
+		return false
+	end
+	local offset = index - GameConfig.Zoo.MaxPens
+	if typeof(mon.CashCages) == "table" and mon.CashCages[tostring(offset)] == true then
+		return true
+	end
+	local cage = GameConfig.Zoo.RoadCages[offset]
+	return cage ~= nil and cage.Unlock == "Cash" and mon.CashPastureUnlocked == true
 end
 
 local function penOpen(data: PlayerDataService.SavedData, index: number): boolean
@@ -150,12 +159,12 @@ local function penOpen(data: PlayerDataService.SavedData, index: number): boolea
 	if not cage then
 		return false
 	end
-	if cage.Unlock == "AnyRobux" then
+	if cageBought(data, index) then
+		return true
+	elseif cage.Unlock == "AnyRobux" then
 		return pastureUnlocked(data)
 	elseif cage.Unlock == "Axolotl" then
 		return sidePastureUnlocked(data)
-	elseif cage.Unlock == "Cash" then
-		return cashPastureUnlocked(data)
 	end
 	return false
 end
@@ -359,7 +368,8 @@ local function refreshPens(player: Player)
 		local status = floor:FindFirstChild("Status")
 		local text = status and status:FindFirstChild("Label") :: TextLabel?
 		if text then
-			text.Text = if not unlocked or animal then "" else "EMPTY"
+			-- An empty pen says how much cash its pad can hold, so bigger pens read as worth more.
+			text.Text = if not unlocked or animal then "" else `EMPTY\nMax {UIStyle.formatMoney(penCap(zoo, i))}`
 		end
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
@@ -378,9 +388,13 @@ local function refreshPens(player: Player)
 		local post = pen:FindFirstChild("GatePost")
 		local prompt = post and post:FindFirstChild("PenPrompt") :: ProximityPrompt?
 		local prompt2 = post and post:FindFirstChild("PenPrompt2") :: ProximityPrompt?
+		local sellPrompt = post and post:FindFirstChild("PenSellPrompt") :: ProximityPrompt?
+		if sellPrompt then
+			sellPrompt.Enabled = false -- armed below for an unlocked pen with an animal
+		end
 		local unlockPrompt = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
 		if unlockPrompt then
-			unlockPrompt.Enabled = cage ~= nil and cage.Unlock == "Cash" and not unlocked
+			unlockPrompt.Enabled = cage ~= nil and not unlocked
 		end
 		if prompt2 then
 			prompt2.Enabled = false
@@ -427,7 +441,14 @@ local function refreshPens(player: Player)
 				prompt.HoldDuration = 0.5
 			end
 		elseif animal then
-			armSell(prompt, animal)
+			-- E picks it up to move it; F sells it.
+			prompt.Enabled = true
+			prompt.ObjectText = ZooService.label(animal.Species, animal.Mutation)
+			prompt.ActionText = "Pick up"
+			prompt.HoldDuration = 0
+			if sellPrompt then
+				armSell(sellPrompt, animal)
+			end
 			if prompt2 and occupants[2] then
 				armSell(prompt2, occupants[2])
 			end
@@ -615,10 +636,8 @@ local function placeInPen(zoo: Zoo, animal: OwnedAnimal, model: Model, data: Pla
 	local slot = if pen and data then slotFor(pen, data, animal) else pen and pen:FindFirstChild("Slot") :: BasePart?
 	model.Name = "ZooAnimal"
 	model:SetAttribute("AnimalId", animal.Id)
-	-- A touch smaller than at the wash, and never longer than the pen is wide.
-	local floor = pen and pen:FindFirstChild("Floor") :: BasePart?
-	local room = if floor then math.min(floor.Size.X, floor.Size.Z) - GameConfig.PenFitMargin else nil
-	AnimalService.resize(model, AnimalService.bodyScale(animal.Species) * GameConfig.PenAnimalScale, room)
+	-- The same size as at the wash, in the cache and in your arms: animals never shrink.
+	AnimalService.resize(model, AnimalService.bodyScale(animal.Species))
 	if slot then
 		model:PivotTo(slot.CFrame)
 	end
@@ -631,7 +650,7 @@ end
 
 local function buildCacheModel(zoo: Zoo, record: CachedAnimal)
 	local model = AnimalService.buildZooAnimal(record.Species, record.Mutation)
-	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
+	AnimalService.resize(model, AnimalService.bodyScale(record.Species))
 	model.Name = "CachedAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model.Parent = zoo.Bay:FindFirstChild("Cache") or zoo.Bay
@@ -790,6 +809,43 @@ local function pickUp(player: Player, slotIndex: number)
 	promoteOverflow(player)
 end
 
+-- Lifts a penned animal into the player's hands so it can go in another pen. Cash still on
+-- its pad is paid out first. In hand it is a cache record like any other (Paid carries over).
+local function pickUpFromPen(player: Player, penIndex: number, which: number?)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local character = player.Character
+	local hand = character
+		and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")) :: BasePart?
+	if not zoo or not data or zoo.CarriedId or not hand then
+		return
+	end
+	local animal = animalsInPen(data, penIndex)[which or 1]
+	local index = animal and table.find(data.Animals, animal)
+	if not animal or not index then
+		return
+	end
+	table.remove(data.Animals, index)
+	EconomyService.addCoins(player, math.floor(animal.Pending))
+	local model = zoo.PenModels[animal.Id]
+	if model then
+		zoo.PenModels[animal.Id] = nil
+		model:Destroy()
+	end
+	seatPen(zoo, data, penIndex)
+	local record: CachedAnimal = {
+		Id = animal.Id,
+		Species = animal.Species,
+		Mutation = animal.Mutation,
+		Paid = animal.Paid,
+	}
+	table.insert(data.Cache, record)
+	zoo.CarriedId = record.Id
+	zoo.CarryModel = AnimalService.buildCarryModel(record.Species, record.Mutation, hand)
+	PlayerDataService.markDirty(player)
+	refreshAll(player)
+end
+
 -- Put the carried animal into a pen. An occupied pen sells its animal first (plus any cash
 -- still on its pad), which is the swap.
 local function placeCarried(player: Player, penIndex: number, confirmed: boolean?)
@@ -801,13 +857,9 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 	end
 	if not penOpen(data, penIndex) then
 		local cage = roadCage(penIndex)
-		if cage and cage.Unlock == "AnyRobux" then
-			purchaseResult:FireClient(player, false, "Spend any Robux to unlock the medium cages.")
-		elseif cage and cage.Unlock == "Axolotl" then
-			purchaseResult:FireClient(player, false, "The Axolotl unlocks this large cage.")
-		elseif cage and cage.Unlock == "Cash" then
-			local price = cage.Price or 500000
-			purchaseResult:FireClient(player, false, `This large cage costs {UIStyle.formatMoney(price)}.`)
+		if cage then
+			local price = UIStyle.formatMoney(cage.Price or 0)
+			purchaseResult:FireClient(player, false, `Unlock this cage for {price} at its gate.`)
 		end
 		return
 	end
@@ -1048,19 +1100,14 @@ local function expand(player: Player)
 	purchaseResult:FireClient(player, true, `{step.Barn} barn unlocked!`)
 end
 
-local function buyCashCage(player: Player)
+local function buyCashCage(player: Player, index: number)
 	local data = PlayerDataService.get(player)
-	if not data or cashPastureUnlocked(data) then
+	local cage = roadCage(index)
+	if not data or not cage or typeof(cage.Price) ~= "number" or penOpen(data, index) then
 		return
 	end
-	local price = 500000
-	for _, cage in GameConfig.Zoo.RoadCages do
-		if cage.Unlock == "Cash" and typeof(cage.Price) == "number" then
-			price = cage.Price
-		end
-	end
-	if not EconomyService.spend(player, price) then
-		purchaseResult:FireClient(player, false, `This cage costs {UIStyle.formatMoney(price)}.`)
+	if not EconomyService.spend(player, cage.Price) then
+		purchaseResult:FireClient(player, false, `This cage costs {UIStyle.formatMoney(cage.Price)}.`)
 		return
 	end
 	local mon = data.Extra.Monetization
@@ -1068,10 +1115,14 @@ local function buyCashCage(player: Player)
 		mon = {}
 		data.Extra.Monetization = mon
 	end
-	mon.CashPastureUnlocked = true
+	if typeof(mon.CashCages) ~= "table" then
+		mon.CashCages = {}
+	end
+	mon.CashCages[tostring(index - GameConfig.Zoo.MaxPens)] = true
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
-	purchaseResult:FireClient(player, true, "Large cage unlocked!")
+	local kind = if cage.Class == "PastureLarge" then "Large" else "Medium"
+	purchaseResult:FireClient(player, true, `{kind} cage unlocked!`)
 end
 
 -- Washed animals ------------------------------------------------------------------------
@@ -1107,7 +1158,7 @@ local function parkOverflow(zoo: Zoo, record: CachedAnimal, model: Model, index:
 	model.Name = "OverflowAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model:SetAttribute("JobId", nil)
-	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
+	AnimalService.resize(model, AnimalService.bodyScale(record.Species))
 	model.Parent = zoo.Bay
 	zoo.OverflowModels[record.Id] = model
 	local at = overflowCFrame(zoo, index)
@@ -1309,8 +1360,8 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 		AnimalService.destroy(model)
 		return
 	end
-	-- Back to cache size before it walks over, so a washed giant doesn't flatten the yard.
-	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
+	-- Same size it was washed at: an animal never changes size between wash, cache and pen.
+	AnimalService.resize(model, AnimalService.bodyScale(species))
 	if #waitingRecords(zoo, data) >= GameConfig.Cache.Slots then
 		local soldModel = takeOldestUnpaid(player)
 		if soldModel then
@@ -1480,7 +1531,7 @@ function ZooService.adoptIntoCache(player: Player, record: CachedAnimal, model: 
 	model.Name = "CachedAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model:SetAttribute("JobId", nil)
-	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
+	AnimalService.resize(model, AnimalService.bodyScale(record.Species))
 	model.Parent = zoo.Bay:FindFirstChild("Cache") or zoo.Bay
 	zoo.CacheModels[record.Id] = model
 	refreshCache(player)
@@ -1571,6 +1622,14 @@ function ZooService.attach(player: Player, bay: Model)
 				if zoo.CarriedId then
 					placeCarried(player, i)
 				else
+					pickUpFromPen(player, i, 1)
+				end
+			end)
+		end
+		local sellPrompt = post and post:FindFirstChild("PenSellPrompt") :: ProximityPrompt?
+		if sellPrompt then
+			connect(sellPrompt.Triggered, function(who: Player)
+				if who == player and not zoo.CarriedId then
 					sellFromPen(player, i, 1)
 				end
 			end)
@@ -1618,7 +1677,7 @@ function ZooService.attach(player: Player, bay: Model)
 		if unlock then
 			connect(unlock.Triggered, function(who: Player)
 				if who == player then
-					buyCashCage(player)
+					buyCashCage(player, i)
 				end
 			end)
 		end

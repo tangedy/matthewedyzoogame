@@ -89,26 +89,34 @@ local GameConfig = {
 		MaxPens = 24,
 		StartPens = 6,
 		-- Two large cages on the road, with a medium cage behind each one so the
-		-- driveway between the larges stays open. Any Robux spend opens both medium
-		-- cages. The Axolotl opens the left large cage. The right large cage is cash.
+		-- driveway between the larges stays open. Every road cage can be bought for Price at its gate. Unlock is a second, free way in:
+		-- any Robux spend opens both mediums, the Axolotl opens the left large ("Cash" has none).
 		RoadCages = {
-			{ Side = "Left", Class = "PastureLarge", Unlock = "Axolotl", Label = "LARGE", Lock = "AXOLOTL" },
-			{ Side = "Left", Class = "PastureMedium", Unlock = "AnyRobux", Label = "MEDIUM", Lock = "SPEND ANY ROBUX" },
+			{
+				Side = "Left",
+				Class = "PastureLarge",
+				Unlock = "Axolotl",
+				Price = 30000,
+				Label = "LARGE",
+				Lock = "$30K",
+			},
+			{
+				Side = "Left",
+				Class = "PastureMedium",
+				Unlock = "AnyRobux",
+				Price = 10000,
+				Label = "MEDIUM",
+				Lock = "$10K",
+			},
 			{
 				Side = "Right",
 				Class = "PastureMedium",
 				Unlock = "AnyRobux",
+				Price = 20000,
 				Label = "MEDIUM",
-				Lock = "SPEND ANY ROBUX",
+				Lock = "$20K",
 			},
-			{
-				Side = "Right",
-				Class = "PastureLarge",
-				Unlock = "Cash",
-				Price = 500000,
-				Label = "LARGE",
-				Lock = "$500K",
-			},
+			{ Side = "Right", Class = "PastureLarge", Unlock = "Cash", Price = 40000, Label = "LARGE", Lock = "$40K" },
 		},
 		Expansions = {
 			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
@@ -133,10 +141,10 @@ local GameConfig = {
 		},
 	},
 
-	-- Display size by body class, applied at the wash and in pens. The placeholder models are
-	-- all built to fit a stall, so the big ones are scaled up here to look the part. Each
-	-- class still fits the smallest pen it can go in (see AnimalConfig.fits). The cache,
-	-- overflow, pets and carrying keep animals at their built size (CacheMaxLength caps it).
+	-- Display size by body class. An animal keeps this one size everywhere: at the wash, in
+	-- the cache and overflow, carried over your head, and in its pen. It never shrinks.
+	-- The placeholder models are all built to fit a stall, so the big ones are scaled up here
+	-- to look the part. (Pets that follow the avatar stay at built size.)
 	BodyScale = {
 		Standard = 1,
 		Large = 1,
@@ -144,10 +152,6 @@ local GameConfig = {
 		Giant = 1.6,
 		Gargantuan = 2.9, -- a T-Rex then fills most of a 38-by-48 yard
 	},
-	-- Penned animals are drawn this much smaller than at the wash, then shrunk further if
-	-- they would still be longer than their pen is wide (any animal can go in any pen).
-	PenAnimalScale = 0.85,
-	PenFitMargin = 1.5, -- studs kept clear of the fence when fitting an animal to its pen
 
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
@@ -155,7 +159,6 @@ local GameConfig = {
 	Cache = {
 		Slots = 2,
 		SlotSpacing = 7,
-		MaxLength = 10, -- studs: a bigger animal shrinks to this while it waits in the cache
 	},
 
 	-- A new player's opening washes. The first ones are random commons that auto-sell, with

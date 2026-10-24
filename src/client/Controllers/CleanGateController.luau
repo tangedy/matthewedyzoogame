@@ -1,13 +1,12 @@
 -- When the animal in the bay needs more clean power than the hose has (Super Soap included),
 -- spraying does nothing. This offers the two ways forward: send it away, or pay to wash it now.
--- The offer floats over the animal and only shows while the cursor is on the animal (or on the
--- offer itself). Touch and gamepad have no hover, so there it shows the whole time.
+-- The offer floats over the animal and only shows while you stand close to it (within the
+-- hose's reach), like a proximity prompt.
 -- Also hides the 🔒 gear line on walk-in nameplates once your gear can already wash them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
@@ -17,23 +16,22 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
-local UIPlatform = require(script.Parent.Parent.UI)
 local Modals = require(script.Parent.Parent.UI.Modals)
 
 local player = Players.LocalPlayer
 
 local CleanGateController = {}
 
-local HOVER_GRACE = 0.6 -- seconds the offer stays after the cursor leaves, to reach its buttons
-local PANEL_COLOR = Color3.fromRGB(34, 38, 50)
-local LEAVE_COLOR = Color3.fromRGB(74, 80, 96)
-local WASH_COLOR = Color3.fromRGB(70, 175, 100)
+local NEAR_DISTANCE = 14 -- studs; the offer shows within this or the hose's range, whichever is more
+-- The same muted palette as the world prompt cards (PromptController).
+local PANEL_COLOR = Color3.fromRGB(26, 30, 40)
+local LEAVE_COLOR = Color3.fromRGB(70, 76, 92)
+local WASH_COLOR = Color3.fromRGB(56, 158, 92)
 
 local tier = 1
 local soapEndsAt = 0
 local bay: Types.BaySnapshot? = nil
 local blocked = false
-local hoveredAt = -math.huge
 local nextClickAt = 0
 local cleanKey = "CleanNow"
 
@@ -130,42 +128,22 @@ local function refresh()
 	cleanButton.Text = `Wash now · {offer.Robux} R$`
 end
 
-local function overPanel(point: Vector2): boolean
-	if not panel.Visible then
-		return false
-	end
-	local from, size = panel.AbsolutePosition, panel.AbsoluteSize
-	return point.X >= from.X and point.X <= from.X + size.X and point.Y >= from.Y and point.Y <= from.Y + size.Y
-end
-
-local function overAnimal(point: Vector2, animal: Model): boolean
-	local camera = Workspace.CurrentCamera
-	if not camera then
-		return false
-	end
-	local ray = camera:ViewportPointToRay(point.X, point.Y)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { animal }
-	return Workspace:Raycast(ray.Origin, ray.Direction * 500, params) ~= nil
-end
-
--- Every frame while blocked: follow the animal on screen, and show only while hovered.
+-- Every frame while blocked: follow the animal on screen, and show only while you're close.
 local function follow()
 	local animal = if blocked then bayAnimal() else nil
 	local head = animal and animal:FindFirstChild("Head")
 	local camera = Workspace.CurrentCamera
-	if not animal or not head or not head:IsA("BasePart") or not camera then
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not animal or not head or not head:IsA("BasePart") or not camera or not root or not root:IsA("BasePart") then
 		panel.Visible = false
 		return
 	end
-	local point = UserInputService:GetMouseLocation()
-	local hoverless = UIPlatform.get().inputMode ~= "KeyboardMouse"
-	if hoverless or overAnimal(point, animal) or overPanel(point) then
-		hoveredAt = os.clock()
-	end
+	local tool = ToolConfig[tier] or ToolConfig[1]
+	local reach = math.max(NEAR_DISTANCE, tool.Range + 4)
+	local near = (root.Position - head.Position).Magnitude <= reach
 	local screen, onScreen = camera:WorldToViewportPoint(head.Position + Vector3.new(0, head.Size.Y, 0))
-	local show = onScreen and os.clock() - hoveredAt < HOVER_GRACE
+	local show = near and onScreen
 	if show then
 		local viewport = camera.ViewportSize
 		local half = panel.AbsoluteSize / 2
@@ -179,14 +157,14 @@ end
 local function button(text: string, color: Color3, x: number): TextButton
 	local created = Instance.new("TextButton")
 	created.AnchorPoint = Vector2.new(0.5, 1)
-	created.Position = UDim2.new(x, 0, 1, -10)
-	created.Size = UDim2.new(0.5, -15, 0, 36)
+	created.Position = UDim2.new(x, 0, 1, -8)
+	created.Size = UDim2.new(0.5, -12, 0, 30)
 	created.BackgroundColor3 = color
 	created.Text = text
 	created.AutoButtonColor = true
 	created.Parent = panel
-	UIStyle.text(created, Color3.new(1, 1, 1), Color3.fromRGB(20, 22, 30), 1.5)
-	UIStyle.border(created, 2)
+	UIStyle.text(created, Color3.new(1, 1, 1), Color3.fromRGB(14, 16, 22), 1.2)
+	UIStyle.border(created, 1.5)
 	return created
 end
 
@@ -194,32 +172,32 @@ local function build()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "CleanGate"
 	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true -- so panel pixels match GetMouseLocation
+	gui.IgnoreGuiInset = true -- so panel pixels match WorldToViewportPoint
 	gui.DisplayOrder = 6
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	panel = Instance.new("Frame")
 	panel.Name = "Prompt"
 	panel.AnchorPoint = Vector2.new(0.5, 1)
-	panel.Size = UDim2.fromOffset(320, 88)
+	panel.Size = UDim2.fromOffset(260, 72)
 	panel.BackgroundColor3 = PANEL_COLOR
-	panel.BackgroundTransparency = 0.08
+	panel.BackgroundTransparency = 0.15
 	panel.Visible = false
 	panel.Parent = gui
 	Modals.holdCursor(panel)
-	UIStyle.border(panel, 2)
+	UIStyle.border(panel, 1.5)
 
 	title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(12, 8)
-	title.Size = UDim2.new(1, -24, 0, 26)
+	title.Position = UDim2.fromOffset(10, 6)
+	title.Size = UDim2.new(1, -20, 0, 22)
 	title.Parent = panel
 	UIStyle.text(title, Color3.fromRGB(240, 242, 248), Color3.fromRGB(20, 22, 30), 1.5)
 
 	local leave = button("Let it go", LEAVE_COLOR, 0.25)
-	leave.Position = UDim2.new(0.25, 2, 1, -10)
+	leave.Position = UDim2.new(0.25, 3, 1, -8)
 	cleanButton = button("Wash now", WASH_COLOR, 0.75)
-	cleanButton.Position = UDim2.new(0.75, -2, 1, -10)
+	cleanButton.Position = UDim2.new(0.75, -3, 1, -8)
 	leave.Activated:Connect(function()
 		if os.clock() < nextClickAt then
 			return

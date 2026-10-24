@@ -349,14 +349,18 @@ local function sanitize(raw: any): SavedData
 		local oldLeft = GameConfig.Zoo.MaxPens + 1
 		local oldRight = oldLeft + 1
 		local held = {}
-		local function ownsRoad(cage: any): boolean
+		local function ownsRoad(cage: any, offset: number): boolean
+			local mon = raw.Extra
+			local savedMon = if typeof(mon) == "table" then mon.Monetization else nil
+			local bought = if typeof(savedMon) == "table" then savedMon.CashCages else nil
+			if typeof(bought) == "table" and bought[tostring(offset)] == true then
+				return true
+			end
 			if cage.Unlock == "AnyRobux" then
 				return spent or sideOpen
 			elseif cage.Unlock == "Axolotl" then
 				return sideOpen
 			elseif cage.Unlock == "Cash" then
-				local mon = raw.Extra
-				local savedMon = if typeof(mon) == "table" then mon.Monetization else nil
 				return typeof(savedMon) == "table" and savedMon.CashPastureUnlocked == true
 			end
 			return false
@@ -394,7 +398,7 @@ local function sanitize(raw: any): SavedData
 			local cage = GameConfig.Zoo.RoadCages[pen - GameConfig.Zoo.MaxPens]
 			local inZoo = pen >= 1 and pen <= data.ZooSize
 			if cage then
-				if not ownsRoad(cage) or usedSlots[pen] then
+				if not ownsRoad(cage, pen - GameConfig.Zoo.MaxPens) or usedSlots[pen] then
 					continue
 				end
 				if not AnimalConfig.fits(AnimalConfig.Animals[species].BodyClass, cage.Class) then

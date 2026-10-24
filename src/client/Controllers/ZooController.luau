@@ -24,6 +24,8 @@ local OWN_PROMPTS = {
 	PenPrompt = 10,
 	PickupPrompt = 10,
 	SellPrompt = 10,
+	PenSellPrompt = 10,
+	PetPrompt = 10,
 	ExpandPrompt = 10,
 	TruckPrompt = 12, -- the delivery truck parks under your bay model
 }
