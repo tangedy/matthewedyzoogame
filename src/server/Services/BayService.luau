@@ -371,10 +371,10 @@ local function runOneJob(bay: Bay, owner: Player)
 		Hooks.fire("WashAbandoned", owner, info) -- (player, info: WashInfo); never paid
 		setState(bay, "Departing")
 		front.Token += 1
-		-- Along the wash road to the exit road, then down it to the street. Never across the grass.
+		-- Across the drive and down the cache arm to the street. Never across the grass.
 		local back = bay.RoadReturn.CFrame
 		local sold = bay.Model:FindFirstChild("SoldSpot") :: BasePart?
-		local route = if sold then { sold.CFrame, back } else { bay.Model.Cache.Slot1.CFrame, back }
+		local route = ZooService.fromWash(bay.Model, if sold then { sold.CFrame, back } else { back })
 		AnimalService.walkCorners(model, route, GameConfig.DepartDuration * 0.6)
 		if bay.Line[1] == front then
 			table.remove(bay.Line, 1)

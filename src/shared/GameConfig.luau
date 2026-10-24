@@ -75,10 +75,28 @@ local GameConfig = {
 	Zoo = {
 		MaxPens = 24,
 		StartPens = 6,
-		-- Two pens the size of a large pasture, left and right of the path at the road,
-		-- in front of the six stalls. Each holds two medium animals or one large animal.
-		-- The left opens with any Robux spend. The right is 99 Robux, or the Axolotl.
-		FlexPasturePens = 2,
+		-- Two large cages on the road, with a medium cage behind each one so the
+		-- driveway between the larges stays open. Any Robux spend opens both medium
+		-- cages. The Axolotl opens the left large cage. The right large cage is cash.
+		RoadCages = {
+			{ Side = "Left", Class = "PastureLarge", Unlock = "Axolotl", Label = "LARGE", Lock = "AXOLOTL" },
+			{ Side = "Left", Class = "PastureMedium", Unlock = "AnyRobux", Label = "MEDIUM", Lock = "SPEND ANY ROBUX" },
+			{
+				Side = "Right",
+				Class = "PastureMedium",
+				Unlock = "AnyRobux",
+				Label = "MEDIUM",
+				Lock = "SPEND ANY ROBUX",
+			},
+			{
+				Side = "Right",
+				Class = "PastureLarge",
+				Unlock = "Cash",
+				Price = 500000,
+				Label = "LARGE",
+				Lock = "$500K",
+			},
+		},
 		Expansions = {
 			{ Pens = 10, Price = 100000, Barn = "Small" }, -- +4 standard lanes, two each side
 			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large
@@ -118,7 +136,7 @@ local GameConfig = {
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
 	-- (carries to a pen) or auto-sells.
 	Cache = {
-		Slots = 1,
+		Slots = 2,
 		SlotSpacing = 7,
 		CarryTilt = 45, -- degrees: carried animals are held full size, tipped up in the left hand
 		MaxLength = 10, -- studs: a bigger animal shrinks to this while it waits in the cache
@@ -136,10 +154,11 @@ local GameConfig = {
 		ShowcaseMutation = "Diamond",
 	},
 
-	-- Unskippable spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator;
-	-- the avatar is loaded at runtime and a stand-in is used if that load fails.
+	-- Spawn cutscene. AvatarUserId is KreekCraft, a public Roblox creator; the avatar is
+	-- loaded at runtime and a stand-in is used if that load fails. E skips it after SkipAfter.
 	Cutscene = {
 		Duration = 12,
+		SkipAfter = 5,
 		AvatarUserId = 140258990,
 		Species = "TRex",
 		Scale = 1.35,

@@ -125,7 +125,7 @@ local function ensureStand(bay: Model): Model?
 		return counter
 	end
 
-	kiosk("TimedCounter", "TimedPrompt", "2 HOURS", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.zero)
+	kiosk("TimedCounter", "TimedPrompt", "10 MIN", `{product.Robux} ROBUX`, Color3.fromRGB(70, 190, 90), Vector3.zero)
 	stand.Parent = zoo
 	return stand
 end
@@ -148,10 +148,15 @@ local function refreshStand(player: Player)
 	local product = MonetizationConfig.ProductsByKey.AutoCollect2h
 	if timed then
 		timed.Enabled = true
-		timed.ObjectText = "2 HOURS"
+		timed.ObjectText = "10 MIN"
+		local sign = timed.Parent and timed.Parent:FindFirstChild("Sign")
+		local title = sign and sign:FindFirstChild("Title")
+		if title and title:IsA("TextLabel") then
+			title.Text = `10 MIN\n{product.Robux} ROBUX`
+		end
 		local left = MonetizationGrants.autoCollectLeft(player)
 		timed.ActionText = if left > 0
-			then `Add 2 hours ({product.Robux} ROBUX) {clock(left)} left`
+			then `Add 10 minutes ({product.Robux} ROBUX) {clock(left)} left`
 			else `Buy ({product.Robux} ROBUX)`
 	end
 end
@@ -177,18 +182,6 @@ local function bindStand(player: Player, bay: Model)
 			bindPrompt(timed, player, "AutoCollect2h")
 		end
 		refreshStand(player)
-	end
-	local zoo = bay:FindFirstChild("Zoo")
-	if zoo then
-		for _, child in zoo:GetChildren() do
-			if child:GetAttribute("FlexSide") == "Right" then
-				local post = child:FindFirstChild("GatePost")
-				local unlock = post and post:FindFirstChild("UnlockPrompt")
-				if unlock and unlock:IsA("ProximityPrompt") then
-					bindPrompt(unlock, player, "SidePasture")
-				end
-			end
-		end
 	end
 end
 
@@ -242,7 +235,7 @@ local function processPurchase(
 	local pasture = MonetizationState.unlockPasture(player)
 	PlayerDataService.saveNow(player)
 	if pasture then
-		local extra = "Left pasture unlocked forever!"
+		local extra = "Medium cages unlocked!"
 		message = if message then `{message} {extra}` else extra
 	end
 	if message then
@@ -332,7 +325,7 @@ local function buyProduct(player: Player, product: Product)
 		PlayerDataService.markDirty(player)
 	end
 	if product.Kind == "SidePasture" and MonetizationState.sidePastureOpen(player) then
-		MonetizationState.notify(player, "You already own the right pasture.", false)
+		MonetizationState.notify(player, "You already own that large cage.", false)
 		return
 	end
 	if product.Kind == "Limited" then
@@ -602,7 +595,7 @@ local function connectHooks()
 						MonetizationGrants.applyPass(player, pass.Key)
 						if MonetizationState.unlockPasture(player) then
 							PlayerDataService.saveNow(player)
-							MonetizationState.notify(player, "Left pasture unlocked forever!", true)
+							MonetizationState.notify(player, "Medium cages unlocked!", true)
 						end
 						MonetizationState.push(player)
 					elseif not ok then

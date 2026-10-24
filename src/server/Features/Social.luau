@@ -1,15 +1,14 @@
 -- Social flex: one washed animal (three, after any Robux spend) follows the avatar,
--- spenders get a VIP title over their head, and playtime or washes unlock a trail
--- and a glow on the hose. None of this changes clean power, income, or tool tier.
+-- spenders get the Vip attribute (chat and leaderboards read it), and playtime or
+-- washes unlock a trail and a glow on the hose. None of this changes clean power,
+-- income, or tool tier.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local WashTool = require(ReplicatedStorage.Shared.WashTool)
-local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Services = script.Parent.Parent.Services
 local AnimalService = require(Services.AnimalService)
 local Hooks = require(Services.Hooks)
@@ -141,34 +140,13 @@ end
 
 local function applyVip(player: Player)
 	local saved = MonetizationState.saved(player)
-	local vip = saved ~= nil and saved.PastureUnlocked == true
+	local vip = MonetizationState.ownsPass(player, "VIPKeeper") or (saved ~= nil and saved.PastureUnlocked == true)
 	player:SetAttribute("Vip", vip)
-	local character = player.Character
-	if not vip or not character then
-		return
+	local head = player.Character and player.Character:FindFirstChild("Head")
+	local tag = head and head:FindFirstChild("VIPTag")
+	if tag then
+		tag:Destroy()
 	end
-	local head = character:FindFirstChild("Head")
-	if not head then
-		head = character:WaitForChild("Head", 5)
-	end
-	if not head or not head:IsA("BasePart") or head:FindFirstChild("VIPTag") or player.Character ~= character then
-		return
-	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "VIPTag"
-	billboard.Size = UDim2.fromOffset(100, 36)
-	billboard.StudsOffset = Vector3.new(0, 2.6, 0)
-	billboard.MaxDistance = 120
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.Parent = billboard
-	UIStyle.text(label, MonetizationConfig.VIP.TagColor, nil, 3)
-	label.Text = MonetizationConfig.VIP.TagText
-	local shine = Instance.new("UIGradient")
-	shine.Rotation = 90
-	shine.Color = ColorSequence.new(Color3.fromRGB(255, 250, 200), Color3.fromRGB(255, 170, 20))
-	shine.Parent = label
-	billboard.Parent = head
 end
 
 local function clearCosmetic(character: Model)

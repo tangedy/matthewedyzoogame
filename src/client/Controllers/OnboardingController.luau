@@ -1,7 +1,7 @@
--- Contextual onboarding. The opening lesson is the wash and nothing else: a trail to the
--- baby elephant and a "Wash me!" marker. Pens, the cache, and the hose stand stay quiet
--- until those opening washes are done. After that the trail only returns for a parked
--- delivery truck or a hose the player can already afford.
+-- Contextual onboarding. The opening lesson is the wash and nothing else: a rainbow
+-- trail to the first pig and a "Wash me!" marker. Pens, the cache, and the hose stand
+-- stay quiet until those opening washes are done. After that the trail only returns
+-- for a parked delivery truck or a hose the player can already afford.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -100,7 +101,63 @@ end
 
 local function bayModel(): Instance?
 	local bays = Workspace:FindFirstChild("WashBays")
-	return bays and bayName and bays:FindFirstChild(bayName)
+	if bayName and bays then
+		local named = bays:FindFirstChild(bayName)
+		if named then
+			return named
+		end
+	end
+	if not bays then
+		return nil
+	end
+	for _, bay in bays:GetChildren() do
+		if bay:GetAttribute("OwnerUserId") == player.UserId then
+			bayName = bay.Name
+			return bay
+		end
+	end
+	return nil
+end
+
+-- The pig the player is supposed to wash, including while it is still walking in.
+local function washTarget(bay: Instance): BasePart?
+	local function partOf(model: Instance): BasePart?
+		if not model:IsA("Model") then
+			return nil
+		end
+		local primary = model.PrimaryPart
+		if primary then
+			return primary
+		end
+		local head = model:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			return head
+		end
+		return model:FindFirstChildWhichIsA("BasePart")
+	end
+	local animal = bay:FindFirstChild("Animal")
+	local standing = animal and partOf(animal)
+	if standing then
+		return standing
+	end
+	for _, child in bay:GetChildren() do
+		if child:GetAttribute("ScriptedIntro") == true then
+			local queued = partOf(child)
+			if queued then
+				return queued
+			end
+		end
+	end
+	local pad = bay:FindFirstChild("WashPosition")
+	return if pad and pad:IsA("BasePart") then pad else nil
+end
+
+-- Rainbow arrows for the first intro pig, and for the wash step if that lesson is still open.
+local function firstPigLesson(): boolean
+	if introLeft >= GameConfig.Intro.AutoSellCount then
+		return true
+	end
+	return guideStep == "Wash" and not tutorialCompleted
 end
 
 local function trailArm(name: string): Part
@@ -154,18 +211,29 @@ local function truckTarget(): BasePart?
 	return nil
 end
 
+local function cutscenePlaying(): boolean
+	if player:GetAttribute("InCutscene") == true then
+		return true
+	end
+	local gui = player:FindFirstChild("PlayerGui")
+	return gui ~= nil and gui:FindFirstChild("SpawnCutscene") ~= nil
+end
+
 -- Where the trail leads right now, and the instruction shown at the top of the screen.
 local function guideTarget(): (BasePart?, string?)
+	if cutscenePlaying() then
+		return nil, nil
+	end
 	local bay = bayModel()
 	if not bay then
 		return nil, nil
 	end
-	if guideStep == "Wash" then
-		local animal = bay:FindFirstChild("Animal")
-		if animal and animal:IsA("Model") and animal.PrimaryPart then
-			return animal.PrimaryPart, nil
+	if firstPigLesson() then
+		-- Rainbow arrows and the prompt lead to the first pig. Both go away once spraying starts.
+		if progress > 0 then
+			return nil, nil
 		end
-		return partNamed(bay, "WashPosition"), nil
+		return washTarget(bay), "CLEAN THE PIG"
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or affordable gear.
 	-- The truck gets the trail only: no text over the screen while it drives by.
@@ -224,7 +292,11 @@ local function updateTrail(dt: number)
 	local base = march % spacing
 	local generation = math.floor(march / spacing)
 
-	rayParams.FilterDescendantsInstances = { trail, character }
+	local ignore: { Instance } = { trail, character }
+	if target.Parent and target.Parent:IsA("Model") and target.Parent ~= Workspace then
+		table.insert(ignore, target.Parent)
+	end
+	rayParams.FilterDescendantsInstances = ignore
 	-- The floor under the player is the path's height; pads and ramps may lift a mark a
 	-- little, but nothing taller (fences, animals) can.
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -276,12 +348,26 @@ local function applyGuide(step: string)
 end
 
 local function refreshAnimalMarker()
-	local bay = bayModel()
-	local animal = bay and bay:FindFirstChild("Animal")
-	local head = animal and animal:GetAttribute("JobId") == jobId and animal:FindFirstChild("Head")
-	local show = not tutorialCompleted and washing and progress < 0.15 and head ~= nil
-	animalMarker.Adornee = if show then head :: BasePart else nil :: any
-	animalMarker.Enabled = show
+	local show = firstPigLesson() and progress <= 0 and not cutscenePlaying()
+	local head: BasePart? = nil
+	if show then
+		local bay = bayModel()
+		local animal = bay and bay:FindFirstChild("Animal")
+		if not (animal and animal:IsA("Model")) and bay then
+			for _, child in bay:GetChildren() do
+				if child:GetAttribute("ScriptedIntro") == true and child:IsA("Model") then
+					animal = child
+					break
+				end
+			end
+		end
+		local found = animal and animal:FindFirstChild("Head")
+		if found and found:IsA("BasePart") then
+			head = found
+		end
+	end
+	animalMarker.Adornee = head
+	animalMarker.Enabled = head ~= nil
 end
 
 local function bobMarker(marker: BillboardGui, offset: Vector3)
@@ -364,7 +450,7 @@ local function buildGui()
 		})
 	end
 
-	animalMarker = makeMarker("Wash me!", Color3.fromRGB(150, 230, 255))
+	animalMarker = makeMarker("Clean the pig!", Color3.fromRGB(150, 230, 255))
 	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
 end
 
@@ -421,6 +507,7 @@ function OnboardingController.init(initial: Types.InitialState)
 		if note.Visible and os.clock() >= noteUntil then
 			note.Visible = false
 		end
+		refreshAnimalMarker()
 		bobMarker(animalMarker, Vector3.new(0, 4, 0))
 		refreshStationMarker()
 		bobMarker(stationMarker, Vector3.new(0, 6, 0))

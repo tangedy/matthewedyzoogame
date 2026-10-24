@@ -74,18 +74,35 @@ function UIStyle.border(frame: GuiObject, thickness: number?)
 	corner.Parent = frame
 end
 
-local function rainbow(label: GuiObject)
+-- Bright rainbow that reads on a black chip or a black stroke. The client slides every
+-- gradient tagged RainbowTag, so the colours move.
+function UIStyle.rainbow(label: GuiObject)
 	local gradient = label:FindFirstChildOfClass("UIGradient") or Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 70, 70)),
-		ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 200, 50)),
-		ColorSequenceKeypoint.new(0.4, Color3.fromRGB(90, 255, 90)),
-		ColorSequenceKeypoint.new(0.6, Color3.fromRGB(70, 200, 255)),
-		ColorSequenceKeypoint.new(0.8, Color3.fromRGB(180, 90, 255)),
+		ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 150, 30)),
+		ColorSequenceKeypoint.new(0.34, Color3.fromRGB(255, 240, 60)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 255, 120)),
+		ColorSequenceKeypoint.new(0.67, Color3.fromRGB(50, 210, 255)),
+		ColorSequenceKeypoint.new(0.84, Color3.fromRGB(190, 80, 255)),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 70, 70)),
 	})
 	gradient.Parent = label
 	CollectionService:AddTag(gradient, UIStyle.RainbowTag)
+end
+
+-- Chat has no UIGradient, so the same rainbow is baked into rich text with a black stroke.
+local VIP_CHAT_COLORS = { "#FF2E46", "#FF9A1A", "#FFE600", "#3DFF6A", "#2AD4FF", "#7B5CFF", "#FF3DCE" }
+
+function UIStyle.vipChatTitle(text: string): string
+	local parts = {}
+	local count = math.max(#text, 1)
+	local step = math.max(1, math.floor(#VIP_CHAT_COLORS / count))
+	for i = 1, #text do
+		local index = ((i - 1) * step) % #VIP_CHAT_COLORS + 1
+		table.insert(parts, `<font color="{VIP_CHAT_COLORS[index]}">{string.sub(text, i, i)}</font>`)
+	end
+	return `<stroke color="#000000" thickness="2" joins="round">{table.concat(parts)}</stroke>`
 end
 
 -- Colours a label for a rarity tier: tier colour, Zoo God rainbow, Secret black/white.
@@ -94,7 +111,7 @@ function UIStyle.rarity(label: TextLabel, rarityKey: string)
 	UIStyle.text(label, if rarity.Rainbow then Color3.new(1, 1, 1) else rarity.Color, rarity.StrokeColor)
 	label.Text = rarity.DisplayName
 	if rarity.Rainbow then
-		rainbow(label)
+		UIStyle.rainbow(label)
 	end
 end
 
@@ -103,7 +120,7 @@ function UIStyle.mutation(label: TextLabel, mutationKey: string)
 	UIStyle.text(label, if mutation.Rainbow then Color3.new(1, 1, 1) else mutation.Color)
 	label.Text = mutation.DisplayName
 	if mutation.Rainbow then
-		rainbow(label)
+		UIStyle.rainbow(label)
 	end
 end
 
@@ -211,7 +228,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	end
 	label.Text = table.concat(rows, "\n")
 	if rainbowLabel then
-		rainbow(label)
+		UIStyle.rainbow(label)
 	end
 	return billboard
 end

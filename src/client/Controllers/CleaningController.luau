@@ -99,17 +99,51 @@ local function washingAnimalFrom(inst: Instance?): Model?
 	return nil
 end
 
-local function currentAnimal(): Model?
-	if not bayName then
+local function ownedBay(): Instance?
+	local bays = Workspace:FindFirstChild("WashBays")
+	if bayName and bays then
+		local named = bays:FindFirstChild(bayName)
+		if named then
+			return named
+		end
+	end
+	if not bays then
 		return nil
 	end
-	local bays = Workspace:FindFirstChild("WashBays")
-	local bay = bays and bays:FindFirstChild(bayName)
-	local animal = bay and bay:FindFirstChild("Animal")
-	if animal and animal:IsA("Model") and animal:GetAttribute("JobId") == jobId then
-		return animal
+	for _, bay in bays:GetChildren() do
+		if bay:GetAttribute("OwnerUserId") == player.UserId then
+			bayName = bay.Name
+			return bay
+		end
 	end
 	return nil
+end
+
+local function currentAnimal(): Model?
+	local bay = ownedBay()
+	local animal = bay and bay:FindFirstChild("Animal")
+	if not (animal and animal:IsA("Model")) then
+		return nil
+	end
+	local id = animal:GetAttribute("JobId")
+	if typeof(id) ~= "string" then
+		return nil
+	end
+	-- Named Animal only while a wash is active. Trust that over a snapshot that has
+	-- not arrived yet, or the hose stays quiet in the player's hand.
+	jobId = id
+	washing = true
+	return animal
+end
+
+-- The opening shot locks the hose. Once its gui is gone, a late server attribute must
+-- not keep the spray off: the server drops the lock when the timer is up.
+local function cutsceneLocked(): boolean
+	if player:GetAttribute("InCutscene") ~= true then
+		return false
+	end
+	local gui = player:FindFirstChild("PlayerGui")
+	return gui ~= nil and gui:FindFirstChild("SpawnCutscene") ~= nil
 end
 
 local function characterExclusions(): { Instance }
@@ -445,7 +479,7 @@ end
 local function onHeartbeat()
 	local camera = Workspace.CurrentCamera
 	local root = getRoot()
-	if not camera or not root or player:GetAttribute("InCutscene") == true then
+	if not camera or not root or cutsceneLocked() then
 		stopEffects()
 		return
 	end

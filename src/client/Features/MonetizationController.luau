@@ -196,7 +196,7 @@ local function refreshTimers()
 		2,
 		Color3.fromRGB(255, 140, 40),
 		speedEnds,
-		if speedLeft > 0 then `SPEED 8X {clock(speedLeft)}` else ""
+		if speedLeft > 0 then `SPEED {MonetizationConfig.Speed.Multiplier}X {clock(speedLeft)}` else ""
 	)
 	local luckEnds = state.LuckEndsAt or 0
 	local luckLeft = luckEnds - now

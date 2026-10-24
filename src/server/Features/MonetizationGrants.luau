@@ -168,7 +168,7 @@ local function grantLimited(
 	PlayerDataService.markDirty(player)
 	local name = AnimalConfig.Animals[species].DisplayName
 	local side = if species == "Axolotl" then MonetizationState.unlockSidePasture(player) else false
-	local bonus = if side then " Right pasture unlocked forever!" else ""
+	local bonus = if side then " Large cage unlocked!" else ""
 	if MonetizationGrants.deliverPending(player) > 0 then
 		return true, `You got a Limited {name}!{bonus}`
 	end
@@ -258,7 +258,7 @@ function MonetizationGrants.product(
 		local cfg = MonetizationConfig.Speed
 		saved.SpeedEndsAt = extendUnix(saved.SpeedEndsAt, cfg.Seconds, cfg.MaxSeconds)
 		MonetizationGrants.watchSpeed(player)
-		return true, `8x Speed for {clock(saved.SpeedEndsAt - os.time())}!`
+		return true, `{cfg.Multiplier}x Speed for {clock(saved.SpeedEndsAt - os.time())}!`
 	elseif kind == "IncredibleLuck" then
 		local cfg = MonetizationConfig.IncredibleLuck
 		saved.LuckEndsAt = extendUnix(saved.LuckEndsAt, cfg.Seconds, cfg.MaxSeconds)
@@ -307,7 +307,7 @@ function MonetizationGrants.product(
 		return true, "Clean Now is saved for the next animal this price covers."
 	elseif kind == "SidePasture" then
 		MonetizationState.unlockSidePasture(player)
-		return true, "Right pasture unlocked forever!"
+		return true, "Large cage unlocked!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil
@@ -315,29 +315,7 @@ end
 
 -- Game passes ---------------------------------------------------------------------------
 
-local function addVipTag(character: Model)
-	local head = character:WaitForChild("Head", 10)
-	if not head or not head:IsA("BasePart") or head:FindFirstChild("VIPTag") then
-		return
-	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "VIPTag"
-	billboard.Size = UDim2.fromOffset(100, 36)
-	billboard.StudsOffset = Vector3.new(0, 2.6, 0)
-	billboard.MaxDistance = 80
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.Parent = billboard
-	UIStyle.text(label, MonetizationConfig.VIP.TagColor, nil, 3)
-	label.Text = MonetizationConfig.VIP.TagText
-	local shine = Instance.new("UIGradient")
-	shine.Rotation = 90
-	shine.Color = ColorSequence.new(Color3.fromRGB(255, 250, 200), Color3.fromRGB(255, 170, 20))
-	shine.Parent = label
-	billboard.Parent = head
-end
-
--- 8x speed. One Janitor per player holds the respawn listener and the expiry timer.
+-- 2x speed. One Janitor per player holds the respawn listener and the expiry timer.
 -- Cleanup restores nothing by itself; clearSpeed puts WalkSpeed back, then Cleanup
 -- drops the listener so a later spawn is not boosted.
 local speedJanitors: { [Player]: Janitor.Janitor } = {}
@@ -476,12 +454,13 @@ function MonetizationGrants.applyPass(player: Player, key: string)
 	if not session or not player.Parent then
 		return
 	end
-	local first = not session.OwnedPasses[key]
 	session.OwnedPasses[key] = true
-	if key == "VIPKeeper" and first then
-		table.insert(session.Connections, player.CharacterAdded:Connect(addVipTag))
-		if player.Character then
-			task.spawn(addVipTag, player.Character)
+	if key == "VIPKeeper" then
+		player:SetAttribute("Vip", true)
+		local head = player.Character and player.Character:FindFirstChild("Head")
+		local tag = head and head:FindFirstChild("VIPTag")
+		if tag then
+			tag:Destroy()
 		end
 	end
 end
@@ -500,7 +479,7 @@ function MonetizationGrants.grantPass(player: Player, key: string, simulated: bo
 	local pass = MonetizationConfig.PassesByKey[key]
 	local text = `{pass.DisplayName} unlocked!`
 	if pasture then
-		text ..= " Left pasture unlocked forever!"
+		text ..= " Medium cages unlocked!"
 	end
 	MonetizationState.notify(player, text, true)
 	MonetizationState.push(player)

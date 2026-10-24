@@ -30,7 +30,8 @@ local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 -- v7: consumable buffs store absolute expiry timestamps in Extra.Monetization
 -- (SpeedEndsAt, LuckEndsAt). Removed passes are dropped when that table is read,
 -- because they are no longer in the pass catalog.
-local SCHEMA_VERSION = 7
+-- v8: the two flex road pastures became four cages (large, medium, medium, large).
+local SCHEMA_VERSION = 8
 
 export type CachedAnimal = {
 	Id: string,
@@ -158,7 +159,7 @@ local function isValidZooSize(size: number): boolean
 	return false
 end
 
--- True when this profile has already spent Robux, so pasture pens (past MaxPens) are real.
+-- True when this profile has already spent Robux, so the medium road cages stay open.
 -- Kept in step with MonetizationState's PastureUnlocked inference.
 local function spentRobux(extra: any): boolean
 	if typeof(extra) ~= "table" then
@@ -201,10 +202,6 @@ local function spentRobux(extra: any): boolean
 		or positive(mon.LuckEndsAt)
 end
 
-local FLEX_LEFT = GameConfig.Zoo.MaxPens + 1
-local FLEX_RIGHT = FLEX_LEFT + 1
-
--- The right twin pasture stays if it was bought, or if this profile has an Axolotl.
 local function sidePastureOpen(raw: any): boolean
 	local extra = raw.Extra
 	local mon = if typeof(extra) == "table" then extra.Monetization else nil
@@ -343,28 +340,23 @@ local function sanitize(raw: any): SavedData
 		local usedSlots: { [number]: number } = {}
 		local spent = spentRobux(raw.Extra)
 		local sideOpen = sidePastureOpen(raw)
-		for _, animal in raw.Animals do
-			local pen = if typeof(animal) == "table" then cleanCount(animal.Pen) else 0
-			local inZoo = pen >= 1 and pen <= data.ZooSize
-			local inLeft = spent and pen == FLEX_LEFT
-			local inRight = sideOpen and pen == FLEX_RIGHT
-			if not inZoo and not inLeft and not inRight then
-				continue
+		local legacyRoad = version < 8
+		local oldLeft = GameConfig.Zoo.MaxPens + 1
+		local oldRight = oldLeft + 1
+		local held = {}
+		local function ownsRoad(cage: any): boolean
+			if cage.Unlock == "AnyRobux" then
+				return spent or sideOpen
+			elseif cage.Unlock == "Axolotl" then
+				return sideOpen
+			elseif cage.Unlock == "Cash" then
+				local mon = raw.Extra
+				local savedMon = if typeof(mon) == "table" then mon.Monetization else nil
+				return typeof(savedMon) == "table" and savedMon.CashPastureUnlocked == true
 			end
-			local species, mutation = validAnimal(animal)
-			if not species or not mutation then
-				continue
-			end
-			local slots = 1
-			if pen == FLEX_LEFT or pen == FLEX_RIGHT then
-				slots = AnimalConfig.flexSlots(AnimalConfig.Animals[species].BodyClass) or 0
-				if slots == 0 or (usedSlots[pen] or 0) + slots > AnimalConfig.flexCapacity() then
-					continue
-				end
-			elseif usedSlots[pen] then
-				continue
-			end
-			usedSlots[pen] = (usedSlots[pen] or 0) + slots
+			return false
+		end
+		local function pushAnimal(animal: any, species: string, mutation: string, pen: number)
 			table.insert(data.Animals, {
 				Id = animal.Id,
 				Species = species,
@@ -373,6 +365,99 @@ local function sanitize(raw: any): SavedData
 				Pending = cleanCount(animal.Pending),
 			})
 			data.Index[PlayerDataService.indexKey(species, mutation)] = true
+		end
+		for _, animal in raw.Animals do
+			local pen = if typeof(animal) == "table" then cleanCount(animal.Pen) else 0
+			local species, mutation = validAnimal(animal)
+			if not species or not mutation then
+				continue
+			end
+			if legacyRoad and (pen == oldLeft or pen == oldRight) then
+				table.insert(held, {
+					Order = #held,
+					Pen = pen,
+					Id = animal.Id,
+					Species = species,
+					Mutation = mutation,
+					Pending = cleanCount(animal.Pending),
+					Body = AnimalConfig.Animals[species].BodyClass,
+				})
+				continue
+			end
+			local cage = GameConfig.Zoo.RoadCages[pen - GameConfig.Zoo.MaxPens]
+			local inZoo = pen >= 1 and pen <= data.ZooSize
+			if cage then
+				if not ownsRoad(cage) or usedSlots[pen] then
+					continue
+				end
+				if not AnimalConfig.fits(AnimalConfig.Animals[species].BodyClass, cage.Class) then
+					continue
+				end
+			elseif not inZoo or usedSlots[pen] then
+				continue
+			end
+			usedSlots[pen] = 1
+			pushAnimal(animal, species, mutation, pen)
+		end
+		if #held > 0 then
+			table.sort(held, function(a, b)
+				local aRight = a.Body == "ExtraLarge" and a.Pen == oldRight
+				local bRight = b.Body == "ExtraLarge" and b.Pen == oldRight
+				if aRight ~= bRight then
+					return aRight
+				end
+				if a.Pen ~= b.Pen then
+					return a.Pen < b.Pen
+				end
+				return a.Order < b.Order
+			end)
+			local axolotlPen: number? = nil
+			local cashPen: number? = nil
+			local mediumPens = {}
+			for index, cage in GameConfig.Zoo.RoadCages do
+				local pen = GameConfig.Zoo.MaxPens + index
+				if cage.Unlock == "Axolotl" then
+					axolotlPen = pen
+				elseif cage.Unlock == "Cash" then
+					cashPen = pen
+				else
+					table.insert(mediumPens, pen)
+				end
+			end
+			local function markCash()
+				if typeof(data.Extra.Monetization) ~= "table" then
+					data.Extra.Monetization = {}
+				end
+				data.Extra.Monetization.CashPastureUnlocked = true
+			end
+			local function parkSpare(entry)
+				data.Coins += entry.Pending
+				if #data.Overflow < 8 then
+					table.insert(data.Overflow, {
+						Id = entry.Id,
+						Species = entry.Species,
+						Mutation = entry.Mutation,
+					})
+				end
+			end
+			local mediumCount = 0
+			local anyRobux = spent or sideOpen
+			for _, entry in held do
+				if entry.Body == "Large" and anyRobux and mediumCount < #mediumPens then
+					mediumCount += 1
+					usedSlots[mediumPens[mediumCount]] = 1
+					pushAnimal(entry, entry.Species, entry.Mutation, mediumPens[mediumCount])
+				elseif entry.Body == "ExtraLarge" and sideOpen and axolotlPen and not usedSlots[axolotlPen] then
+					usedSlots[axolotlPen] = 1
+					pushAnimal(entry, entry.Species, entry.Mutation, axolotlPen)
+				elseif entry.Body == "ExtraLarge" and cashPen and not usedSlots[cashPen] then
+					usedSlots[cashPen] = 1
+					markCash()
+					pushAnimal(entry, entry.Species, entry.Mutation, cashPen)
+				else
+					parkSpare(entry)
+				end
+			end
 		end
 	end
 
@@ -423,6 +508,11 @@ local function sanitize(raw: any): SavedData
 	end
 	if played and data.IntroWashesLeft > 0 then
 		data.IntroWashesLeft = 0
+	end
+	-- The rainbow trail is the wash step. Keep it on until the opening pigs are done,
+	-- including a save that was marked finished before the first one.
+	if data.IntroWashesLeft > 0 then
+		data.GuideStep = "Wash"
 	end
 	if raw.CutsceneSeen == nil then
 		data.CutsceneSeen = played

@@ -103,42 +103,49 @@ local function penOf(zoo: Zoo, index: number): Model?
 	return if pen and pen:IsA("Model") then pen else nil
 end
 
-local FLEX_LEFT = GameConfig.Zoo.MaxPens + 1
-local FLEX_RIGHT = FLEX_LEFT + 1
+local function monetization(data: PlayerDataService.SavedData): any
+	local mon = data.Extra.Monetization
+	return if typeof(mon) == "table" then mon else nil
+end
 
-local function flexSide(index: number): string?
-	if index == FLEX_LEFT then
-		return "Left"
-	elseif index == FLEX_RIGHT then
-		return "Right"
-	end
-	return nil
+local function roadCage(index: number): any
+	return GameConfig.Zoo.RoadCages[index - GameConfig.Zoo.MaxPens]
 end
 
 local function pastureUnlocked(data: PlayerDataService.SavedData): boolean
-	local mon = data.Extra.Monetization
-	return typeof(mon) == "table" and mon.PastureUnlocked == true
+	local mon = monetization(data)
+	return mon ~= nil and mon.PastureUnlocked == true
 end
 
 local function sidePastureUnlocked(data: PlayerDataService.SavedData): boolean
-	local mon = data.Extra.Monetization
-	return typeof(mon) == "table" and mon.SidePastureUnlocked == true
+	local mon = monetization(data)
+	return mon ~= nil and mon.SidePastureUnlocked == true
+end
+
+local function cashPastureUnlocked(data: PlayerDataService.SavedData): boolean
+	local mon = monetization(data)
+	return mon ~= nil and mon.CashPastureUnlocked == true
 end
 
 local function penOpen(data: PlayerDataService.SavedData, index: number): boolean
 	if index >= 1 and index <= data.ZooSize then
 		return true
 	end
-	if flexSide(index) == "Left" then
-		return pastureUnlocked(data)
+	local cage = roadCage(index)
+	if not cage then
+		return false
 	end
-	if flexSide(index) == "Right" then
+	if cage.Unlock == "AnyRobux" then
+		return pastureUnlocked(data)
+	elseif cage.Unlock == "Axolotl" then
 		return sidePastureUnlocked(data)
+	elseif cage.Unlock == "Cash" then
+		return cashPastureUnlocked(data)
 	end
 	return false
 end
 
-local LAST_PEN = GameConfig.Zoo.MaxPens + GameConfig.Zoo.FlexPasturePens
+local LAST_PEN = GameConfig.Zoo.MaxPens + #GameConfig.Zoo.RoadCages
 
 local function cacheSlot(zoo: Zoo, index: number): BasePart?
 	local folder = zoo.Bay:FindFirstChild("Cache")
@@ -200,16 +207,6 @@ local function animalsInPen(data: PlayerDataService.SavedData, pen: number): { O
 		end
 	end
 	return list
-end
-
-local function flexUsed(data: PlayerDataService.SavedData, pen: number): number
-	local used = 0
-	for _, animal in data.Animals do
-		if animal.Pen == pen then
-			used += AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) or 0
-		end
-	end
-	return used
 end
 
 local function totalIncome(data: PlayerDataService.SavedData): number
@@ -294,13 +291,13 @@ local function refreshPens(player: Player)
 			continue
 		end
 		local unlocked = penOpen(data, i)
-		local flex = flexSide(i)
-		WorldBuilder.setShown(pen, if flex then true else unlocked)
+		local cage = roadCage(i)
+		WorldBuilder.setShown(pen, if cage then true else unlocked)
 		local lock = pen:FindFirstChild("FlexLock")
 		if lock then
-			WorldBuilder.setShown(lock, flex ~= nil and not unlocked)
+			WorldBuilder.setShown(lock, cage ~= nil and not unlocked)
 		end
-		if not unlocked and not flex then
+		if not unlocked and not cage then
 			continue
 		end
 		local occupants = animalsInPen(data, i)
@@ -310,17 +307,7 @@ local function refreshPens(player: Player)
 		local status = floor:FindFirstChild("Status")
 		local text = status and status:FindFirstChild("Label") :: TextLabel?
 		if text then
-			if not unlocked then
-				text.Text = ""
-			elseif
-				flex
-				and #occupants == 1
-				and AnimalConfig.flexSlots(AnimalConfig.Animals[animal.Species].BodyClass) == 1
-			then
-				text.Text = "1/2"
-			else
-				text.Text = if animal then "" else "EMPTY"
-			end
+			text.Text = if not unlocked or animal then "" else "EMPTY"
 		end
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
@@ -340,7 +327,7 @@ local function refreshPens(player: Player)
 		local prompt2 = post and post:FindFirstChild("PenPrompt2") :: ProximityPrompt?
 		local unlockPrompt = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
 		if unlockPrompt then
-			unlockPrompt.Enabled = flex == "Right" and not unlocked
+			unlockPrompt.Enabled = cage ~= nil and cage.Unlock == "Cash" and not unlocked
 		end
 		if prompt2 then
 			prompt2.Enabled = false
@@ -375,15 +362,10 @@ local function refreshPens(player: Player)
 			local bodyClass = AnimalConfig.Animals[carried.Species].BodyClass
 			prompt.Enabled = true
 			prompt.ObjectText = ZooService.label(carried.Species, carried.Mutation)
-			local flexFull = flex ~= nil
-				and (flexUsed(data, i) + (AnimalConfig.flexSlots(bodyClass) or 0)) > AnimalConfig.flexCapacity()
 			if not AnimalConfig.fits(bodyClass, penClass) then
 				prompt.ActionText = AnimalConfig.placementHint(bodyClass, penClass)
 				prompt.HoldDuration = 0
-			elseif flex and flexFull then
-				prompt.ActionText = "Two mediums or one large"
-				prompt.HoldDuration = 0
-			elseif flex or not animal then
+			elseif not animal then
 				prompt.ActionText = "Place"
 				prompt.HoldDuration = 0
 			else
@@ -504,24 +486,9 @@ function ZooService.refresh(player: Player)
 	refreshAll(player)
 end
 
-local function slotFor(pen: Model, data: PlayerDataService.SavedData, animal: OwnedAnimal): BasePart?
+local function slotFor(pen: Model, _data: PlayerDataService.SavedData, _animal: OwnedAnimal): BasePart?
 	local slot = pen:FindFirstChild("Slot") :: BasePart?
-	if pen:GetAttribute("PenClass") ~= "PastureFlex" then
-		return slot
-	end
-	if AnimalConfig.Animals[animal.Species].BodyClass ~= "Large" then
-		return slot
-	end
-	local ids = {}
-	for _, other in data.Animals do
-		if other.Pen == animal.Pen and AnimalConfig.Animals[other.Species].BodyClass == "Large" then
-			table.insert(ids, other.Id)
-		end
-	end
-	table.sort(ids)
-	local index = table.find(ids, animal.Id) or 1
-	local named = pen:FindFirstChild(if index == 1 then "SlotMedium1" else "SlotMedium2")
-	return if named and named:IsA("BasePart") then named else slot
+	return slot
 end
 
 local function seatPen(zoo: Zoo, data: PlayerDataService.SavedData, penIndex: number)
@@ -603,39 +570,54 @@ local function sendSoldHome(zoo: Zoo, model: Model?)
 	end)
 end
 
--- Pushes the oldest waiting animal out of the cache so a bought animal fits. Washes never
--- call this: an uncollected animal stays put when the next wash finishes.
+-- Sells the oldest unpaid animal waiting in the cache and returns its model, still standing
+-- in the slot. The caller walks it out, then walks whoever is left into the open slot.
+local function takeOldestUnpaid(player: Player): Model?
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
+		return nil
+	end
+	for _, record in waitingRecords(zoo, data) do
+		if record.Paid then
+			continue
+		end
+		removeCached(data, record.Id)
+		local model = zoo.CacheModels[record.Id]
+		if model then
+			zoo.CacheModels[record.Id] = nil
+		end
+		EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
+		Hooks.fire(
+			"AnimalSold",
+			player,
+			record.Species,
+			record.Mutation,
+			ZooService.sellValue(record.Species, record.Mutation)
+		)
+		PlayerDataService.markDirty(player)
+		return model
+	end
+	return nil
+end
+
+-- Pushes the oldest unpaid animal out so a bought animal fits. A full wash cache sells
+-- the same way before the new animal is allowed in.
 local function makeCacheRoom(player: Player): boolean
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	if not zoo or not data then
 		return false
 	end
-	local list = waitingRecords(zoo, data)
-	if #list < GameConfig.Cache.Slots then
+	if #waitingRecords(zoo, data) < GameConfig.Cache.Slots then
 		return true
 	end
-	for _, record in list do
-		if not record.Paid then
-			removeCached(data, record.Id)
-			local model = zoo.CacheModels[record.Id]
-			if model then
-				zoo.CacheModels[record.Id] = nil
-			end
-			EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
-			Hooks.fire(
-				"AnimalSold",
-				player,
-				record.Species,
-				record.Mutation,
-				ZooService.sellValue(record.Species, record.Mutation)
-			)
-			PlayerDataService.markDirty(player)
-			sendSoldHome(zoo, model)
-			return true
-		end
+	local model = takeOldestUnpaid(player)
+	if not model then
+		return false
 	end
-	return false
+	sendSoldHome(zoo, model)
+	return true
 end
 
 local fireOverflow: (player: Player) -> ()
@@ -713,11 +695,14 @@ local function placeCarried(player: Player, penIndex: number)
 		return
 	end
 	if not penOpen(data, penIndex) then
-		local side = flexSide(penIndex)
-		if side == "Left" then
-			purchaseResult:FireClient(player, false, "Spend any Robux to unlock this pasture.")
-		elseif side == "Right" then
-			purchaseResult:FireClient(player, false, "Unlock this pasture for 99 Robux, or with the Axolotl.")
+		local cage = roadCage(penIndex)
+		if cage and cage.Unlock == "AnyRobux" then
+			purchaseResult:FireClient(player, false, "Spend any Robux to unlock the medium cages.")
+		elseif cage and cage.Unlock == "Axolotl" then
+			purchaseResult:FireClient(player, false, "The Axolotl unlocks this large cage.")
+		elseif cage and cage.Unlock == "Cash" then
+			local price = cage.Price or 500000
+			purchaseResult:FireClient(player, false, `This large cage costs {UIStyle.formatMoney(price)}.`)
 		end
 		return
 	end
@@ -729,23 +714,15 @@ local function placeCarried(player: Player, penIndex: number)
 		purchaseResult:FireClient(player, false, `{AnimalConfig.placementHint(bodyClass, penClass)}.`)
 		return
 	end
-	if flexSide(penIndex) then
-		local need = AnimalConfig.flexSlots(bodyClass) or 0
-		if flexUsed(data, penIndex) + need > AnimalConfig.flexCapacity() then
-			purchaseResult:FireClient(player, false, "This pasture holds two mediums or one large.")
-			return
-		end
-	else
-		local old, oldIndex = animalInPen(data, penIndex)
-		if old and oldIndex then
-			table.remove(data.Animals, oldIndex)
-			EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
-			Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
-			local oldModel = zoo.PenModels[old.Id]
-			if oldModel then
-				zoo.PenModels[old.Id] = nil
-				AnimalService.poof(oldModel)
-			end
+	local old, oldIndex = animalInPen(data, penIndex)
+	if old and oldIndex then
+		table.remove(data.Animals, oldIndex)
+		EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
+		Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
+		local oldModel = zoo.PenModels[old.Id]
+		if oldModel then
+			zoo.PenModels[old.Id] = nil
+			AnimalService.poof(oldModel)
 		end
 	end
 	local _, cacheIndex = findCached(data, record.Id)
@@ -919,6 +896,32 @@ local function expand(player: Player)
 	purchaseResult:FireClient(player, true, `{step.Barn} barn unlocked!`)
 end
 
+local function buyCashCage(player: Player)
+	local data = PlayerDataService.get(player)
+	if not data or cashPastureUnlocked(data) then
+		return
+	end
+	local price = 500000
+	for _, cage in GameConfig.Zoo.RoadCages do
+		if cage.Unlock == "Cash" and typeof(cage.Price) == "number" then
+			price = cage.Price
+		end
+	end
+	if not EconomyService.spend(player, price) then
+		purchaseResult:FireClient(player, false, `This cage costs {UIStyle.formatMoney(price)}.`)
+		return
+	end
+	local mon = data.Extra.Monetization
+	if typeof(mon) ~= "table" then
+		mon = {}
+		data.Extra.Monetization = mon
+	end
+	mon.CashPastureUnlocked = true
+	PlayerDataService.saveNow(player)
+	refreshAll(player)
+	purchaseResult:FireClient(player, true, "Large cage unlocked!")
+end
+
 -- Washed animals ------------------------------------------------------------------------
 
 local function overflowCFrame(zoo: Zoo, index: number): CFrame?
@@ -926,9 +929,7 @@ local function overflowCFrame(zoo: Zoo, index: number): CFrame?
 	if not slot then
 		return nil
 	end
-	-- In a line in front of the cache, toward the road, on open grass beside the queue lane.
-	-- The slot faces along the wash road, so its -X runs toward the street.
-	return slot.CFrame * CFrame.new(-8 * index, 0, 0)
+	return slot.CFrame * CFrame.new(6 * index, 0, 0)
 end
 
 function fireOverflow(player: Player)
@@ -961,10 +962,9 @@ local function parkOverflow(zoo: Zoo, record: CachedAnimal, model: Model, index:
 	if not at then
 		return
 	end
-	local slot = cacheSlot(zoo, 1)
-	if walk and slot and model.Parent then
-		-- Fresh from the wash: along the wash road to the cache, then out to its spot.
-		AnimalService.walkCorners(model, { slot.CFrame, at }, GameConfig.DepartDuration * 0.6)
+	if walk and model.Parent then
+		-- Fresh from the wash: across the drive to the cache arm, then out to its spot.
+		AnimalService.walkCorners(model, ZooService.fromWash(zoo.Bay, { at }), GameConfig.DepartDuration * 0.6)
 	end
 	if model.Parent then
 		model:PivotTo(at)
@@ -1104,8 +1104,23 @@ function ZooService.noteIntroWash(player: Player)
 	yardRevealed:FireClient(player)
 end
 
--- The washed model has finished celebrating. Intro animals are sold on the spot.
--- Otherwise the cache takes it, or it waits beside the cache until Keep or Auto-Sell.
+-- A route out of the wash spot: along the drive's cross piece to the cache arm first
+-- (WorldBuilder's CacheTurn), so animals follow the U instead of cutting across the grass.
+function ZooService.fromWash(bay: Instance, points: { CFrame }): { CFrame }
+	local turn = bay:FindFirstChild("CacheTurn")
+	if not turn or not turn:IsA("BasePart") then
+		return points
+	end
+	local route = { turn.CFrame }
+	for _, point in points do
+		table.insert(route, point)
+	end
+	return route
+end
+
+-- The washed model has finished celebrating. Intro animals are sold on the spot and never
+-- enter the cache. Once the yard is open, two animals can wait; a third sells the oldest
+-- and the one behind walks up into that slot.
 function ZooService.receiveWashed(player: Player, model: Model, species: string, mutation: string)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -1119,20 +1134,54 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 		Hooks.fire("AnimalSold", player, species, mutation, value)
 		PlayerDataService.markDirty(player)
 		introAutoSold:FireClient(player, value, data.IntroWashesLeft)
-		-- Along the wash road to the exit road, then down it: the same route as a sale.
+		-- Across the drive and down the cache arm: the same way out as a sale.
 		local sold = zoo.Bay:FindFirstChild("SoldSpot")
 		local back = zoo.Bay:FindFirstChild("RoadReturn")
 		if sold and sold:IsA("BasePart") and back and back:IsA("BasePart") and model.Parent then
-			AnimalService.walkCorners(model, { sold.CFrame, back.CFrame }, GameConfig.DepartDuration * 0.6)
+			local route = ZooService.fromWash(zoo.Bay, { sold.CFrame, back.CFrame })
+			AnimalService.walkCorners(model, route, GameConfig.DepartDuration * 0.6)
 		end
 		AnimalService.destroy(model)
 		return
 	end
 	-- Back to cache size before it walks over, so a washed giant doesn't flatten the yard.
 	AnimalService.resize(model, 1, GameConfig.Cache.MaxLength)
+	if #waitingRecords(zoo, data) >= GameConfig.Cache.Slots then
+		local soldModel = takeOldestUnpaid(player)
+		if soldModel then
+			local soldSpot = zoo.Bay:FindFirstChild("SoldSpot")
+			if soldSpot and soldSpot:IsA("BasePart") and soldModel.Parent then
+				AnimalService.walkCorners(soldModel, { soldSpot.CFrame }, 0.55)
+			end
+			local leaving = soldModel
+			task.spawn(function()
+				if leaving.Parent then
+					AnimalService.sold(leaving)
+				end
+				local road = zoo.Bay:FindFirstChild("RoadReturn")
+				if road and road:IsA("BasePart") and leaving.Parent then
+					AnimalService.walkCorners(leaving, { road.CFrame }, 0.7, 0.55)
+				end
+				if leaving.Parent then
+					leaving:Destroy()
+				end
+			end)
+			local current = PlayerDataService.get(player)
+			if current and zoos[player] == zoo then
+				for index, waiting in waitingRecords(zoo, current) do
+					local cached = zoo.CacheModels[waiting.Id]
+					local slotPart = cacheSlot(zoo, index)
+					if cached and slotPart and cached.Parent then
+						AnimalService.walkCorners(cached, { slotPart.CFrame }, 0.6)
+					end
+				end
+				refreshCache(player)
+			end
+		end
+	end
 	local record, slot = ZooService.addToCache(player, species, mutation)
 	if record and slot then
-		AnimalService.walkCorners(model, { slot }, GameConfig.DepartDuration)
+		AnimalService.walkCorners(model, ZooService.fromWash(zoo.Bay, { slot }), GameConfig.DepartDuration)
 		if zoos[player] == zoo and model.Parent then
 			ZooService.adoptIntoCache(player, record, model)
 			return
@@ -1172,8 +1221,8 @@ end
 
 -- Adds an animal to the cache. Returns the record and the slot it should walk to.
 -- `options.Evict` is for a Robux animal that has to fit: it sells the oldest unpaid animal
--- already waiting. A wash never sets it. Washes that don't fit become an overflow instead,
--- so the animal already in the cache stays.
+-- already waiting. A wash that finds both slots full sells that animal first, then the
+-- animal behind it steps forward. Paid animals are left for the keep-or-sell prompt.
 -- `options.Paid`: Robux animals, which are never pushed out themselves.
 function ZooService.addToCache(
 	player: Player,
@@ -1394,6 +1443,14 @@ function ZooService.attach(player: Player, bay: Model)
 				local character = player.Character
 				if character and hit:IsDescendantOf(character) then
 					collect(player, i)
+				end
+			end)
+		end
+		local unlock = post and post:FindFirstChild("UnlockPrompt") :: ProximityPrompt?
+		if unlock then
+			connect(unlock.Triggered, function(who: Player)
+				if who == player then
+					buyCashCage(player)
 				end
 			end)
 		end

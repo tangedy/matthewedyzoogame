@@ -25,13 +25,14 @@ export type Saved = {
 	AutoCollectLeft: number, -- seconds; only counts down while the player is online
 	LuckyLeft: number, -- walk-ins
 	-- Absolute os.time() expiries. 0 means the buff is off. They keep counting while offline.
-	SpeedEndsAt: number, -- 8x walk speed
+	SpeedEndsAt: number, -- 2x walk speed
 	LuckEndsAt: number, -- Incredible Luck (rare-animal drop weights)
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
-	PastureUnlocked: boolean, -- any Robux spend; the left pen after the stalls stays open
-	SidePastureUnlocked: boolean, -- 99 Robux, or the Axolotl; the right twin pen stays open
+	PastureUnlocked: boolean, -- any Robux spend; both medium road cages stay open
+	SidePastureUnlocked: boolean, -- the Axolotl; the first large road cage stays open
+	CashPastureUnlocked: boolean, -- $500K; the last large road cage stays open
 }
 
 export type Session = {
@@ -102,6 +103,7 @@ local function sanitize(raw: any): Saved
 		PendingAnimals = {},
 		PastureUnlocked = false,
 		SidePastureUnlocked = false,
+		CashPastureUnlocked = false,
 	}
 	if typeof(raw) ~= "table" then
 		return saved
@@ -163,6 +165,7 @@ local function sanitize(raw: any): Saved
 		end
 	end
 	saved.SidePastureUnlocked = raw.SidePastureUnlocked == true or saved.Once.SidePasture == true or pendingAxolotl
+	saved.CashPastureUnlocked = raw.CashPastureUnlocked == true
 	return saved
 end
 
@@ -288,7 +291,7 @@ function MonetizationState.ownsPass(player: Player, key: string): boolean
 	return saved ~= nil and saved.Passes[key] == true
 end
 
--- The left pen after the stalls stays open once any Robux has been spent.
+-- Both medium road cages stay open once any Robux has been spent.
 -- Returns true only the first time, so the caller can announce it.
 function MonetizationState.unlockPasture(player: Player): boolean
 	local saved = MonetizationState.saved(player)
@@ -301,7 +304,7 @@ function MonetizationState.unlockPasture(player: Player): boolean
 	return true
 end
 
--- The right twin pen. 99 Robux, or buying the Axolotl. Returns true only the first time.
+-- The first large road cage. Buying the Axolotl, or an older right-pasture receipt.
 function MonetizationState.unlockSidePasture(player: Player): boolean
 	local saved = MonetizationState.saved(player)
 	if not saved or saved.SidePastureUnlocked then
