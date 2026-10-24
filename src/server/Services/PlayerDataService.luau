@@ -312,7 +312,15 @@ local function sanitize(raw: any): SavedData
 			zooSize = 10
 		end
 	end
-	data.ZooSize = if isValidZooSize(zooSize) then zooSize else GameConfig.Zoo.StartPens
+	-- Pen counts from older layouts drop to the largest step this layout still has.
+	local validSize = GameConfig.Zoo.StartPens
+	for size = math.min(zooSize, GameConfig.Zoo.MaxPens), GameConfig.Zoo.StartPens, -1 do
+		if isValidZooSize(size) then
+			validSize = size
+			break
+		end
+	end
+	data.ZooSize = validSize
 	data.NextAnimalId = math.max(cleanCount(raw.NextAnimalId), 1)
 
 	if typeof(raw.Index) == "table" then

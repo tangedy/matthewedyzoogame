@@ -86,26 +86,17 @@ local GameConfig = {
 
 	-- Zoo. Pens 1-6 are the face stalls beside the sidewalk. Each later step is a barn.
 	Zoo = {
-		MaxPens = 24,
+		MaxPens = 14,
 		StartPens = 6,
-		-- The cage upgrade (the RoadCages step in Expansions): two stalls and two medium pens
-		-- right after the small barn, pens MaxPens+1.. in this order. The order is the save
-		-- format; Unlock is only read when migrating saves from before they were an upgrade.
-		RoadCages = {
-			{ Side = "Left", Class = "Medium", Unlock = "Axolotl" },
-			{ Side = "Left", Class = "Standard", Unlock = "AnyRobux" },
-			{ Side = "Right", Class = "Standard", Unlock = "AnyRobux" },
-			{ Side = "Right", Class = "Medium", Unlock = "Cash" },
-		},
-		-- In order along the walkway. Pens steps open pens up to that count; the RoadCages step
-		-- opens the four road cages. Each step's index is its UnlockSpot in WorldBuilder.
+		-- The old road cages are gone. The list stays (empty) because the save migration reads it.
+		RoadCages = {} :: { { Side: string, Class: string, Unlock: string } },
+		-- In order along the walkway, one pen per side per step so both sides stay even. Each
+		-- step's index is its UnlockSpot in WorldBuilder.
 		Expansions = {
-			{ Pens = 10, Price = 25000, Barn = "Small" }, -- +4 standard lanes, two each side
-			{ RoadCages = true, Price = 100000, Barn = "Cage" }, -- two stalls and two medium pens
-			{ Pens = 14, Price = 500000, Barn = "Medium" }, -- outer lanes at 1.5x, fits through extra large
-			{ Pens = 17, Price = 2500000, Barn = "Large" }, -- 2 small barns, then a giant barn behind
-			{ Pens = 22, Price = 10000000, Barn = "Gargantuan" }, -- open gargantuan pen, 3 skinny medium barns
-			{ Pens = 24, Price = 50000000, Barn = "Mega" }, -- two gargantuan pens behind that barn
+			{ Pens = 8, Price = 25000, Barn = "Small" }, -- a medium pen each side
+			{ Pens = 10, Price = 500000, Barn = "Medium" }, -- a second medium pen each side
+			{ Pens = 12, Price = 2500000, Barn = "Large" }, -- a giant pen each side
+			{ Pens = 14, Price = 10000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
 		} :: { { Pens: number?, RoadCages: boolean?, Price: number, Barn: string } },
 	},
 

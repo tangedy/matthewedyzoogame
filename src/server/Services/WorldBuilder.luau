@@ -65,13 +65,11 @@ local FIRST_PEN = PLAZA_DEPTH + PLAZA_HALF_DEPTH + 2
 local STALL = Vector2.new(10, 10)
 local MEDIUM = Vector2.new(12, 10.5)
 local GIANT = Vector2.new(24, 21)
-local YARD = Vector2.new(48, 38) -- gargantuan yards, three abreast across the back
-local YARD_GAP = 4
+local YARD = Vector2.new(48, 38) -- gargantuan yards, one each side at the walkway end
 
 -- Which pens unlock together, and which side of the walkway each goes on (+1 left walking in,
 -- -1 right). Tier is the step's index in GameConfig.Zoo.Expansions (0 is the six starting
--- stalls). The road cages (GameConfig.Zoo.RoadCages) are step ROAD_CAGE_TIER and stand right
--- after the small barn. Pen numbers and classes are the save format, so they never change;
+-- stalls). Pen numbers are the save format;
 -- only where the pens stand.
 type PenSpec = { Index: number, Class: string }
 local PEN_GROUPS: { { Tier: number, Left: { PenSpec }, Right: { PenSpec } } } = {
@@ -88,35 +86,11 @@ local PEN_GROUPS: { { Tier: number, Left: { PenSpec }, Right: { PenSpec } } } = 
 			{ Index = 6, Class = "Standard" },
 		},
 	},
-	{
-		Tier = 1,
-		Left = { { Index = 7, Class = "Standard" }, { Index = 9, Class = "Standard" } },
-		Right = { { Index = 8, Class = "Standard" }, { Index = 10, Class = "Standard" } },
-	},
-	{
-		Tier = 3,
-		Left = { { Index = 11, Class = "Medium" }, { Index = 13, Class = "Medium" } },
-		Right = { { Index = 12, Class = "Medium" }, { Index = 14, Class = "Medium" } },
-	},
-	{
-		Tier = 4,
-		Left = { { Index = 15, Class = "Giant" } },
-		Right = { { Index = 16, Class = "Large" }, { Index = 17, Class = "Large" } },
-	},
-	{
-		Tier = 5,
-		Left = { { Index = 18, Class = "Giant" }, { Index = 22, Class = "Medium" } },
-		Right = { { Index = 20, Class = "Medium" }, { Index = 21, Class = "Medium" } },
-	},
+	{ Tier = 1, Left = { { Index = 7, Class = "Medium" } }, Right = { { Index = 8, Class = "Medium" } } },
+	{ Tier = 2, Left = { { Index = 9, Class = "Medium" } }, Right = { { Index = 10, Class = "Medium" } } },
+	{ Tier = 3, Left = { { Index = 11, Class = "Giant" } }, Right = { { Index = 12, Class = "Giant" } } },
+	{ Tier = 4, Left = { { Index = 13, Class = "Gargantuan" } }, Right = { { Index = 14, Class = "Gargantuan" } } },
 }
--- The back row, left to right walking in: a mega yard, the gargantuan yard, a mega yard.
-local BACK_ROW = {
-	{ Index = 23, Tier = 6, Lateral = YARD.Y + YARD_GAP },
-	{ Index = 19, Tier = 5, Lateral = 0 },
-	{ Index = 24, Tier = 6, Lateral = -(YARD.Y + YARD_GAP) },
-}
-local ROAD_CAGE_TIER = 2
-local BACK_ROW_TIER = 6
 
 local function penSize(class: string): Vector2
 	if class == "Giant" then
@@ -411,6 +385,33 @@ local function dressMerchant(keeper: Model, apron: Color3)
 	local function part(name: string): BasePart?
 		local found = keeper:FindFirstChild(name)
 		return if found and found:IsA("BasePart") then found else nil
+	end
+	-- A BodyColors instance overrides part colours and can leave the rig black, so drop it and
+	-- paint every limb directly.
+	for _, child in keeper:GetChildren() do
+		if child:IsA("BodyColors") or child:IsA("CharacterMesh") then
+			child:Destroy()
+		end
+	end
+	local limbColors: { [string]: Color3 } = {
+		Head = MERCHANT_SKIN,
+		UpperTorso = MERCHANT_SHIRT,
+		LowerTorso = MERCHANT_SHIRT,
+		LeftUpperArm = MERCHANT_SHIRT,
+		LeftLowerArm = MERCHANT_SHIRT,
+		RightUpperArm = MERCHANT_SHIRT,
+		RightLowerArm = MERCHANT_SHIRT,
+		LeftUpperLeg = MERCHANT_TROUSERS,
+		LeftLowerLeg = MERCHANT_TROUSERS,
+		RightUpperLeg = MERCHANT_TROUSERS,
+		RightLowerLeg = MERCHANT_TROUSERS,
+	}
+	for name, color in limbColors do
+		local limb = part(name)
+		if limb then
+			limb.Color = color
+			limb.Material = Enum.Material.SmoothPlastic
+		end
 	end
 	for _, name in { "LeftHand", "RightHand" } do
 		local hand = part(name)
@@ -885,34 +886,8 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		local left = row(cursor, 1, group.Left)
 		local right = row(cursor, -1, group.Right)
 		cursor = math.max(left, right) + GROUP_GAP
-
-		-- The road cages follow the small barn and open together as the next barn upgrade.
-		-- They stay in view behind a lock bar until then.
-		-- The cage upgrade follows the small barn: two stalls and two medium pens, laid out
-		-- like any other group (hidden, then ghosted while it is the next upgrade).
-		if group.Tier == ROAD_CAGE_TIER - 1 then
-			unlockSpot(ROAD_CAGE_TIER, cursor - GROUP_GAP / 2)
-			local sideSpecs: { [string]: { PenSpec } } = { Left = {}, Right = {} }
-			for offset, spec in GameConfig.Zoo.RoadCages do
-				table.insert(sideSpecs[spec.Side], { Index = GameConfig.Zoo.MaxPens + offset, Class = spec.Class })
-			end
-			for _, specs in sideSpecs do
-				-- Stalls nearest the plaza, the medium pen behind.
-				table.sort(specs, function(a, b)
-					return (a.Class == "Standard") and b.Class ~= "Standard"
-				end)
-			end
-			local cageLeft = row(cursor, 1, sideSpecs.Left)
-			local cageRight = row(cursor, -1, sideSpecs.Right)
-			cursor = math.max(cageLeft, cageRight) + GROUP_GAP
-		end
 	end
 
-	-- The back row: three gargantuan yards abreast, gates toward the walkway's end.
-	unlockSpot(BACK_ROW_TIER, cursor - GROUP_GAP / 2)
-	for _, yard in BACK_ROW do
-		addPen(yard.Index, cursor + YARD.X / 2, yard.Lateral, YARD, "Gargantuan", plot.Look)
-	end
 	zoo:SetAttribute("WalkEnd", cursor + 2)
 
 	local first = zoo:FindFirstChild("UnlockSpot1")
