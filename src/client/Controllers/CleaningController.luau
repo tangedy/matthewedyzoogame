@@ -55,6 +55,7 @@ type Feel = {
 }
 
 local SOUND = "rbxasset://sounds/"
+local SHAKE_SECONDS = 0.35
 local FEEL: { [number]: Feel } = {
 	{
 		Beam = false,
@@ -201,6 +202,7 @@ local dropPool: { Frame } = {}
 local drops: { Drop } = {}
 local dropCarry = 0
 local sprayActive = false
+local sprayStartedAt = 0 -- os.clock() when the current spray began
 local sprayOnTarget = false
 local sprayScreenPoint = Vector2.zero
 local random = Random.new()
@@ -806,6 +808,9 @@ local function onHeartbeat()
 		dribble.Parent = nozzle
 	end
 	dribble.Enabled = feel.Dribble
+	if not sprayActive then
+		sprayStartedAt = os.clock()
+	end
 	sprayActive = true
 	sprayOnTarget = onTarget
 	sprayScreenPoint = screenPoint
@@ -853,7 +858,8 @@ local function applyTier(tier: number)
 	end
 end
 
--- A small shake while the stronger hoses are spraying, after the camera has moved.
+-- A short kick when the stronger hoses start spraying, fading out over SHAKE_SECONDS,
+-- applied after the camera has moved.
 local function shakeCamera()
 	if not sprayActive or feel.Shake <= 0 then
 		return
@@ -862,7 +868,12 @@ local function shakeCamera()
 	if not camera then
 		return
 	end
-	local amount = math.rad(feel.Shake) * (if sprayOnTarget then 1 else 0.6)
+	local age = os.clock() - sprayStartedAt
+	if age >= SHAKE_SECONDS then
+		return
+	end
+	local fade = 1 - age / SHAKE_SECONDS
+	local amount = math.rad(feel.Shake) * 2.2 * fade * fade
 	local t = os.clock() * 40
 	camera.CFrame *= CFrame.Angles(math.sin(t) * amount, math.cos(t * 1.3) * amount, 0)
 end

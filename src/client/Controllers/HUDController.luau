@@ -27,7 +27,6 @@ local PROGRESS_HEIGHT = 56 -- clean bar, then the Tension patience row (y 32)
 local gui: ScreenGui
 local cashLabel: TextLabel
 local incomeLabel: TextLabel
-local toolLabel: TextLabel
 local progressBoard: BillboardGui
 local progressRoot: Frame
 local barFill: Frame
@@ -67,7 +66,7 @@ local function buildGui()
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Bottom left, big: cash, income, hose. On phones it sits above the thumbstick.
+	-- Bottom left, big: cash, then income. On phones it sits above the thumbstick.
 	local touchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local wallet = Instance.new("Frame")
 	wallet.AnchorPoint = Vector2.new(0, 1)
@@ -76,21 +75,16 @@ local function buildGui()
 	wallet.BackgroundTransparency = 1
 	wallet.Parent = gui
 	cashLabel = textLabel(wallet, {
-		Size = UDim2.new(1, 0, 0, 84),
+		Size = UDim2.new(1, 0, 0, 110),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "$0",
 	}, UIStyle.CashColor)
 	incomeLabel = textLabel(wallet, {
-		Position = UDim2.fromOffset(0, 84),
-		Size = UDim2.new(1, 0, 0, 36),
+		Position = UDim2.fromOffset(0, 110),
+		Size = UDim2.new(1, 0, 0, 40),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "+$0/s",
 	}, UIStyle.CashColor)
-	toolLabel = textLabel(wallet, {
-		Position = UDim2.fromOffset(0, 122),
-		Size = UDim2.new(1, 0, 0, 26),
-		TextXAlignment = Enum.TextXAlignment.Left,
-	})
 
 	-- Clean meter above the animal. A BillboardGui inside a ScreenGui is never drawn,
 	-- so this one sits directly under PlayerGui and points at the animal's head.
@@ -431,7 +425,6 @@ function HUDController.init(initial: Types.InitialState)
 	end)
 	tutorialCompleted = initial.TutorialCompleted
 	cashLabel.Text = UIStyle.formatMoney(initial.Coins)
-	toolLabel.Text = initial.ToolName
 	if initial.Zoo then
 		incomeLabel.Text = `+{UIStyle.formatMoney(initial.Zoo.IncomePerSecond)}/s`
 	end
@@ -465,9 +458,6 @@ function HUDController.init(initial: Types.InitialState)
 	end)
 	Remotes.event("ZooChanged").OnClientEvent:Connect(function(summary: Types.ZooSummary)
 		incomeLabel.Text = `+{UIStyle.formatMoney(summary.IncomePerSecond)}/s`
-	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(_tier: number, name: string)
-		toolLabel.Text = name
 	end)
 	Remotes.event("Announcement").OnClientEvent:Connect(showAnnouncement)
 

@@ -251,6 +251,23 @@ function HoseBuilder.equip(character: Model, tier: number)
 	body.Parent = character
 end
 
+-- The tool on its own, anchored, for a picture (the gear shop's viewport). Pivoted on the
+-- handle, nozzle toward -Z.
+function HoseBuilder.preview(tier: number): Model
+	local model = Instance.new("Model")
+	model.Name = "GearPreview"
+	local body, design = build(tier, "Handle", CFrame.new())
+	body.Parent = model
+	design.Decorate(body, model)
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+		end
+	end
+	model.PrimaryPart = body
+	return model
+end
+
 -- A player's cleaning tool: a real Tool named after the tier, so the hotbar shows "Sponge",
 -- "Fire Hose" and so on. It is always equipped; putting it away puts it straight back.
 function HoseBuilder.give(player: Player, character: Model, tier: number)

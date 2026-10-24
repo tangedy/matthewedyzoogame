@@ -13,6 +13,7 @@ local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.Moneti
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -23,6 +24,7 @@ local ShopController = {}
 
 local FONT = UIStyle.Font
 local PANEL_COLOR = Color3.fromRGB(25, 30, 45)
+local PANEL_HEIGHT = 464
 local BUY_COLOR = Color3.fromRGB(80, 200, 110)
 local ROBUX_COLOR = Color3.fromRGB(255, 170, 40)
 local DISABLED_COLOR = Color3.fromRGB(110, 110, 120)
@@ -35,6 +37,11 @@ local coins = 0
 local tier = 1
 local openStation: BasePart? = nil
 local awaitingResult = false
+local preview: ViewportFrame
+local previewCamera: Camera
+local previewModel: Model? = nil
+local previewTier = 0
+local previewDistance = 6
 local lastSentAt = 0
 
 local panel: Frame
@@ -92,12 +99,42 @@ local function unlocksText(toolTier: number): string
 	return if #groups > 0 then `\nUnlocks {table.concat(groups, " & ")}` else ""
 end
 
+-- The panel ends just under its last button; the Robux button only shows when cash is short.
+local function fitPanel()
+	local bottom = if robuxButton.Visible then 416 else 366
+	messageLabel.Position = UDim2.fromOffset(18, bottom)
+	local height = bottom + 48
+	panel.Size = UDim2.new(0.9, 0, 0, height)
+	local constraint = panel:FindFirstChildOfClass("UISizeConstraint")
+	if constraint then
+		constraint.MaxSize = Vector2.new(360, height)
+	end
+end
+
+-- Shows the next gear (or the current one once fully upgraded) in the viewport.
+local function showPreview(showTier: number)
+	if not preview or previewTier == showTier then
+		return
+	end
+	previewTier = showTier
+	if previewModel then
+		previewModel:Destroy()
+	end
+	local model = HoseBuilder.preview(showTier)
+	local _, size = model:GetBoundingBox()
+	local radius = size.Magnitude / 2
+	previewDistance = radius / math.tan(math.rad(previewCamera.FieldOfView / 2)) * 1.15
+	model.Parent = preview
+	previewModel = model
+end
+
 local function refresh()
 	if not panel then
 		return
 	end
 	local current = ToolConfig[tier] or ToolConfig[1]
 	local nextTool = ToolConfig[tier + 1]
+	showPreview(if nextTool then nextTool.Tier else current.Tier)
 	currentLabel.Text = `Current: {current.Name} — clean power {CleanPower.format(current.CleaningPower)}`
 	if nextTool then
 		local gain = math.floor((nextTool.CleaningPower / current.CleaningPower - 1) * 100 + 0.5)
@@ -124,6 +161,7 @@ local function refresh()
 		buyButton.Visible = false
 		robuxButton.Visible = false
 	end
+	fitPanel()
 end
 
 local function setMessage(text: string, ok: boolean)
@@ -166,7 +204,7 @@ local function buildGui()
 	panel.Name = "ShopPanel"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(360, 320)
+	panel.Size = UDim2.fromOffset(360, PANEL_HEIGHT)
 	panel.BackgroundColor3 = PANEL_COLOR
 	panel.BackgroundTransparency = 0
 	panel.Visible = false
@@ -174,9 +212,9 @@ local function buildGui()
 	panel.Parent = gui
 	round(panel, 14)
 	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(360, 320)
+	constraint.MaxSize = Vector2.new(360, PANEL_HEIGHT)
 	constraint.Parent = panel
-	panel.Size = UDim2.new(0.9, 0, 0, 320)
+	panel.Size = UDim2.new(0.9, 0, 0, PANEL_HEIGHT)
 
 	label({
 		Position = UDim2.fromOffset(18, 12),
@@ -198,17 +236,40 @@ local function buildGui()
 	round(closeButton, 8)
 	closeButton.Activated:Connect(close)
 
-	currentLabel = label({ Position = UDim2.fromOffset(18, 56), Size = UDim2.new(1, -36, 0, 26), Parent = panel })
-	nextLabel = label({ Position = UDim2.fromOffset(18, 88), Size = UDim2.new(1, -36, 0, 26), Parent = panel })
+	-- A turning picture of the next gear: the real tool model, built the same way as the one
+	-- that ends up in the player's hand (HoseBuilder).
+	preview = Instance.new("ViewportFrame")
+	preview.Name = "GearPreview"
+	preview.Position = UDim2.fromOffset(18, 54)
+	preview.Size = UDim2.new(1, -36, 0, 150)
+	preview.BackgroundColor3 = Color3.fromRGB(40, 48, 72)
+	preview.Ambient = Color3.fromRGB(170, 170, 185)
+	preview.LightColor = Color3.new(1, 1, 1)
+	preview.LightDirection = Vector3.new(-1, -1.2, -0.6)
+	preview.Parent = panel
+	round(preview, 10)
+	previewCamera = Instance.new("Camera")
+	previewCamera.FieldOfView = 30
+	previewCamera.Parent = preview
+	preview.CurrentCamera = previewCamera
+
+	nextLabel = label({ Position = UDim2.fromOffset(18, 212), Size = UDim2.new(1, -36, 0, 30), Parent = panel })
 	gainLabel = label({
-		Position = UDim2.fromOffset(18, 118),
-		Size = UDim2.new(1, -36, 0, 22),
+		Position = UDim2.fromOffset(18, 244),
+		Size = UDim2.new(1, -36, 0, 40),
 		TextColor3 = Color3.fromRGB(150, 220, 255),
+		TextWrapped = true,
+		Parent = panel,
+	})
+	currentLabel = label({
+		Position = UDim2.fromOffset(18, 288),
+		Size = UDim2.new(1, -36, 0, 20),
+		TextColor3 = Color3.fromRGB(190, 195, 215),
 		Parent = panel,
 	})
 
 	buyButton = Instance.new("TextButton")
-	buyButton.Position = UDim2.fromOffset(18, 148)
+	buyButton.Position = UDim2.fromOffset(18, 316)
 	buyButton.Size = UDim2.new(1, -36, 0, 44)
 	buyButton.BackgroundColor3 = BUY_COLOR
 	buyButton.Font = FONT
@@ -223,7 +284,7 @@ local function buildGui()
 
 	robuxButton = Instance.new("TextButton")
 	robuxButton.Name = "RobuxBuy"
-	robuxButton.Position = UDim2.fromOffset(18, 198)
+	robuxButton.Position = UDim2.fromOffset(18, 366)
 	robuxButton.Size = UDim2.new(1, -36, 0, 44)
 	robuxButton.BackgroundColor3 = ROBUX_COLOR
 	robuxButton.Font = FONT
@@ -239,8 +300,8 @@ local function buildGui()
 	robuxPad.Parent = robuxButton
 
 	messageLabel = label({
-		Position = UDim2.fromOffset(18, 252),
-		Size = UDim2.new(1, -36, 0, 48),
+		Position = UDim2.fromOffset(18, 416),
+		Size = UDim2.new(1, -36, 0, 36),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = "",
 		TextWrapped = true,
@@ -307,6 +368,17 @@ function ShopController.init(initial: Types.InitialState)
 	end)
 
 	-- Close when the player walks away from the station.
+	-- Turn the gear picture slowly while the shop is open.
+	RunService.RenderStepped:Connect(function()
+		if not panel.Visible or not previewModel then
+			return
+		end
+		local centre = previewModel:GetBoundingBox().Position
+		local angle = os.clock() * 0.8
+		local eye = centre + Vector3.new(math.sin(angle), 0.45, math.cos(angle)).Unit * previewDistance
+		previewCamera.CFrame = CFrame.lookAt(eye, centre)
+	end)
+
 	RunService.Heartbeat:Connect(function()
 		local station = openStation
 		if not station then

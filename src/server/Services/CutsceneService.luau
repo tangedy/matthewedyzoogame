@@ -12,7 +12,7 @@ local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
-local HoseBuilder = require(script.Parent.HoseBuilder)
+local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local CutsceneService = {}

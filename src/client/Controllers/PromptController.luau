@@ -43,6 +43,11 @@ local COLORS: { [string]: Color3 } = {
 	PetPrompt2 = Color3.fromRGB(190, 120, 255),
 }
 
+-- Prompts whose object needs no name over the button.
+local NO_TITLE: { [string]: boolean } = {
+	UpgradePrompt = true,
+}
+
 type Button = {
 	Prompt: ProximityPrompt,
 	Frame: TextButton,
@@ -93,7 +98,8 @@ local function layout(card: Card)
 	for index, button in ordered do
 		button.Frame.LayoutOrder = index
 		count += 1
-		if title == "" and button.Prompt.ObjectText ~= "" then
+		-- The shop sign already names the gear shop, so its card is just the button.
+		if title == "" and button.Prompt.ObjectText ~= "" and not NO_TITLE[button.Prompt.Name] then
 			title = button.Prompt.ObjectText
 		end
 	end

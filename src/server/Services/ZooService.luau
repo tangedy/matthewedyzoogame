@@ -46,6 +46,8 @@ type Zoo = {
 	OverflowModels: { [string]: Model }, -- animal id -> model waiting on a full-cache decision
 	CarriedId: string?, -- cache record currently being carried
 	CarryModel: Model?,
+	ShowcaseId: string?, -- animal standing on the showcase podium
+	ShowcaseModel: Model?,
 	Cleaner: Janitor.Janitor,
 	PadDebounce: { [number]: number },
 }
@@ -285,6 +287,10 @@ local function refreshPens(player: Player)
 		return
 	end
 	local carried = carriedRecord(player)
+	-- The next unlock group shows as ghost pens: what the next barn buys, and where.
+	local upcoming = nextExpansion(data.ZooSize)
+	local ghostFrom = data.ZooSize
+	local ghostTo = if upcoming then upcoming.Pens else 0
 	for i = 1, LAST_PEN do
 		local pen = penOf(zoo, i)
 		if not pen then
@@ -292,7 +298,13 @@ local function refreshPens(player: Player)
 		end
 		local unlocked = penOpen(data, i)
 		local cage = roadCage(i)
-		WorldBuilder.setShown(pen, if cage then true else unlocked)
+		if cage or unlocked then
+			WorldBuilder.setShown(pen, true)
+		elseif ghostFrom < i and i <= ghostTo then
+			WorldBuilder.setGhost(pen)
+		else
+			WorldBuilder.setShown(pen, false)
+		end
 		local lock = pen:FindFirstChild("FlexLock")
 		if lock then
 			WorldBuilder.setShown(lock, cage ~= nil and not unlocked)
@@ -404,29 +416,29 @@ local function refreshPens(player: Player)
 		armPet(petPrompt2, if carried then nil else occupants[2])
 	end
 
-	local tier = 0
-	for stepIndex, step in GameConfig.Zoo.Expansions do
-		if data.ZooSize >= step.Pens then
-			tier = stepIndex
-		end
-	end
+	-- The unlock stand moves to the front of the next locked group and names its price.
 	local zooFolder = zoo.Bay:FindFirstChild("Zoo")
-	local function showBarn(name: string, shown: boolean)
-		local shell = zooFolder and zooFolder:FindFirstChild(name)
-		if shell then
-			WorldBuilder.setShown(shell, shown)
-		end
-	end
-	showBarn("BarnAisle", tier >= 1)
-	showBarn("BarnSmall", tier == 1)
-	showBarn("BarnMedium", tier >= 2)
-	showBarn("BarnLarge", tier >= 3)
-	showBarn("BarnGargantuan", tier >= 4)
-	showBarn("BarnMega", tier >= 5)
-
-	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter")
+	local stand = zooFolder and zooFolder:FindFirstChild("ExpandStand")
+	local counter = stand and stand:FindFirstChild("ExpandCounter")
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
 	local step = nextExpansion(data.ZooSize)
+	local stepIndex = 0
+	for index, candidate in GameConfig.Zoo.Expansions do
+		if candidate == step then
+			stepIndex = index
+		end
+	end
+	local spot = zooFolder and zooFolder:FindFirstChild("UnlockSpot" .. stepIndex)
+	if stand and stand:IsA("Model") then
+		WorldBuilder.setShown(stand, step ~= nil)
+		if spot and spot:IsA("BasePart") then
+			stand:PivotTo(spot.CFrame)
+		end
+		local label = counter and counter:FindFirstChild("NextLabel", true) :: TextLabel?
+		if label and step then
+			label.Text = `{string.upper(step.Barn)} BARN\n{UIStyle.formatMoney(step.Price)}`
+		end
+	end
 	if expandPrompt then
 		expandPrompt.Enabled = step ~= nil
 		if step then
@@ -475,9 +487,58 @@ local function refreshCache(player: Player)
 	end
 end
 
+-- The showcase podium at the road: the farm's best animal (by income) stands on it, with the
+-- farm's income under the farm name, so passers-by see what this player has. It is a copy:
+-- the animal still lives and earns in its pen.
+local SHOWCASE_MAX = 11 -- studs: a giant on the podium shrinks to fit it
+local function refreshShowcase(player: Player)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
+		return
+	end
+	local showcase = zoo.Bay:FindFirstChild("Showcase")
+	local slot = showcase and showcase:FindFirstChild("ShowcaseSlot")
+	if not showcase or not slot or not slot:IsA("BasePart") then
+		return
+	end
+	local summary = ZooService.getZooSummary(player)
+	local income = showcase:FindFirstChild("IncomeLabel", true) :: TextLabel?
+	if income then
+		income.Text = `{UIStyle.formatMoney(if summary then summary.IncomePerSecond else 0)}/s`
+	end
+	local best: OwnedAnimal? = nil
+	local bestIncome = -1
+	for _, animal in data.Animals do
+		local value = ZooService.income(animal.Species, animal.Mutation)
+		if value > bestIncome then
+			best, bestIncome = animal, value
+		end
+	end
+	local id = best and best.Id
+	if id == zoo.ShowcaseId and (zoo.ShowcaseModel == nil) == (best == nil) then
+		return
+	end
+	if zoo.ShowcaseModel then
+		zoo.ShowcaseModel:Destroy()
+		zoo.ShowcaseModel = nil
+	end
+	zoo.ShowcaseId = id
+	if not best then
+		return
+	end
+	local model = AnimalService.buildZooAnimal(best.Species, best.Mutation)
+	model.Name = "ShowcaseAnimal"
+	AnimalService.resize(model, AnimalService.bodyScale(best.Species), SHOWCASE_MAX)
+	model:PivotTo(slot.CFrame)
+	model.Parent = showcase
+	zoo.ShowcaseModel = model
+end
+
 local function refreshAll(player: Player)
 	refreshPens(player)
 	refreshCache(player)
+	refreshShowcase(player)
 	sendZoo(player)
 	sendCarry(player)
 end
@@ -1461,7 +1522,7 @@ function ZooService.attach(player: Player, bay: Model)
 		end
 	end
 	local zooFolder = bay:FindFirstChild("Zoo")
-	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter")
+	local counter = zooFolder and zooFolder:FindFirstChild("ExpandCounter", true)
 	local expandPrompt = counter and counter:FindFirstChild("ExpandPrompt") :: ProximityPrompt?
 	if expandPrompt then
 		connect(expandPrompt.Triggered, function(who: Player)

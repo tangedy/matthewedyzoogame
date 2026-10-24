@@ -16,6 +16,7 @@ export type AnimalDefinition = {
 	WashTimeMultiplier: number,
 	Limited: boolean?, -- sold, never spawns (SpawnWeight 0); see the monetization feature
 	RequiresSoap: boolean?, -- only takes dirt while Super Soap is running, on top of the hose gate
+	DisplayScale: number?, -- overrides GameConfig.BodyScale for its class (the Dragon's wings)
 	-- Which pens can hold this animal. Standard fits a face stall. Larger classes need a
 	-- barn pen built for them (see AnimalConfig.fits).
 	BodyClass: "Standard" | "Large" | "ExtraLarge" | "Giant" | "Gargantuan",
@@ -91,6 +92,8 @@ local AnimalConfig = {
 AnimalConfig.Animals.TRex.TemplateName = "TRex"
 -- A magic fox: no hose alone gets the mud off. It needs the Foam Cannon and Super Soap.
 AnimalConfig.Animals.Kitsune.RequiresSoap = true
+-- Its spread wings are far wider than its body; this keeps them inside a gargantuan yard.
+AnimalConfig.Animals.Dragon.DisplayScale = 2.1
 
 local BODY: { [string]: string } = {
 	Cow = "Large",

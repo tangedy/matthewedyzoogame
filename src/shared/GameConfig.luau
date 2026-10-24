@@ -130,7 +130,7 @@ local GameConfig = {
 		Large = 1,
 		ExtraLarge = 1.12,
 		Giant = 1.6,
-		Gargantuan = 3.2,
+		Gargantuan = 2.9, -- a T-Rex then fills most of a 38-by-48 yard
 	},
 
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.

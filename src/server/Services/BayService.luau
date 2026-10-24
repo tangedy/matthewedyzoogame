@@ -494,7 +494,7 @@ end
 
 local function makeBay(index: number): Bay
 	local model = WorldBuilder.buildBay(index)
-	local post = model:FindFirstChild("SignPost")
+	local post = model:FindFirstChild("SignPost", true)
 	local sign = post and post:FindFirstChild("Sign")
 	local wash = model:FindFirstChild("WashPosition") :: BasePart
 	local queue2 = model:FindFirstChild("Queue2") :: BasePart

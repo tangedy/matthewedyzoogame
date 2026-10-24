@@ -159,7 +159,7 @@ end
 -- Display scale for this species at the wash and in a pen (GameConfig.BodyScale).
 function AnimalService.bodyScale(animalKey: string): number
 	local def = AnimalConfig.Animals[animalKey]
-	local scale = def and GameConfig.BodyScale[def.BodyClass]
+	local scale = def and (def.DisplayScale or GameConfig.BodyScale[def.BodyClass])
 	return if typeof(scale) == "number" and scale > 0 then scale else 1
 end
 

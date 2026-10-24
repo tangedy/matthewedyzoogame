@@ -409,6 +409,9 @@ local function offer(player: Player, kind: string, productKey: string)
 		return
 	end
 	local cfg = MonetizationConfig.Offers
+	if not cfg.Enabled then
+		return
+	end
 	local now = os.clock()
 	if now - session.JoinedAt < cfg.QuietSeconds or session.OffersShown >= cfg.MaxPerSession then
 		return

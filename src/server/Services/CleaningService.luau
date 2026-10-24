@@ -21,7 +21,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CutsceneService = require(script.Parent.CutsceneService)
 local DirtRenderer = require(script.Parent.DirtRenderer)
 local Hooks = require(script.Parent.Hooks)
-local HoseBuilder = require(script.Parent.HoseBuilder)
+local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
 local StationProps = require(script.Parent.StationProps)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 

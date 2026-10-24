@@ -408,6 +408,9 @@ return {
 	SoldOutCompensation = { Minutes = 120, Floor = 5000, CapFraction = 1 },
 
 	Offers = {
+		-- The side pop-ups (Super Soap on a big wash, Calm Treat before a mud shake) are off.
+		-- The products stay in the shop and on the "too dirty" prompt.
+		Enabled = false,
 		QuietSeconds = 90, -- no offer or auto-opened shop this early in a session
 		CooldownSeconds = 240, -- per offer kind
 		MaxPerSession = 6,
