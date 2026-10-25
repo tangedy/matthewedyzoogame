@@ -90,6 +90,11 @@ local TOUCH_HOLD_ACTIONS = { "Sell", "Swap", "Pick up" }
 local TOUCH_TAP_PROMPTS: { [string]: boolean } = {
 	PickupPrompt = true,
 }
+-- Setting a pet swaps the one following you, so it holds on touch whatever its label says.
+local TOUCH_HOLD_PROMPTS: { [string]: boolean } = {
+	PetPrompt = true,
+	PetPrompt2 = true,
+}
 local serverHold: { [ProximityPrompt]: number } = {}
 -- What we last wrote. Property signals are deferred, so a flag set around the write is
 -- already cleared when the change fires; comparing against our own value is not.
@@ -98,6 +103,9 @@ local localHold: { [ProximityPrompt]: number } = {}
 local function wantsTouchHold(prompt: ProximityPrompt): boolean
 	if UIPlatform.get().inputMode ~= "Touch" or TOUCH_TAP_PROMPTS[prompt.Name] then
 		return false
+	end
+	if TOUCH_HOLD_PROMPTS[prompt.Name] then
+		return true
 	end
 	for _, prefix in TOUCH_HOLD_ACTIONS do
 		if string.sub(prompt.ActionText, 1, #prefix) == prefix then
