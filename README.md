@@ -60,7 +60,7 @@ Server services:
 
 Client controllers:
 
-- **CleaningController** handles input, aiming, the spray beam, splash and sound, the phone WASH button (hold to spray, drag to look around), the reticle and the remaining-dirt highlight.
+- **CleaningController** handles input, aiming, the spray beam, splash and sound, the phone WASH button (hold to spray; drag that thumb or another finger to look around) and finger-scrubbing (rub an animal on screen to wash it with the camera held still), the reticle and the remaining-dirt highlight.
 - **OnboardingController** shows the first-wash "Wash me!" marker and the "you can afford an upgrade" hint.
 - **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
 - **ZooController** shows what you're carrying and the "cache full" hint, puts other players' prompts out of reach, and animates rainbow labels.
@@ -109,7 +109,7 @@ Developer keys (Studio and place owner only): **C** cleans the current animal, *
 **Zoo loop (Steal a Brainrot style)**, which replaces roadmap Phases A–B:
 
 - **Bays:** a bay is built only while a player owns it, so there are no empty lanes.
-- **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead.
+- **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead. On touch screens, Sell, Swap and Pick up are a 0.75 s hold (the button fills and reads HOLD), so a brushed card never sells by accident.
 - **Full cache:** while the cache is full, no new animal walks in.
 - **Income:** penned animals earn cash per second onto the green pad in front of their pen. Step on the pad to collect it.
 - **Pen tiers:** each pen's pad holds up to a cap set by its size ($1K, $10K, $100K, $1M). The fence wood shows the tier (oak, redwood, golden, royal; `Shared.PenTiers`), and while an animal is in, a "MAX $X" line in that colour sits under the pad's cash counter.

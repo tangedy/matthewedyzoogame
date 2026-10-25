@@ -84,9 +84,10 @@ local function buildGui()
 	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 	rowLayout.Padding = UDim.new(0, 12)
 	rowLayout.Parent = row
+	local carryButtons: { TextButton } = {}
 	local function carryButton(text: string, color: Color3, action: string): TextButton
 		local button = Instance.new("TextButton")
-		button.Size = UDim2.fromOffset(170, 44)
+		table.insert(carryButtons, button)
 		button.BackgroundColor3 = color
 		button.AutoButtonColor = true
 		button.Parent = row
@@ -120,6 +121,11 @@ local function buildGui()
 	-- Low in the middle on phones, between the thumbstick and WASH; higher on desktop.
 	UIPlatform.Layout.watch(function(spec)
 		carryBanner.Position = UDim2.new(0.5, 0, 1, -spec.bannerLift)
+		local size = spec.carryButton
+		carryBanner.Size = UDim2.fromOffset(math.max(420, size.X * #carryButtons + 12), size.Y + 8)
+		for _, button in carryButtons do
+			button.Size = UDim2.fromOffset(size.X, size.Y)
+		end
 		cacheHint.Position = UDim2.new(0.5, 0, 1, -spec.bannerLift)
 	end)
 end

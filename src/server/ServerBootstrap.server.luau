@@ -9,6 +9,13 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 -- The character waits until a base exists, then loads on that base's spawn.
 Players.CharacterAutoLoads = false
 StarterPlayer.CharacterWalkSpeed = GameConfig.WalkSpeed
+-- Phones default to the Follow camera, which swings on its own and fights the finger-scrub's
+-- held camera. Classic is the plain free camera. Only the server may set this (a LocalScript
+-- that tries errors), so it's set here and on anyone who joined before this line ran.
+StarterPlayer.DevTouchCameraMovementMode = Enum.DevTouchCameraMovementMode.Classic
+for _, player in Players:GetPlayers() do
+	player.DevTouchCameraMode = Enum.DevTouchCameraMovementMode.Classic
+end
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Services

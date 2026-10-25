@@ -118,7 +118,7 @@ local function patchesInSpray(job: Job, hit: BasePart, position: Vector3, direct
 		end
 		local isDirect = typeof(direct) == "string" and patch.Id == direct
 		local near = (patch.Part.Position - position).Magnitude <= radius
-		local facing = patch.Part.CFrame.RightVector:Dot(-direction) > 0.15 -- RightVector is the surface normal
+		local facing = patch.Part.CFrame.RightVector:Dot(-direction) > GameConfig.PatchFacingDot -- RightVector is the surface normal
 		if isDirect or (near and facing) then
 			table.insert(found, patch)
 		end

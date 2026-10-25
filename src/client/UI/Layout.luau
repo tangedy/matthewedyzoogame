@@ -32,6 +32,7 @@ export type Spec = {
 	panel: { scale: Vector2, maxSize: Vector2, columns: number? },
 	toastLift: number, -- bottom-centre hint line, above the controls
 	bannerLift: number, -- bottom-centre button rows (carry PUT DOWN / SELL)
+	carryButton: Vector2, -- each of those buttons
 }
 
 local DESKTOP: Spec = {
@@ -56,6 +57,7 @@ local DESKTOP: Spec = {
 	panel = { scale = Vector2.new(0.94, 0.86), maxSize = Vector2.new(680, 480), columns = nil },
 	toastLift = 140,
 	bannerLift = 190,
+	carryButton = Vector2.new(170, 44),
 }
 
 -- A landscape phone at scale 0.5 is about 660 units tall under the top bar. Cash and
@@ -84,6 +86,8 @@ local TOUCH: Spec = {
 	panel = { scale = Vector2.new(0.96, 0.95), maxSize = Vector2.new(1120, 640), columns = 2 },
 	toastLift = 28,
 	bannerLift = 24,
+	-- About 40px tall drawn at phone scale: a thumb-sized target, not a 20px strip.
+	carryButton = Vector2.new(210, 84),
 }
 
 local current: Spec = DESKTOP

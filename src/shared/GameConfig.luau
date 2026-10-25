@@ -20,7 +20,7 @@ local GameConfig = {
 	PlotDepth = 440,
 	GroundSize = Vector3.new(1000, 2, 760), -- plots, the road, and the board at the south end
 	WashQueue = 3, -- animals standing in the square lane; only the front one is washed
-	WalkSpeed = 16 * 1.2, -- player characters, 1.2x Roblox's default 16
+	WalkSpeed = 16 * 1.35, -- player characters, 1.35x Roblox's default 16
 
 	-- Spraying (shared by client and server so both use the same nozzle origin)
 	NozzleOffset = Vector3.new(0, 1.5, 0), -- from HumanoidRootPart
@@ -33,6 +33,9 @@ local GameConfig = {
 	MaxAimCameraDistance = 160,
 	MaxAcceptedStep = 0.1, -- max seconds of cleaning credited per request
 	SprayRadius = 1.6, -- aim assist: a patch counts as reachable if the ray lands this close
+	-- A patch only takes water when its surface faces the spray: normal · -direction above this.
+	-- The server enforces it; the client's aim lock uses it too, or it locks onto far-side mud.
+	PatchFacingDot = 0.15,
 
 	-- Touch/gamepad aiming (client only; the server still validates every spray)
 	CenterAimHeight = 0.4, -- reticle height as a fraction of the screen, above the character

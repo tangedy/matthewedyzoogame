@@ -76,14 +76,23 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 
 ### Mobile (Studio Device emulator, then a real phone)
 
-- [ ] A large round WASH button sits right above the jump button and doesn't overlap the thumbstick or jump.
-- [ ] Holding WASH near an animal locks the water onto a mud patch. Dragging the same finger turns only the camera: the stream stays on the mud and moves to the next patch when one is clean. Letting go anywhere stops it.
+- [ ] A round 💦 WASH button, a little bigger than jump, sits right above it and doesn't overlap the thumbstick or jump. No knob or look ring; nothing on it moves with the thumb.
+- [ ] Holding WASH near an animal locks the water onto a mud patch the camera can see, including the top and back of a tall animal, and the mud actually goes away. Dragging the WASH thumb itself turns the camera smoothly like a normal swipe, with no stutter (a still thumb doesn't jitter it; the reticle stays glued to the mud), and so does another finger on the free screen, even over the animal: the stream stays on the mud and moves to the next patch when one is clean. Lifting the WASH thumb stops it.
+- [ ] **Scrub:** without WASH held, put a finger on the free screen over an animal being washed and rub: the water follows the finger, the reticle sits under it, and the camera does not move. Lifting stops the water.
+- [ ] A drag that starts off the animal (sky, floor) turns the camera as normal. A drag that starts on the thumbstick, jump, WASH or a HUD button never scrubs.
+- [ ] Pressing WASH mid-scrub hands the aim to WASH; the camera is free again.
 - [ ] Landscape phone: `PlayerGui.UIFormFactor` reads **Mobile**. Cash sits top left with a narrow column of icon buttons (📖 🎁 🛒) under it, all the same size, and nothing overlaps.
 - [ ] The thumbstick starts anywhere in the lower left without hitting a button. No hotbar slot at the bottom.
 - [ ] The event counter never covers the Roblox menu, chat or voice buttons.
 - [ ] WASH is faded and smaller with no animal; full size with a breathing ring and a HOLD! hint when one walks in. Holding it near the animal washes mud without aiming, even while looking around.
 - [ ] Moving with the thumbstick while holding WASH works (two thumbs).
-- [ ] Hold WASH and drag the same finger: the camera turns and stays turned (also while walking). "◀ DRAG TO LOOK ▶" shows on the first hold and goes after the first drag.
+- [ ] Sell, Swap and Pick up cards say HOLD and need a 0.75 s hold (the button fills); a quick tap does nothing. Place and Set pet are still a tap.
+- [ ] Prompt cards over animals are smaller than before and don't hide the animal.
+- [ ] After a Sell/Pick up card, Place on a pen is still a TAP (no hold).
+- [ ] With only far-side mud left, holding WASH doesn't freeze on it: turn the camera to that side and it washes.
+- [ ] The first-wash guide names the real animal ("CLEAN THE DUCK"), not always "pig".
+- [ ] Carrying an animal: PUT DOWN and SELL are thumb-sized (about 40px tall) between the thumbstick and WASH.
+- [ ] The Gear shop opens large enough to read on a phone and still fits the screen.
 - [ ] The Robux shop fills the screen with two columns of cards; INDEX and DAILY panels fill it too. HUD text reads at phone size.
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
 - [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.

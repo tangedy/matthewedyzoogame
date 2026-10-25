@@ -59,6 +59,7 @@ local bayName: string? = nil
 local jobId: string? = nil
 local washing = false
 local progress = 0
+local animalName: string? = nil -- the washing animal, for "CLEAN THE CHICKEN"
 local shopVisitedForTier: { [number]: boolean } = {}
 
 local animalMarker: BillboardGui
@@ -234,7 +235,7 @@ local function guideTarget(): (BasePart?, string?)
 		if progress > 0 then
 			return nil, nil
 		end
-		return washTarget(bay), "CLEAN THE PIG"
+		return washTarget(bay), `CLEAN THE {string.upper(animalName or "animal")}`
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or affordable gear.
 	-- The truck gets the trail only: no text over the screen while it drives by.
@@ -404,6 +405,11 @@ local function applyBay(bay: Types.BaySnapshot?)
 	jobId = bay.JobId
 	washing = bay.State == "Washing"
 	progress = bay.Progress or progress
+	animalName = bay.AnimalName or animalName
+	local markerLabel = animalMarker:FindFirstChildOfClass("TextLabel")
+	if markerLabel then
+		markerLabel.Text = `Clean the {string.lower(animalName or "animal")}!`
+	end
 	refreshAnimalMarker()
 end
 

@@ -2,9 +2,14 @@
 -- spraying; the server decides what actually gets cleaned.
 --
 -- Desktop: hold left mouse, aim with the pointer. Gamepad: hold R2, aim with the reticle.
--- Touch: hold the WASH button above jump (UI/WashButton), aim with the center reticle, and
--- drag the same finger to turn the camera while the water keeps flowing.
+-- Touch, two ways:
+--   * Hold the WASH button above jump (UI/WashButton). The water locks onto the mud, and
+--     another finger on the free screen turns the camera as usual.
+--   * Scrub: put a finger on the free screen over an animal being washed and rub it, like a
+--     car wash game. The camera stays locked while that finger is down and the water goes
+--     wherever the finger is. A drag that starts off an animal turns the camera as usual.
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -177,6 +182,10 @@ local bayName: string? = nil
 local range = GearLadder.get(1).Range
 
 local mouseHeld, touchHeld, padHeld = false, false, false
+-- The finger scrubbing an animal on the free screen, and the camera turn held while it is down.
+local scrubTouch: InputObject? = nil
+local scrubRotation = CFrame.identity
+local FIRST_PERSON_DISTANCE = 0.6
 local lastSendAt = 0
 local hintActive = false
 local hintHighlight: Highlight? = nil
@@ -354,7 +363,8 @@ local function findAssistTarget(
 			if onScreen and d < bestDist then
 				local eye = camera.CFrame.Position
 				local toPatch = patch.Position - eye
-				if (patch.Position - rootPosition).Magnitude <= range + GameConfig.AimReachSlack then
+				local facing = patch.CFrame.RightVector:Dot(-toPatch.Unit) > GameConfig.PatchFacingDot
+				if facing and (patch.Position - rootPosition).Magnitude <= range + GameConfig.AimReachSlack then
 					local hit = Workspace:Raycast(eye, toPatch.Unit * (toPatch.Magnitude + 2), params)
 					if
 						hit
@@ -370,32 +380,56 @@ local function findAssistTarget(
 	return best
 end
 
--- WASH on touch: the hose holds onto one patch until it is clean, then moves to the next
--- patch nearest the last one. The camera never steers it, so the drag on WASH only turns
--- the view. Own animal first; a neighbour's wash only when nothing of ours is in reach.
+-- WASH on touch: the hose holds onto one patch until it is clean, then moves to the next.
+-- It aims from the camera, the same check the server runs for the mouse: any mud the
+-- player can see and the hose can reach counts, the top and back of a tall animal too.
+-- Turning the camera never moves the stream while the patch stays in view. A new patch is
+-- the one nearest the reticle; own animal first, a neighbour's wash only when nothing of
+-- ours is in reach.
 local lockedPatch: BasePart? = nil
-local lastLockPoint: Vector3? = nil
-local NEIGHBOUR_PENALTY = 1000
+local lockedWorld: Vector3? = nil -- where the reticle follows on screen, every frame
+local NEIGHBOUR_PENALTY = 100000
 
-local function patchReachable(patch: BasePart, model: Model, origin: Vector3, params: RaycastParams): boolean
+local function patchReachable(
+	patch: BasePart,
+	model: Model,
+	eye: Vector3,
+	rootPosition: Vector3,
+	params: RaycastParams
+): boolean
 	if patch.Parent == nil or not patch.CanQuery or not patch:IsDescendantOf(model) then
 		return false
 	end
-	local toPatch = patch.Position - origin
-	if toPatch.Magnitude > range or toPatch.Magnitude < 0.01 then
+	-- The server allows Range + AimReachSlack from the player; keep half the slack spare.
+	if (patch.Position - rootPosition).Magnitude > range + GameConfig.AimReachSlack * 0.5 then
 		return false
 	end
-	local hit = Workspace:Raycast(origin, toPatch.Unit * range, params)
+	local toPatch = patch.Position - eye
+	if toPatch.Magnitude < 0.01 then
+		return false
+	end
+	-- The server only washes a patch facing the spray; the far side of a small animal can sit
+	-- within SprayRadius of the hit and still never take water.
+	if patch.CFrame.RightVector:Dot(-toPatch.Unit) <= GameConfig.PatchFacingDot then
+		return false
+	end
+	local hit = Workspace:Raycast(eye, toPatch.Unit * (toPatch.Magnitude + 2), params)
 	return hit ~= nil
 		and hit.Instance:IsDescendantOf(model)
 		and (hit.Position - patch.Position).Magnitude <= GameConfig.SprayRadius
 end
 
-local function lockOnPatch(origin: Vector3, params: RaycastParams): (BasePart?, Model?)
+local function lockOnPatch(
+	camera: Camera,
+	rootPosition: Vector3,
+	screenPoint: Vector2,
+	params: RaycastParams
+): (BasePart?, Model?)
+	local eye = camera.CFrame.Position
 	local held = lockedPatch
 	if held then
 		local model = washingAnimalFrom(held)
-		if model and patchReachable(held, model, origin, params) then
+		if model and patchReachable(held, model, eye, rootPosition, params) then
 			return held, model
 		end
 		lockedPatch = nil
@@ -404,7 +438,8 @@ local function lockOnPatch(origin: Vector3, params: RaycastParams): (BasePart?, 
 	if not bays then
 		return nil, nil
 	end
-	local from = lastLockPoint or origin
+	local viewport = camera.ViewportSize
+	local offScreen = viewport.Magnitude
 	local bestPart: BasePart?, bestModel: Model?, bestScore = nil, nil, math.huge
 	for _, bay in bays:GetChildren() do
 		local model = bay:FindFirstChild("Animal")
@@ -413,8 +448,12 @@ local function lockOnPatch(origin: Vector3, params: RaycastParams): (BasePart?, 
 			local penalty = if model:GetAttribute("JobId") == jobId then 0 else NEIGHBOUR_PENALTY
 			for _, patch in patches:GetChildren() do
 				if patch:IsA("BasePart") then
-					local score = (patch.Position - from).Magnitude + penalty
-					if score < bestScore and patchReachable(patch, model, origin, params) then
+					local projected, onScreen = camera:WorldToViewportPoint(patch.Position)
+					local score = if onScreen
+						then (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude
+						else offScreen + (patch.Position - rootPosition).Magnitude
+					score += penalty
+					if score < bestScore and patchReachable(patch, model, eye, rootPosition, params) then
 						bestPart, bestModel, bestScore = patch, model, score
 					end
 				end
@@ -723,13 +762,90 @@ local function updateDrops(dt: number)
 	end
 end
 
+-- A finger landing here belongs to a button or the move stick, not the free screen.
+local function overControl(position: Vector3): boolean
+	local playerGui = player:FindFirstChild("PlayerGui") :: PlayerGui?
+	if not playerGui then
+		return false
+	end
+	for _, object in playerGui:GetGuiObjectsAtPosition(position.X, position.Y) do
+		if object.Visible and (object:IsA("GuiButton") or string.find(object.Name, "Thumbstick") ~= nil) then
+			return true
+		end
+	end
+	return false
+end
+
+local function endScrub()
+	scrubTouch = nil
+end
+
+-- A free-screen finger that lands on an animal being washed scrubs it instead of turning
+-- the camera. Not while WASH is held: then every free finger looks around.
+local function tryScrub(input: InputObject, processed: boolean)
+	if processed or scrubTouch or touchHeld or not WashButton.isEnabled() or cutsceneLocked() then
+		return
+	end
+	if input.UserInputType ~= Enum.UserInputType.Touch or overControl(input.Position) then
+		return
+	end
+	local camera = Workspace.CurrentCamera
+	if not camera or camera.CameraType ~= Enum.CameraType.Custom then
+		return
+	end
+	local ray = camera:ScreenPointToRay(input.Position.X, input.Position.Y)
+	sprayParams.FilterDescendantsInstances = characterExclusions()
+	local hit = Workspace:Raycast(ray.Origin, ray.Direction * 1000, sprayParams)
+	if hit and washingAnimalFrom(hit.Instance) then
+		scrubTouch = input
+		scrubRotation = camera.CFrame.Rotation
+	end
+end
+
+-- Runs right after the camera script and puts back the turn it had when the scrub began,
+-- so the scrubbing finger never moves the view. Zoom and walking still work: the camera
+-- keeps its current distance and follows the character's focus. The Classic camera reads
+-- its look direction from Camera.CFrame each frame, so the hold sticks.
+local function holdScrubLook()
+	local touch = scrubTouch
+	if not touch then
+		return
+	end
+	if touch.UserInputState == Enum.UserInputState.End or touch.UserInputState == Enum.UserInputState.Cancel then
+		endScrub()
+		return
+	end
+	local camera = Workspace.CurrentCamera
+	if not camera or camera.CameraType ~= Enum.CameraType.Custom then
+		return
+	end
+	local focus = camera.Focus.Position
+	local distance = (camera.CFrame.Position - focus).Magnitude
+	if distance < FIRST_PERSON_DISTANCE then
+		camera.CFrame = CFrame.new(camera.CFrame.Position) * scrubRotation
+	else
+		camera.CFrame = CFrame.new(focus) * scrubRotation * CFrame.new(0, 0, distance)
+	end
+end
+
 local function bindInput()
 	-- Mouse and R2 through the action map. Touch gets the WASH button instead of the
 	-- engine's action button, because a held engine button cannot steer the camera.
 	UIPlatform.ActionMap.bindTemplate("Spray", onSpray)
 	WashButton.start(function(down)
 		touchHeld = down
+		-- WASH takes over the aim; the scrubbing finger goes back to being a free finger.
+		if down then
+			endScrub()
+		end
 	end)
+	UserInputService.InputBegan:Connect(tryScrub)
+	UserInputService.InputEnded:Connect(function(input)
+		if input == scrubTouch then
+			endScrub()
+		end
+	end)
+	RunService:BindToRenderStep("ScrubLook", Enum.RenderPriority.Camera.Value + 1, holdScrubLook)
 	local appliedTouch: boolean? = nil
 	local function applyMode(touch: boolean)
 		if touch == appliedTouch then
@@ -737,11 +853,9 @@ local function bindInput()
 		end
 		appliedTouch = touch
 		WashButton.setEnabled(touch)
-		-- Phones default to the Follow camera, which swings back toward its last angle and
-		-- undoes the WASH finger's turn. Classic is the plain free camera and keeps it.
-		-- Other fingers still swipe the camera as normal.
-		if touch then
-			player.DevTouchCameraMode = Enum.DevTouchCameraMovementMode.Classic
+		-- The touch camera is set to Classic by the server (ServerBootstrap); clients can't set it.
+		if not touch then
+			endScrub()
 		end
 		reticle.Size = if touch then UDim2.fromOffset(26, 26) else UDim2.fromOffset(18, 18)
 		-- The hose re-equips itself, so its hotbar slot only covers the screen on a phone.
@@ -767,6 +881,7 @@ local function bindInput()
 	-- Losing focus mid-hold shouldn't leave the hose stuck on. Cancel covers most cases.
 	UserInputService.WindowFocusReleased:Connect(function()
 		mouseHeld, touchHeld, padHeld = false, false, false
+		endScrub()
 	end)
 end
 
@@ -825,6 +940,7 @@ local function onHeartbeat()
 	WashButton.setBlocked(locked)
 	WashButton.setReady(washing and jobId ~= nil and player:GetAttribute("CleanBlocked") ~= true)
 	if not camera or not root or locked then
+		endScrub()
 		stopEffects()
 		return
 	end
@@ -834,8 +950,11 @@ local function onHeartbeat()
 	local shiftLock = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 	local assisted = touchHeld or padHeld or UIPlatform.get().inputMode ~= "KeyboardMouse"
 	local viewport = camera.ViewportSize
-	local screenPoint = if assisted
-		then Vector2.new(viewport.X / 2, viewport.Y * GameConfig.CenterAimHeight)
+	local scrub = scrubTouch
+	-- Touch positions leave out the top bar; the reticle and the ray use the whole viewport.
+	local screenPoint = if scrub
+		then Vector2.new(scrub.Position.X, scrub.Position.Y) + GuiService:GetGuiInset()
+		elseif assisted then Vector2.new(viewport.X / 2, viewport.Y * GameConfig.CenterAimHeight)
 		elseif shiftLock then viewport / 2
 		else UserInputService:GetMouseLocation()
 
@@ -859,14 +978,13 @@ local function onHeartbeat()
 	local assistUsed = false
 	if touchHeld then
 		-- The water holds onto the mud; the camera is free to look around.
-		local patch, model = lockOnPatch(origin, params)
+		local patch, model = lockOnPatch(camera, root.Position, screenPoint, params)
 		if patch and model then
 			assistUsed = true
 			animal = model
 			aimJob = model:GetAttribute("JobId") :: string
 			helping = aimJob ~= jobId
 			target = patch.Position
-			lastLockPoint = target
 		else
 			-- No mud in reach: spray ahead of the character, still not where the camera looks.
 			local ahead = root.CFrame.LookVector * Vector3.new(1, 0, 1)
@@ -876,12 +994,13 @@ local function onHeartbeat()
 			aimJob = nil
 			helping = false
 		end
+		lockedWorld = target
 		local projected, onScreen = camera:WorldToViewportPoint(target)
 		screenPoint = Vector2.new(projected.X, projected.Y)
 		reticle.Visible = onScreen and projected.Z > 0
 	else
 		lockedPatch = nil
-		lastLockPoint = nil
+		lockedWorld = nil
 		reticle.Visible = true
 	end
 	if assisted and not aimed and not touchHeld then
@@ -927,9 +1046,9 @@ local function onHeartbeat()
 	local direction = toTarget.Unit
 	-- The spray lands wherever the cursor is on the animal, whichever side the player stands
 	-- on, as long as the hose can reach it. The server checks the same camera ray.
-	-- WASH on touch aims from the nozzle instead (no aimOrigin): the server then casts from
-	-- the same nozzle point, so the camera's position plays no part.
-	local aimOrigin: Vector3? = if touchHeld then nil else ray.Origin
+	-- WASH on touch aims from the camera at the locked patch. With no mud in reach it sprays
+	-- ahead of the character from the nozzle (no aimOrigin).
+	local aimOrigin: Vector3? = if touchHeld then (if lockedPatch then camera.CFrame.Position else nil) else ray.Origin
 	local aimVector = target - (aimOrigin or origin)
 	local aimDirection = if aimVector.Magnitude > 0.01 then aimVector.Unit else ray.Direction
 	local cameraOnAnimal = not touchHeld and camHit ~= nil and animal ~= nil and camHit.Instance:IsDescendantOf(animal)
@@ -951,7 +1070,7 @@ local function onHeartbeat()
 		pulseHint(animal)
 	end
 
-	if not (mouseHeld or touchHeld or padHeld) then
+	if not (mouseHeld or touchHeld or padHeld or scrub) then
 		stopEffects()
 		return
 	end
@@ -1031,6 +1150,21 @@ local function applyTier(tier: number, _name: string?, level: number?)
 	end
 end
 
+-- WASH's reticle sits on the locked mud. The aim runs on Heartbeat, before the camera moves
+-- this frame, so the reticle is placed again here after it, or it would trail the view.
+local function followLock()
+	local world = lockedWorld
+	local camera = Workspace.CurrentCamera
+	if not (touchHeld and world and camera) then
+		return
+	end
+	local projected, onScreen = camera:WorldToViewportPoint(world)
+	local point = Vector2.new(projected.X, projected.Y)
+	reticle.Visible = onScreen and projected.Z > 0
+	reticle.Position = UDim2.fromOffset(point.X, point.Y)
+	sprayScreenPoint = point
+end
+
 -- A short kick when the stronger hoses start spraying, fading out over SHAKE_SECONDS,
 -- applied after the camera has moved.
 local function shakeCamera()
@@ -1068,7 +1202,9 @@ function CleaningController.init(initial: Types.InitialState)
 		end)
 	RunService.Heartbeat:Connect(onHeartbeat)
 	RunService.RenderStepped:Connect(updateDrops)
-	RunService:BindToRenderStep("SprayShake", Enum.RenderPriority.Camera.Value + 1, shakeCamera)
+	-- After ScrubLook, which would otherwise put the camera back over the shake.
+	RunService:BindToRenderStep("SprayShake", Enum.RenderPriority.Camera.Value + 2, shakeCamera)
+	RunService:BindToRenderStep("WashReticle", Enum.RenderPriority.Camera.Value + 3, followLock)
 end
 
 return CleaningController

@@ -1,14 +1,16 @@
--- The phone WASH button: a big round button sitting right above the jump button.
--- Hold it to spray. Keep holding and drag the same finger to look around: only the
--- camera turns. The water stays locked on the mud (CleaningController picks the patch),
--- so looking around never moves the stream. Let go anywhere on screen to stop.
+-- The phone WASH button: a round button sitting right above the jump button, a little
+-- bigger than jump. A button, not a joystick: nothing on it moves with the thumb. Hold it to spray; let go to stop. The water locks
+-- onto the mud (CleaningController picks the patch), so the camera is free while washing:
+-- drag the thumb that holds WASH and the view turns just like a swipe on the free screen
+-- (past a small dead zone, so a still thumb never jitters it, and eased over a few frames
+-- so uneven touch updates never make it stutter). Another finger on the free screen turns
+-- it too.
 --
 -- The touch that starts on a GUI button is sunk, so the default camera never sees it.
 -- This module turns the camera itself, right after the camera script runs, by rotating
 -- Camera.CFrame around Camera.Focus. The Classic camera reads its look direction from
--- Camera.CFrame each frame, so the turn sticks. The Follow camera (the phone default)
--- swings back toward its last position instead, so CleaningController puts touch
--- players on Classic.
+-- Camera.CFrame each frame, so the turn sticks. CleaningController puts touch players on
+-- Classic.
 --
 -- Sizes here are physical pixels, matched to the engine jump button. The gui is
 -- excluded from ResponsiveScale, like TouchGui, so the two stay lined up.
@@ -16,9 +18,10 @@
 --   WashButton.start(onHold)   onHold(true) when the finger lands, onHold(false) on release
 --   WashButton.setEnabled(on)  shows it for touch input, hides it otherwise
 --   WashButton.setBlocked(on)  hides it while a cutscene owns the camera
---   WashButton.setReady(on)    an animal is waiting to be washed: full size, glowing ring,
---                              and a HOLD! hint until the first press. Otherwise it shrinks
---                              and fades so it stays out of the way.
+--   WashButton.setReady(on)    an animal is waiting to be washed: full colour, glowing ring,
+--                              and a HOLD! hint until the first press. Otherwise it fades
+--                              so it stays out of the way.
+--   WashButton.isHeld()        a finger is holding it
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -34,14 +37,6 @@ local WashButton = {}
 
 local player = Players.LocalPlayer
 
--- Look speed in radians per pixel of drag, close to a normal camera swipe so holding
--- WASH never feels like losing the free camera. The water is locked on the mud, so a
--- fast turn does not throw the stream around. Other fingers still turn the camera the
--- normal way; only the WASH finger is handled here.
-local LOOK_SPEED = Vector2.new(0.014, 0.0095)
-local MAX_PITCH = math.rad(80) -- the default camera's limit
-local FIRST_PERSON_DISTANCE = 0.6
-
 -- The engine's own jump button layout (TouchJump), used until the real one is found.
 local SMALL_SCREEN_SIDE = 500
 local GAP = 12 -- between the top of jump and the bottom of WASH
@@ -53,9 +48,14 @@ local WATER_BOTTOM = Color3.fromRGB(30, 120, 230)
 local HELD_TOP = Color3.fromRGB(170, 240, 255)
 local HELD_BOTTOM = Color3.fromRGB(60, 160, 255)
 local RIM = Color3.fromRGB(255, 255, 255)
-local IDLE_SIZE = 0.86
 local IDLE_FADE = 0.45
-local READY_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+-- Look speed in radians per pixel of drag, close to a normal camera swipe.
+local LOOK_SPEED = Vector2.new(0.014, 0.0095)
+local MAX_PITCH = math.rad(80) -- the default camera's limit
+local FIRST_PERSON_DISTANCE = 0.6
+local DEAD_ZONE = 8 -- px the thumb moves before the camera starts turning
+local LOOK_EASE = 30 -- per second: how fast the camera catches up with the thumb
 
 local gui: ScreenGui
 local button: ImageButton
@@ -64,17 +64,12 @@ local faceGradient: UIGradient
 local pressScale: UIScale
 local ring: Frame
 local ringStroke: UIStroke
-local knob: Frame
 local drop: TextLabel
 local label: TextLabel
 local rim: UIStroke
 local innerStroke: UIStroke
-local readyScale: UIScale
 local fade: NumberValue
 local hint: TextLabel
-local dragHint: TextLabel
-local dragLearned = false -- the player has steered with the WASH finger this session
-local DRAG_LEARNED_PIXELS = 40
 
 local onHold: ((boolean) -> ())? = nil
 local enabled = false
@@ -82,8 +77,10 @@ local blocked = false
 local ready = false
 local hintArmed = false
 local activeTouch: InputObject? = nil
-local lastPosition = Vector2.zero
 local startPosition = Vector2.zero
+local lastPosition = Vector2.zero
+local looking = false -- the thumb has left the dead zone this hold
+local pendingLook = Vector2.zero -- thumb drag the camera has not caught up with yet
 local jumpConns: { RBXScriptConnection } = {}
 
 local function corner(parent: Instance)
@@ -102,8 +99,8 @@ local function build()
 	gui:SetAttribute("UIPlatformExclude", true)
 	gui.Enabled = false
 
-	-- The button is transparent: the round face, rim and text are children so the
-	-- press scale and the look ring can move separately.
+	-- The button is transparent: the face, rim and text are children so the press scale
+	-- and the ready ring can move separately.
 	button = Instance.new("ImageButton")
 	button.Name = "Wash"
 	button.AnchorPoint = Vector2.new(0.5, 1)
@@ -115,13 +112,12 @@ local function build()
 	pressScale = Instance.new("UIScale")
 	pressScale.Parent = button
 
-	-- Drag ring: shows while held, so the player sees that the finger is steering.
+	-- Ready ring: breathes around the button while an animal is waiting.
 	ring = Instance.new("Frame")
-	ring.Name = "LookRing"
+	ring.Name = "ReadyRing"
 	ring.AnchorPoint = Vector2.new(0.5, 0.5)
 	ring.Position = UDim2.fromScale(0.5, 0.5)
-	ring.Size = UDim2.fromScale(1.55, 1.55)
-	ring.BackgroundColor3 = Color3.new(0, 0, 0)
+	ring.Size = UDim2.fromScale(1.12, 1.12)
 	ring.BackgroundTransparency = 1
 	ring.Parent = button
 	corner(ring)
@@ -145,9 +141,6 @@ local function build()
 	faceGradient.Color = ColorSequence.new(WATER_TOP, WATER_BOTTOM)
 	faceGradient.Parent = face
 	-- Cartoon rim: white inside, black outside, like the rest of the HUD.
-	readyScale = Instance.new("UIScale")
-	readyScale.Scale = IDLE_SIZE
-	readyScale.Parent = face
 	rim = Instance.new("UIStroke")
 	rim.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	rim.Color = Color3.new(0, 0, 0)
@@ -167,18 +160,6 @@ local function build()
 	innerStroke.Thickness = 3
 	innerStroke.Transparency = 0.25
 	innerStroke.Parent = inner
-
-	-- Knob that follows the finger a little while dragging.
-	knob = Instance.new("Frame")
-	knob.Name = "Knob"
-	knob.AnchorPoint = Vector2.new(0.5, 0.5)
-	knob.Position = UDim2.fromScale(0.5, 0.5)
-	knob.Size = UDim2.fromScale(0.34, 0.34)
-	knob.BackgroundColor3 = RIM
-	knob.BackgroundTransparency = 1
-	knob.ZIndex = 4
-	knob.Parent = button
-	corner(knob)
 
 	drop = Instance.new("TextLabel")
 	drop.Name = "Drop"
@@ -211,18 +192,6 @@ local function build()
 	hint.ZIndex = 5
 	hint.Parent = button
 	UIStyle.text(hint, Color3.fromRGB(255, 240, 120), nil, 2.5)
-
-	-- While held, until the player has steered once: tell them the finger can drag.
-	dragHint = Instance.new("TextLabel")
-	dragHint.Name = "DragHint"
-	dragHint.AnchorPoint = Vector2.new(1, 0.5)
-	dragHint.Position = UDim2.new(0, -14, 0.5, 0)
-	dragHint.Size = UDim2.fromScale(1.5, 0.32)
-	dragHint.Text = "◀ DRAG TO LOOK ▶"
-	dragHint.Visible = false
-	dragHint.ZIndex = 5
-	dragHint.Parent = button
-	UIStyle.text(dragHint, Color3.fromRGB(200, 240, 255), nil, 2)
 
 	-- One number drives the idle fade of every piece of the face.
 	fade = Instance.new("NumberValue")
@@ -266,14 +235,16 @@ local function jumpRect(): (Vector2, number)
 	return Vector2.new(screen.X - 170 + 60, screen.Y - 210 + 60), 120
 end
 
+-- Centred over jump, kept on screen when it is bigger than jump.
 local function place()
 	if not button then
 		return
 	end
 	local center, jumpSize = jumpRect()
 	local size = math.max(MIN_SIZE, math.floor(jumpSize * SIZE_OVER_JUMP))
+	local x = math.min(center.X, gui.AbsoluteSize.X - size / 2 - 4)
 	button.Size = UDim2.fromOffset(size, size)
-	button.Position = UDim2.fromOffset(center.X, center.Y - jumpSize / 2 - GAP)
+	button.Position = UDim2.fromOffset(x, center.Y - jumpSize / 2 - GAP)
 end
 
 -- Follows the jump button as the engine builds, moves or resizes it. Until a link in
@@ -307,19 +278,14 @@ local function watchJump()
 end
 
 local function setHeldLook(held: boolean)
-	local info = TweenInfo.new(if held then 0.12 else 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	TweenService:Create(ringStroke, info, { Transparency = if held then 0.35 else 1 }):Play()
-	TweenService:Create(ring, info, { Size = UDim2.fromScale(1.55, 1.55) }):Play()
-	TweenService:Create(ring, info, { BackgroundTransparency = if held then 0.82 else 1 }):Play()
-	TweenService:Create(knob, info, { BackgroundTransparency = if held then 0.35 else 1 }):Play()
-	-- Solid and full size while held, even when nothing is waiting to be washed.
+	local info = TweenInfo.new(if held then 0.08 else 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	-- Solid while held, even when nothing is waiting to be washed.
 	TweenService:Create(fade, info, { Value = if held or ready then 0 else IDLE_FADE }):Play()
-	TweenService:Create(readyScale, READY_INFO, { Scale = if held or ready then 1 else IDLE_SIZE }):Play()
 	faceGradient.Color = if held
 		then ColorSequence.new(HELD_TOP, HELD_BOTTOM)
 		else ColorSequence.new(WATER_TOP, WATER_BOTTOM)
-	if not held then
-		TweenService:Create(knob, info, { Position = UDim2.fromScale(0.5, 0.5) }):Play()
+	if held then
+		ringStroke.Transparency = 1
 	end
 end
 
@@ -328,8 +294,7 @@ local function release()
 		return
 	end
 	activeTouch = nil
-	dragHint.Visible = false
-	TweenService:Create(pressScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+	TweenService:Create(pressScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Scale = 1,
 	}):Play()
 	setHeldLook(false)
@@ -343,52 +308,44 @@ local function press(input: InputObject)
 		return
 	end
 	activeTouch = input
-	hintArmed = false
-	hint.Visible = false
 	startPosition = Vector2.new(input.Position.X, input.Position.Y)
 	lastPosition = startPosition
-	TweenService:Create(pressScale, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Scale = 0.94,
+	looking = false
+	pendingLook = Vector2.zero
+	hintArmed = false
+	hint.Visible = false
+	TweenService:Create(pressScale, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Scale = 0.92,
 	}):Play()
 	setHeldLook(true)
-	dragHint.Visible = not dragLearned
 	Feedback.play("click")
 	if onHold then
 		onHold(true)
 	end
 end
 
-local function moved(input: InputObject)
-	if input ~= activeTouch then
-		return
-	end
-	local position = Vector2.new(input.Position.X, input.Position.Y)
-	-- The knob leans toward the finger, up to the face's edge.
-	local offset = position - startPosition
-	if not dragLearned and offset.Magnitude >= DRAG_LEARNED_PIXELS then
-		dragLearned = true
-		dragHint.Visible = false
-	end
-	local radius = button.AbsoluteSize.X * 0.5
-	if offset.Magnitude > radius then
-		offset = offset.Unit * radius
-	end
-	local half = math.max(1, button.AbsoluteSize.X)
-	knob.Position = UDim2.fromScale(0.5 + offset.X / half, 0.5 + offset.Y / half)
-end
-
--- After the camera script: turn by this frame's drag around the focus point. The drag is
--- read straight from the held finger's InputObject every frame, so it never depends on
--- move events reaching us for a touch that a button captured.
-local function applyLook()
+-- After the camera script: turn by this frame's thumb drag around the focus point. The
+-- drag is read straight from the held finger's InputObject every frame, so it never
+-- depends on move events reaching us for a touch that a button captured.
+local function applyLook(dt: number)
 	local touch = activeTouch
 	if not touch then
+		pendingLook = Vector2.zero
 		return
 	end
-	moved(touch)
 	local position = Vector2.new(touch.Position.X, touch.Position.Y)
-	local delta = position - lastPosition
+	if not looking then
+		if (position - startPosition).Magnitude < DEAD_ZONE then
+			return
+		end
+		looking = true
+	end
+	pendingLook += position - lastPosition
 	lastPosition = position
+	-- Ease toward the thumb: a frame with no touch update still turns a little, so the
+	-- view glides instead of stepping.
+	local delta = pendingLook * (1 - math.exp(-LOOK_EASE * dt))
+	pendingLook -= delta
 	if delta.Magnitude < 0.01 then
 		return
 	end
@@ -429,8 +386,8 @@ function WashButton.start(callback: (boolean) -> ())
 			press(input)
 		end
 	end)
-	-- The drag itself is polled in applyLook. The end is tracked on UserInputService, not
-	-- the button: the finger leaves the button as it drags.
+	-- The end is tracked on UserInputService, not the button: the thumb leaves the button
+	-- as it drags, and the water keeps going until it lifts.
 	UserInputService.InputEnded:Connect(function(input)
 		if input == activeTouch then
 			release()
@@ -438,8 +395,8 @@ function WashButton.start(callback: (boolean) -> ())
 	end)
 	UserInputService.WindowFocusReleased:Connect(release)
 	RunService:BindToRenderStep("WashLook", Enum.RenderPriority.Camera.Value + 1, applyLook)
-	-- The spray runs until that finger lifts, nothing else. This backs up InputEnded in
-	-- case a lift is missed: the finger's own InputObject says when it is gone.
+	-- Backs up InputEnded in case a lift is missed: the finger's own InputObject says when
+	-- it is gone.
 	RunService.Heartbeat:Connect(function()
 		local touch = activeTouch
 		if
@@ -451,7 +408,7 @@ function WashButton.start(callback: (boolean) -> ())
 	end)
 
 	-- Idle life: the droplet bobs; while an animal waits, the ring breathes and the
-	-- HOLD! hint bounces. A held button leaves the ring to setHeldLook's tweens.
+	-- HOLD! hint bounces.
 	RunService.RenderStepped:Connect(function()
 		if not gui.Enabled or activeTouch then
 			return
@@ -507,12 +464,15 @@ function WashButton.setReady(on: boolean)
 		hintArmed = true
 	end
 	local solid = on or activeTouch ~= nil
-	TweenService:Create(readyScale, READY_INFO, { Scale = if solid then 1 else IDLE_SIZE }):Play()
 	TweenService:Create(fade, TweenInfo.new(0.25), { Value = if solid then 0 else IDLE_FADE }):Play()
 end
 
 function WashButton.isHeld(): boolean
 	return activeTouch ~= nil
+end
+
+function WashButton.isEnabled(): boolean
+	return enabled and not blocked
 end
 
 return WashButton

@@ -15,6 +15,7 @@ local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.Moneti
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local Layout = require(script.Parent.Parent.UI.Layout)
 local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -172,6 +173,23 @@ local function setMessage(text: string, ok: boolean)
 end
 
 local dim: TextButton
+local panelScale: UIScale
+
+-- The panel is authored at desktop size, so at phone scale its text is a few pixels tall.
+-- On touch it grows to fill most of the screen height (never past 1.45x), measured when
+-- it opens so it matches the HUD's current ResponsiveScale.
+local function scalePanel()
+	if Layout.get().key ~= "Touch" then
+		panelScale.Scale = 1
+		return
+	end
+	local gui = panel:FindFirstAncestorOfClass("ScreenGui")
+	local responsive = gui and gui:FindFirstChild("ResponsiveScale")
+	local factor = if responsive and responsive:IsA("UIScale") and responsive.Scale > 0.05 then responsive.Scale else 1
+	local height = math.max(panel.Size.Y.Offset, 1)
+	local room = if gui then gui.AbsoluteSize.Y / factor * 0.94 else height
+	panelScale.Scale = math.clamp(room / height, 1, 1.45)
+end
 
 local function close()
 	openStation = nil
@@ -189,6 +207,7 @@ local function open(station: BasePart)
 	if dim then
 		dim.Visible = true
 	end
+	scalePanel()
 	panel.Visible = true
 end
 
@@ -217,6 +236,8 @@ local function buildGui()
 	constraint.MaxSize = Vector2.new(360, PANEL_HEIGHT)
 	constraint.Parent = panel
 	panel.Size = UDim2.new(0.9, 0, 0, PANEL_HEIGHT)
+	panelScale = Instance.new("UIScale")
+	panelScale.Parent = panel
 
 	label({
 		Position = UDim2.fromOffset(18, 12),

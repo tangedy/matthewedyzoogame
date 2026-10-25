@@ -26,6 +26,10 @@ local TITLE_HEIGHT = 20
 local BUTTON_HEIGHT = 32
 local BUTTON_GAP = 4
 local PAD = 6
+-- Cards over animals and pens draw at this size: smaller so they cover less of the
+-- animal and are harder to brush by accident. Touch screens sit closer, so smaller still.
+local CARD_SCALE_TOUCH = 0.8
+local CARD_SCALE = 0.9
 
 -- Button colour by what the action does: muted so the card sits quietly over the world.
 -- Anything unlisted is the neutral blue (pick up, place, and other moves).
@@ -74,16 +78,52 @@ type Card = {
 local cards: { [Instance]: Card } = {}
 local holding: { [ProximityPrompt]: boolean } = {}
 
+-- On touch, the actions that cost you an animal or move it need a short hold, so a
+-- thumb brushing past a card can't sell or pick up by accident. The server sets each
+-- prompt's own HoldDuration (serverHold); this raises it locally on touch only. The
+-- engine runs the hold on the client, so the local value is the one that counts.
+local TOUCH_HOLD = 0.75
+local TOUCH_HOLD_ACTIONS = { "Sell", "Swap", "Pick up" }
+local serverHold: { [ProximityPrompt]: number } = {}
+-- What we last wrote. Property signals are deferred, so a flag set around the write is
+-- already cleared when the change fires; comparing against our own value is not.
+local localHold: { [ProximityPrompt]: number } = {}
+
+local function wantsTouchHold(prompt: ProximityPrompt): boolean
+	if UIPlatform.get().inputMode ~= "Touch" then
+		return false
+	end
+	for _, prefix in TOUCH_HOLD_ACTIONS do
+		if string.sub(prompt.ActionText, 1, #prefix) == prefix then
+			return true
+		end
+	end
+	return false
+end
+
+local function applyHold(prompt: ProximityPrompt)
+	local base = serverHold[prompt] or prompt.HoldDuration
+	local want = if wantsTouchHold(prompt) then math.max(base, TOUCH_HOLD) else base
+	if prompt.HoldDuration ~= want then
+		localHold[prompt] = want
+		prompt.HoldDuration = want
+	end
+end
+
 local function keyText(prompt: ProximityPrompt): string
 	local mode = UIPlatform.get().inputMode
 	if mode == "Touch" then
-		return "TAP"
+		return if prompt.HoldDuration > 0 then "HOLD" else "TAP"
 	end
 	if mode == "Gamepad" then
 		local name = prompt.GamepadKeyCode.Name
 		return string.gsub(name, "^Button", "")
 	end
 	return prompt.KeyboardKeyCode.Name
+end
+
+local function cardScale(): number
+	return if UIPlatform.get().inputMode == "Touch" then CARD_SCALE_TOUCH else CARD_SCALE
 end
 
 local function colorFor(prompt: ProximityPrompt): Color3
@@ -169,7 +209,7 @@ local function makeCard(parent: Instance): Card
 	board.Parent = player:WaitForChild("PlayerGui")
 
 	local scale = Instance.new("UIScale")
-	scale.Scale = 0.6
+	scale.Scale = 0.6 * cardScale()
 	scale.Parent = board
 
 	-- One dark rounded backing for the whole card, so it reads against any scenery.
@@ -206,7 +246,8 @@ local function makeCard(parent: Instance): Card
 	listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	listLayout.Parent = list
 
-	TweenService:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+	TweenService
+		:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = cardScale() })
 		:Play()
 	return { Gui = board, Title = title, List = list, Scale = scale, Buttons = {} }
 end
@@ -296,7 +337,7 @@ local function makeButton(card: Card, prompt: ProximityPrompt): Button
 			end
 		end)
 	)
-	for _, property in { "ActionText", "ObjectText", "KeyboardKeyCode", "UIOffset" } do
+	for _, property in { "ActionText", "ObjectText", "KeyboardKeyCode", "UIOffset", "HoldDuration" } do
 		table.insert(
 			button.Connections,
 			prompt:GetPropertyChangedSignal(property):Connect(function()
@@ -348,6 +389,26 @@ local function show(prompt: ProximityPrompt)
 end
 
 local function adopt(prompt: ProximityPrompt)
+	if serverHold[prompt] == nil then
+		serverHold[prompt] = prompt.HoldDuration
+		-- A replicated change is the server's new value; our own write is not.
+		prompt:GetPropertyChangedSignal("HoldDuration"):Connect(function()
+			if prompt.HoldDuration == localHold[prompt] then
+				return
+			end
+			localHold[prompt] = nil
+			serverHold[prompt] = prompt.HoldDuration
+			applyHold(prompt)
+		end)
+		prompt:GetPropertyChangedSignal("ActionText"):Connect(function()
+			applyHold(prompt)
+		end)
+		prompt.Destroying:Connect(function()
+			serverHold[prompt] = nil
+			localHold[prompt] = nil
+		end)
+		applyHold(prompt)
+	end
 	if prompt.Style ~= Enum.ProximityPromptStyle.Custom then
 		prompt.Style = Enum.ProximityPromptStyle.Custom
 		-- A prompt already on screen keeps its native billboard until it is shown again.
@@ -367,6 +428,12 @@ function PromptController.init()
 	Workspace.DescendantAdded:Connect(function(descendant)
 		if descendant:IsA("ProximityPrompt") then
 			adopt(descendant)
+		end
+	end)
+	-- Switching between touch and keyboard turns the touch holds on or off.
+	UIPlatform.onChanged(function()
+		for prompt in serverHold do
+			applyHold(prompt)
 		end
 	end)
 
@@ -401,8 +468,9 @@ function PromptController.init()
 				button.HoldStart = nil
 				button.Fill.Size = UDim2.fromScale(0, 1)
 				-- A quick press pop so the tap reads as done.
-				card.Scale.Scale = 0.92
-				TweenService:Create(card.Scale, TweenInfo.new(0.18, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+				local size = cardScale()
+				card.Scale.Scale = 0.92 * size
+				TweenService:Create(card.Scale, TweenInfo.new(0.18, Enum.EasingStyle.Back), { Scale = size }):Play()
 			end
 		end
 	end)
