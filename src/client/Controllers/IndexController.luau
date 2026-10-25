@@ -95,9 +95,7 @@ local function buildGui()
 	UIStyle.border(panel, 4)
 	panelScale = Instance.new("UIScale")
 	panelScale.Parent = panel
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(600, 560)
-	constraint.Parent = panel
+	UIPlatform.Layout.panel(panel, { scale = Vector2.new(0.92, 0.82), maxSize = Vector2.new(600, 560) })
 
 	local title = Instance.new("TextLabel")
 	title.Position = UDim2.fromOffset(16, 10)

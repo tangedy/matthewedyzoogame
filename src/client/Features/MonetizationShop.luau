@@ -249,9 +249,12 @@ local function refreshCard(card: Card, state: ShopState)
 	card.Buy.BackgroundColor3 = if buyable then BUY_COLOR elseif buyText == "OWNED" then OWNED_COLOR else DISABLED_COLOR
 end
 
+-- Columns are worked out in design units (the cell size is one). Touch always gets two
+-- columns that fill the panel; desktop fits as many 200-wide cards as it can, up to three.
 local function relayout()
-	local width = grid.AbsoluteSize.X - 10
-	local columns = math.clamp(math.floor(width / 200), 1, 3)
+	local width = UIPlatform.Layout.designSize(grid).X - 14 -- padding and scroll bar
+	local fixed = UIPlatform.Layout.get().panel.columns
+	local columns = fixed or math.clamp(math.floor(width / 200), 1, 3)
 	local cellWidth = math.floor((width - (columns - 1) * 10) / columns)
 	gridLayout.CellSize = UDim2.fromOffset(math.max(cellWidth, 140), 206)
 end
@@ -314,9 +317,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	dim = Modals.dim(gui, MonetizationShop.close)
 	Modals.bind("RobuxShop", MonetizationShop.close)
 	UIStyle.border(panel, 4)
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(680, 480)
-	constraint.Parent = panel
+	UIPlatform.Layout.panel(panel)
 	panelScale = Instance.new("UIScale")
 	panelScale.Parent = panel
 
@@ -379,6 +380,11 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
 	grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	UIPlatform.Layout.watch(function()
+		if gridLayout then
+			relayout()
+		end
+	end)
 
 	testLabel = textLabel(panel, {
 		AnchorPoint = Vector2.new(0.5, 1),

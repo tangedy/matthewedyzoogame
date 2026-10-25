@@ -5,8 +5,10 @@
 --
 -- The touch that starts on a GUI button is sunk, so the default camera never sees it.
 -- This module turns the camera itself, right after the camera script runs, by rotating
--- Camera.CFrame around Camera.Focus. The camera script reads its look direction from
--- Camera.CFrame each frame, so the turn sticks.
+-- Camera.CFrame around Camera.Focus. The Classic camera reads its look direction from
+-- Camera.CFrame each frame, so the turn sticks. The Follow camera (the phone default)
+-- swings back toward its last position instead, so CleaningController puts touch
+-- players on Classic.
 --
 -- Sizes here are physical pixels, matched to the engine jump button. The gui is
 -- excluded from ResponsiveScale, like TouchGui, so the two stay lined up.
@@ -70,6 +72,9 @@ local innerStroke: UIStroke
 local readyScale: UIScale
 local fade: NumberValue
 local hint: TextLabel
+local dragHint: TextLabel
+local dragLearned = false -- the player has steered with the WASH finger this session
+local DRAG_LEARNED_PIXELS = 40
 
 local onHold: ((boolean) -> ())? = nil
 local enabled = false
@@ -79,7 +84,6 @@ local hintArmed = false
 local activeTouch: InputObject? = nil
 local lastPosition = Vector2.zero
 local startPosition = Vector2.zero
-local pendingLook = Vector2.zero
 local jumpConns: { RBXScriptConnection } = {}
 
 local function corner(parent: Instance)
@@ -208,6 +212,18 @@ local function build()
 	hint.Parent = button
 	UIStyle.text(hint, Color3.fromRGB(255, 240, 120), nil, 2.5)
 
+	-- While held, until the player has steered once: tell them the finger can drag.
+	dragHint = Instance.new("TextLabel")
+	dragHint.Name = "DragHint"
+	dragHint.AnchorPoint = Vector2.new(1, 0.5)
+	dragHint.Position = UDim2.new(0, -14, 0.5, 0)
+	dragHint.Size = UDim2.fromScale(1.5, 0.32)
+	dragHint.Text = "◀ DRAG TO LOOK ▶"
+	dragHint.Visible = false
+	dragHint.ZIndex = 5
+	dragHint.Parent = button
+	UIStyle.text(dragHint, Color3.fromRGB(200, 240, 255), nil, 2)
+
 	-- One number drives the idle fade of every piece of the face.
 	fade = Instance.new("NumberValue")
 	fade.Value = IDLE_FADE
@@ -312,7 +328,7 @@ local function release()
 		return
 	end
 	activeTouch = nil
-	pendingLook = Vector2.zero
+	dragHint.Visible = false
 	TweenService:Create(pressScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Scale = 1,
 	}):Play()
@@ -331,11 +347,11 @@ local function press(input: InputObject)
 	hint.Visible = false
 	startPosition = Vector2.new(input.Position.X, input.Position.Y)
 	lastPosition = startPosition
-	pendingLook = Vector2.zero
 	TweenService:Create(pressScale, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Scale = 0.94,
 	}):Play()
 	setHeldLook(true)
+	dragHint.Visible = not dragLearned
 	Feedback.play("click")
 	if onHold then
 		onHold(true)
@@ -347,10 +363,12 @@ local function moved(input: InputObject)
 		return
 	end
 	local position = Vector2.new(input.Position.X, input.Position.Y)
-	pendingLook += position - lastPosition
-	lastPosition = position
 	-- The knob leans toward the finger, up to the face's edge.
 	local offset = position - startPosition
+	if not dragLearned and offset.Magnitude >= DRAG_LEARNED_PIXELS then
+		dragLearned = true
+		dragHint.Visible = false
+	end
 	local radius = button.AbsoluteSize.X * 0.5
 	if offset.Magnitude > radius then
 		offset = offset.Unit * radius
@@ -359,13 +377,21 @@ local function moved(input: InputObject)
 	knob.Position = UDim2.fromScale(0.5 + offset.X / half, 0.5 + offset.Y / half)
 end
 
--- After the camera script: turn by this frame's drag around the focus point.
+-- After the camera script: turn by this frame's drag around the focus point. The drag is
+-- read straight from the held finger's InputObject every frame, so it never depends on
+-- move events reaching us for a touch that a button captured.
 local function applyLook()
-	if pendingLook.Magnitude < 0.01 then
+	local touch = activeTouch
+	if not touch then
 		return
 	end
-	local delta = pendingLook
-	pendingLook = Vector2.zero
+	moved(touch)
+	local position = Vector2.new(touch.Position.X, touch.Position.Y)
+	local delta = position - lastPosition
+	lastPosition = position
+	if delta.Magnitude < 0.01 then
+		return
+	end
 	local camera = Workspace.CurrentCamera
 	if not camera or camera.CameraType ~= Enum.CameraType.Custom then
 		return
@@ -403,8 +429,8 @@ function WashButton.start(callback: (boolean) -> ())
 			press(input)
 		end
 	end)
-	-- Tracked on UserInputService, not the button: the finger leaves the button as it drags.
-	UserInputService.InputChanged:Connect(moved)
+	-- The drag itself is polled in applyLook. The end is tracked on UserInputService, not
+	-- the button: the finger leaves the button as it drags.
 	UserInputService.InputEnded:Connect(function(input)
 		if input == activeTouch then
 			release()

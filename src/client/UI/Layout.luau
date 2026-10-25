@@ -28,6 +28,8 @@ export type Spec = {
 	boostTimers: { anchor: Vector2, position: UDim2 },
 	invite: { anchor: Vector2, position: UDim2 },
 	dataWarning: UDim2,
+	-- Full-screen menus (Robux shop, index, daily). columns: shop grid columns, nil = by width.
+	panel: { scale: Vector2, maxSize: Vector2, columns: number? },
 	toastLift: number, -- bottom-centre hint line, above the controls
 	bannerLift: number, -- bottom-centre button rows (carry PUT DOWN / SELL)
 }
@@ -51,32 +53,35 @@ local DESKTOP: Spec = {
 	boostTimers = { anchor = Vector2.new(0, 0.5), position = UDim2.new(0, 196, 0.5, 14) },
 	invite = { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -16, 0.5, 70) },
 	dataWarning = UDim2.new(0, 16, 0.5, 140),
+	panel = { scale = Vector2.new(0.94, 0.86), maxSize = Vector2.new(680, 480), columns = nil },
 	toastLift = 140,
 	bannerLift = 190,
 }
 
--- A landscape phone at scale 0.55 is about 600 units tall under the top bar. Cash and
--- the icon column end near 400; the column is 90 wide (about 50px drawn), so a thumb
--- landing anywhere right of it or below it reaches the thumbstick.
+-- A landscape phone at scale 0.5 is about 660 units tall under the top bar. Cash and
+-- the icon column end near 360; the column is 84 wide (about 42px drawn), so a thumb
+-- landing anywhere right of it or below it reaches the thumbstick. Menus fill nearly
+-- the whole screen, and the shop is two columns.
 local TOUCH: Spec = {
 	key = "Touch",
 	wallet = {
 		anchor = Vector2.new(0, 0),
 		position = UDim2.fromOffset(16, 4),
-		size = Vector2.new(280, 92),
-		cashHeight = 66,
+		size = Vector2.new(240, 78),
+		cashHeight = 56,
 	},
 	rail = {
 		anchor = Vector2.new(0, 0),
 		x = 16,
-		top = UDim.new(0, 104),
-		step = 100,
-		size = Vector2.new(90, 90),
+		top = UDim.new(0, 90),
+		step = 92,
+		size = Vector2.new(84, 84),
 		compact = true,
 	},
-	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(118, 104) },
+	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(112, 90) },
 	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
-	dataWarning = UDim2.fromOffset(310, 10),
+	dataWarning = UDim2.fromOffset(270, 10),
+	panel = { scale = Vector2.new(0.96, 0.95), maxSize = Vector2.new(1120, 640), columns = 2 },
 	toastLift = 28,
 	bannerLift = 24,
 }
@@ -144,6 +149,33 @@ local function restackRail()
 			slot += 1
 		end
 	end
+end
+
+-- Sizes a full-screen menu panel from the spec, and keeps it sized when the spec changes.
+-- Its UISizeConstraint is reused (or made) so there is only one cap on it. desktop keeps
+-- a panel's own original desktop size; touch always uses the shared full-screen size.
+function Layout.panel(panel: GuiObject, desktop: { scale: Vector2, maxSize: Vector2 }?)
+	local cap = panel:FindFirstChildOfClass("UISizeConstraint")
+	if not cap then
+		local created = Instance.new("UISizeConstraint")
+		created.Parent = panel
+		cap = created
+	end
+	local constraint = cap :: UISizeConstraint
+	Layout.watch(function(spec)
+		local size = if spec.key == "Desktop" and desktop then desktop else spec.panel
+		panel.Size = UDim2.fromScale(size.scale.X, size.scale.Y)
+		constraint.MaxSize = size.maxSize
+	end)
+end
+
+-- The design-unit size of a scaled object: AbsoluteSize is screen pixels after
+-- ResponsiveScale, and offsets inside it are design units before it.
+function Layout.designSize(object: GuiObject): Vector2
+	local gui = object:FindFirstAncestorOfClass("ScreenGui")
+	local scale = gui and gui:FindFirstChild("ResponsiveScale")
+	local factor = if scale and scale:IsA("UIScale") and scale.Scale > 0.05 then scale.Scale else 1
+	return object.AbsoluteSize / factor
 end
 
 function Layout.get(): Spec

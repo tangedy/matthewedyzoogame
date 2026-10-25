@@ -62,7 +62,7 @@ PlayerGui
 
 - Width 360 or below maps to **0.62**. Width 1280 or above maps to **1**. In between, a smoothstep so the ends do not kink.
 - A short window (height under 720) shrinks a little more.
-- The form factor then clamps that number: Mobile 0.55–0.80, Tablet 0.55–0.95, PC 0.55–1.00. A normal window already sits inside the clamp, so dragging across 600 or 1024 does not pop.
+- The form factor then clamps that number: Mobile 0.45–0.80 (a landscape phone lands near 0.5), Tablet 0.55–0.95, PC 0.55–1.00. A normal window already sits inside the clamp, so dragging across 600 or 1024 does not pop.
 - PC never goes above 1. The existing desktop offsets stay the size they were built at.
 - The first value is applied immediately. Later changes ease in over about 180ms on one shared heartbeat, not a tween per gui.
 
@@ -176,7 +176,9 @@ Clicks that land on an `Active` gui (buttons, text boxes) do not start Spray. Th
 On touch, Spray is a custom button, not an engine action button. An engine button sinks the touch, so the finger holding it can never turn the camera. `UI/WashButton` fixes that:
 
 - It sits centred over the engine jump button, 12px above it, 1.1× its size (at least 76px). It reads `TouchGui > TouchControlFrame > JumpButton` and follows it when the engine moves or resizes it. Until that exists it uses the engine's own jump layout.
-- Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), close to a normal camera swipe. Other fingers still turn the camera the normal way while WASH is held, and the spray only stops when the WASH finger lifts.
+- Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), close to a normal camera swipe. Other fingers still turn the camera the normal way while WASH is held, and the spray only stops when the WASH finger lifts. The finger's position is read from its InputObject every frame, not from move events.
+- Touch players are put on the **Classic** camera (`Player.DevTouchCameraMode`). The phone default, Follow, swings the camera back toward its last angle every frame you are not swiping it yourself, which undid the WASH finger's turn.
+- The first time you hold WASH, a "◀ DRAG TO LOOK ▶" cue shows beside it until you drag about 40px.
 - Letting go anywhere on screen stops the water. A ring and a knob show while held, so the player sees the finger is steering.
 - It hides during the opening cutscene, and sits under every menu: the menu dimmers block it while a panel is open.
 - While an animal is waiting to be washed it is full size with a breathing ring, and a bouncing **HOLD!** shows until the first press. Otherwise it shrinks to 86% and fades, so it stays out of the way.
@@ -189,11 +191,12 @@ On touch, Spray is a custom button, not an engine action button. An engine butto
 | Piece | Desktop | Touch |
 | --- | --- | --- |
 | Cash and income | Bottom left | Top left, under the top bar |
-| INDEX / DAILY / SHOP | Left middle text buttons, 170×42, 48 apart | Narrow column of 90×90 icon buttons (📖 🎁 🛒) under the cash, 100 apart (about 50px drawn) |
+| INDEX / DAILY / SHOP | Left middle text buttons, 170×42, 48 apart | Narrow column of 84×84 icon buttons (📖 🎁 🛒) under the cash, 92 apart (about 42px drawn) |
 | Boost timers | Right of the rail | Right of the icon column |
 | Invite box | Right middle | Top right |
 | Event counter | Free part of the top bar | Same, or just under the bar when Roblox's buttons leave too little room (`GuiService.TopbarInset`) |
 | Toasts, carry PUT DOWN / SELL | 140 / 190 up from the bottom | 28 / 24 up, between the thumbstick and WASH |
+| Robux shop, index, daily | Each panel's own size | 96% × 95% of the screen (cap 1120×640); the Robux shop is always two columns |
 | Hotbar (Backpack) | Shown | Hidden: the hose re-equips itself, so the slot only covered the screen |
 
 The left-rail buttons register with `Layout.rail(button, order)`. The rail owns their position and size, and a hidden button (DAILY before it unlocks) gives its slot to the next one.

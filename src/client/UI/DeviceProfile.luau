@@ -35,7 +35,9 @@ local READABILITY_EXPONENT = 0.8
 -- Guard rails only. The curve already lands inside these for a normal resize,
 -- so crossing a width band does not pop. Mobile stays capped under desktop size.
 local SCALE_LIMITS: { [FormFactor]: { min: number, max: number } } = {
-	Mobile = { min = 0.55, max = 0.8 },
+	-- A landscape phone lands on ~0.5: text and boxes read at phone size, and the
+	-- 84-unit touch buttons still draw about 42px.
+	Mobile = { min = 0.45, max = 0.8 },
 	Tablet = { min = 0.55, max = 0.95 },
 	PC = { min = 0.55, max = 1 },
 }

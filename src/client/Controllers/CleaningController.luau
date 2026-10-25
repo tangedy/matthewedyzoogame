@@ -737,6 +737,12 @@ local function bindInput()
 		end
 		appliedTouch = touch
 		WashButton.setEnabled(touch)
+		-- Phones default to the Follow camera, which swings back toward its last angle and
+		-- undoes the WASH finger's turn. Classic is the plain free camera and keeps it.
+		-- Other fingers still swipe the camera as normal.
+		if touch then
+			player.DevTouchCameraMode = Enum.DevTouchCameraMovementMode.Classic
+		end
 		reticle.Size = if touch then UDim2.fromOffset(26, 26) else UDim2.fromOffset(18, 18)
 		-- The hose re-equips itself, so its hotbar slot only covers the screen on a phone.
 		task.spawn(function()

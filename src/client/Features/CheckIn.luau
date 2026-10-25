@@ -227,9 +227,7 @@ local function buildGui()
 	dim = Modals.dim(gui, close)
 	Modals.bind("CheckIn", close)
 	UIStyle.border(panel, 4)
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(640, 430)
-	constraint.Parent = panel
+	UIPlatform.Layout.panel(panel, { scale = Vector2.new(0.94, 0.86), maxSize = Vector2.new(640, 430) })
 	panelScale = Instance.new("UIScale")
 	panelScale.Parent = panel
 
