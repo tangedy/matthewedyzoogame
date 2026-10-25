@@ -112,7 +112,9 @@ local function render()
 		claimButton.Active = false
 	end
 	badge.Visible = s.CanClaim
-	dailyButton.Text = if s.CanClaim then "DAILY" else `DAILY {clock(left)}`
+	-- Touch shows the 🎁 icon above a short caption: the countdown alone.
+	local compact = UIPlatform.Layout.get().rail.compact
+	dailyButton.Text = if s.CanClaim then "DAILY" elseif compact then clock(left) else `DAILY {clock(left)}`
 	-- Hidden until unlocked; the rail closes the gap so SHOP moves up under INDEX.
 	dailyButton.Visible = s.Unlocked == true
 end
@@ -190,7 +192,7 @@ local function buildGui()
 	pad.Parent = dailyButton
 	dailyScale = Instance.new("UIScale")
 	dailyScale.Parent = dailyButton
-	UIPlatform.Layout.rail(dailyButton, 2)
+	UIPlatform.Layout.rail(dailyButton, 2, "🎁")
 	UIPlatform.Feedback.button(dailyButton)
 	badge = textLabel(dailyButton, {
 		AnchorPoint = Vector2.new(0.5, 0.5),

@@ -277,7 +277,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	shopButton = button
 	shopButton.Name = "ShopButton"
 	shopButton.ZIndex = 10
-	UIPlatform.Layout.rail(shopButton, 3)
+	UIPlatform.Layout.rail(shopButton, 3, "🛒")
 	UIPlatform.Feedback.button(shopButton)
 	shopButton.BackgroundColor3 = Color3.new(1, 1, 1)
 	local buttonGradient = Instance.new("UIGradient")

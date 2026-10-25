@@ -44,7 +44,9 @@ local function count(): number
 end
 
 local function refresh()
-	button.Text = `INDEX {count()}/{total()}`
+	-- Touch shows the 📖 icon above a short caption.
+	local prefix = if UIPlatform.Layout.get().rail.compact then "" else "INDEX "
+	button.Text = `{prefix}{count()}/{total()}`
 	for key, cell in cells do
 		local mutationKey = string.match(key, ":(%w+)$") or "Normal"
 		local mutation = MutationConfig.ByKey[mutationKey]
@@ -78,7 +80,7 @@ local function buildGui()
 	buttonPad.PaddingTop = UDim.new(0, 6)
 	buttonPad.PaddingBottom = UDim.new(0, 6)
 	buttonPad.Parent = button
-	UIPlatform.Layout.rail(button, 1)
+	UIPlatform.Layout.rail(button, 1, "📖")
 	UIPlatform.Feedback.button(button)
 
 	panel = Instance.new("Frame")
@@ -213,7 +215,9 @@ function IndexController.init(initial: Types.InitialState)
 	end)
 	index = initial.Index or {}
 	buildGui()
-	refresh()
+	UIPlatform.Layout.watch(function()
+		refresh()
+	end)
 
 	Remotes.event("IndexChanged").OnClientEvent:Connect(function(newIndex: { [string]: boolean })
 		index = newIndex

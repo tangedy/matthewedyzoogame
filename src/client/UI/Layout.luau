@@ -1,15 +1,21 @@
--- Where the HUD's fixed pieces sit for each form factor. Every number is in design
--- units: ResponsiveScale multiplies them, so a phone at scale 0.55 draws a 68-unit
--- button about 37px tall.
+-- Where the HUD's fixed pieces sit. Every number is in design units: ResponsiveScale
+-- multiplies them, so a phone at scale 0.55 draws a 90-unit button about 50px wide.
 --
--- Phones are laid out around the thumbs. The bottom-left is the thumbstick, the
--- bottom-right is jump and WASH, so cash and the menu rail move to the top-left and
--- toasts sit low in the middle. Tablets and desktops keep the original layout.
+-- Every touch device, phone or tablet, gets one layout built around the thumbs:
 --
---   Layout.get()          the spec for the current profile
---   Layout.watch(fn)      calls fn(spec) now and whenever the form factor or input changes
---   Layout.rail(b, order) stacks a left-rail button (INDEX, DAILY, SHOP) by order,
---                         skipping hidden ones, across ScreenGuis
+--   top left      cash and income, then a narrow column of square icon buttons
+--                 (INDEX, DAILY, SHOP). Narrow, so the thumbstick area stays clear.
+--   top right     the invite box
+--   bottom left   nothing: the thumbstick
+--   bottom right  jump and WASH (UI/WashButton)
+--   bottom centre one hint line, and the carry PUT DOWN / SELL row
+--
+-- Keyboard and gamepad keep the original desktop layout, with text buttons.
+--
+--   Layout.get()                the spec for the current profile
+--   Layout.watch(fn)            calls fn(spec) now and whenever the spec changes
+--   Layout.rail(b, order, icon) stacks a left-rail button by order, skipping hidden
+--                               ones, across ScreenGuis. icon shows in compact mode.
 
 local DeviceProfile = require(script.Parent.DeviceProfile)
 
@@ -18,7 +24,7 @@ local Layout = {}
 export type Spec = {
 	key: string,
 	wallet: { anchor: Vector2, position: UDim2, size: Vector2, cashHeight: number },
-	rail: { anchor: Vector2, x: number, top: UDim, step: number, size: Vector2 },
+	rail: { anchor: Vector2, x: number, top: UDim, step: number, size: Vector2, compact: boolean },
 	boostTimers: { anchor: Vector2, position: UDim2 },
 	invite: { anchor: Vector2, position: UDim2 },
 	dataWarning: UDim2,
@@ -26,7 +32,6 @@ export type Spec = {
 	bannerLift: number, -- bottom-centre button rows (carry PUT DOWN / SELL)
 }
 
--- Desktop and keyboard tablets: the layout the HUD was first built at.
 local DESKTOP: Spec = {
 	key = "Desktop",
 	wallet = {
@@ -35,7 +40,14 @@ local DESKTOP: Spec = {
 		size = Vector2.new(380, 150),
 		cashHeight = 110,
 	},
-	rail = { anchor = Vector2.new(0, 0.5), x = 16, top = UDim.new(0.5, 14), step = 48, size = Vector2.new(170, 42) },
+	rail = {
+		anchor = Vector2.new(0, 0.5),
+		x = 16,
+		top = UDim.new(0.5, 14),
+		step = 48,
+		size = Vector2.new(170, 42),
+		compact = false,
+	},
 	boostTimers = { anchor = Vector2.new(0, 0.5), position = UDim2.new(0, 196, 0.5, 14) },
 	invite = { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -16, 0.5, 70) },
 	dataWarning = UDim2.new(0, 16, 0.5, 140),
@@ -43,30 +55,28 @@ local DESKTOP: Spec = {
 	bannerLift = 190,
 }
 
--- Touch tablets: the jump button and thumbstick are large, so the bottom rows lift.
-local TABLET_TOUCH: Spec = table.clone(DESKTOP)
-TABLET_TOUCH.key = "TabletTouch"
-TABLET_TOUCH.wallet = table.clone(DESKTOP.wallet)
-TABLET_TOUCH.wallet.position = UDim2.new(0, 16, 1, -190)
-TABLET_TOUCH.invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 64) }
-TABLET_TOUCH.toastLift = 260
-TABLET_TOUCH.bannerLift = 260
-
--- Phones, landscape or portrait. A landscape phone at scale 0.55 is about 600 units
--- tall under the top bar. The wallet and rail use the top 340; the rest is thumb room.
--- Rail buttons are 68 tall so the drawn target stays near 40px.
-local PHONE: Spec = {
-	key = "Phone",
+-- A landscape phone at scale 0.55 is about 600 units tall under the top bar. Cash and
+-- the icon column end near 400; the column is 90 wide (about 50px drawn), so a thumb
+-- landing anywhere right of it or below it reaches the thumbstick.
+local TOUCH: Spec = {
+	key = "Touch",
 	wallet = {
 		anchor = Vector2.new(0, 0),
 		position = UDim2.fromOffset(16, 4),
-		size = Vector2.new(300, 100),
-		cashHeight = 72,
+		size = Vector2.new(280, 92),
+		cashHeight = 66,
 	},
-	rail = { anchor = Vector2.new(0, 0), x = 16, top = UDim.new(0, 112), step = 76, size = Vector2.new(176, 68) },
-	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(204, 112) },
-	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 12) },
-	dataWarning = UDim2.fromOffset(330, 10),
+	rail = {
+		anchor = Vector2.new(0, 0),
+		x = 16,
+		top = UDim.new(0, 104),
+		step = 100,
+		size = Vector2.new(90, 90),
+		compact = true,
+	},
+	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(118, 104) },
+	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
+	dataWarning = UDim2.fromOffset(310, 10),
 	toastLift = 28,
 	bannerLift = 24,
 }
@@ -74,16 +84,48 @@ local PHONE: Spec = {
 local current: Spec = DESKTOP
 local watchers: { (Spec) -> () } = {}
 
-type RailEntry = { button: GuiObject, order: number }
+type RailEntry = { button: GuiButton, order: number, icon: string?, iconLabel: TextLabel? }
 local railEntries: { RailEntry } = {}
 
+local ICON_SHARE = 0.58 -- top part of a compact button that holds the icon
+
 local function specFor(profile: DeviceProfile.Profile): Spec
-	if profile.formFactor == "Mobile" then
-		return PHONE
-	elseif profile.inputMode == "Touch" then
-		return TABLET_TOUCH
+	if profile.inputMode == "Touch" or profile.formFactor == "Mobile" then
+		return TOUCH
 	end
 	return DESKTOP
+end
+
+-- Compact: icon on top, the button's own text shrinks to a caption underneath.
+local function styleEntry(entry: RailEntry, compact: boolean)
+	local button = entry.button
+	local pad = button:FindFirstChildOfClass("UIPadding")
+	if pad then
+		if pad:GetAttribute("RailTop") == nil then
+			pad:SetAttribute("RailTop", pad.PaddingTop.Offset)
+		end
+		local original = pad:GetAttribute("RailTop") :: number
+		pad.PaddingTop = if compact and entry.icon then UDim.new(ICON_SHARE, 0) else UDim.new(0, original)
+	end
+	if not entry.icon then
+		return
+	end
+	if compact and not entry.iconLabel then
+		local icon = Instance.new("TextLabel")
+		icon.Name = "RailIcon"
+		icon.AnchorPoint = Vector2.new(0.5, 0)
+		icon.Position = UDim2.fromScale(0.5, 0.06)
+		icon.Size = UDim2.fromScale(0.62, ICON_SHARE - 0.06)
+		icon.BackgroundTransparency = 1
+		icon.Text = entry.icon
+		icon.TextScaled = true
+		icon.ZIndex = button.ZIndex + 1
+		icon.Parent = button
+		entry.iconLabel = icon
+	end
+	if entry.iconLabel then
+		entry.iconLabel.Visible = compact
+	end
 end
 
 local function restackRail()
@@ -97,6 +139,7 @@ local function restackRail()
 		button.AnchorPoint = rail.anchor
 		button.Size = UDim2.fromOffset(rail.size.X, rail.size.Y)
 		button.Position = UDim2.new(0, rail.x, rail.top.Scale, rail.top.Offset + slot * rail.step)
+		styleEntry(entry, rail.compact)
 		if button.Visible then
 			slot += 1
 		end
@@ -136,8 +179,8 @@ end
 
 -- The rail owns Position, Size and AnchorPoint of these buttons. A button that hides
 -- gives its slot to the next one.
-function Layout.rail(button: GuiObject, order: number)
-	table.insert(railEntries, { button = button, order = order })
+function Layout.rail(button: GuiButton, order: number, icon: string?)
+	table.insert(railEntries, { button = button, order = order, icon = icon })
 	button:GetPropertyChangedSignal("Visible"):Connect(restackRail)
 	button.Destroying:Connect(function()
 		for index, entry in railEntries do

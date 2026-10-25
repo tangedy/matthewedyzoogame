@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
+local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -336,14 +337,15 @@ local function findAssistTarget(
 	animal: Model,
 	origin: Vector3,
 	screenPoint: Vector2,
-	params: RaycastParams
+	params: RaycastParams,
+	radius: number
 ): BasePart?
 	local patches = animal:FindFirstChild("DirtPatches")
 	if not patches then
 		return nil
 	end
 	local viewport = camera.ViewportSize
-	local best: BasePart?, bestDist = nil, math.min(viewport.X, viewport.Y) * GameConfig.AimAssistRadius
+	local best: BasePart?, bestDist = nil, math.min(viewport.X, viewport.Y) * radius
 	for _, patch in patches:GetChildren() do
 		if patch:IsA("BasePart") and patch.CanQuery then
 			local projected, onScreen = camera:WorldToViewportPoint(patch.Position)
@@ -671,9 +673,27 @@ local function bindInput()
 	WashButton.start(function(down)
 		touchHeld = down
 	end)
-	WashButton.setEnabled(UIPlatform.get().inputMode == "Touch")
+	local appliedTouch: boolean? = nil
+	local function applyMode(touch: boolean)
+		if touch == appliedTouch then
+			return
+		end
+		appliedTouch = touch
+		WashButton.setEnabled(touch)
+		reticle.Size = if touch then UDim2.fromOffset(26, 26) else UDim2.fromOffset(18, 18)
+		-- The hose re-equips itself, so its hotbar slot only covers the screen on a phone.
+		task.spawn(function()
+			for _ = 1, 10 do
+				if pcall(StarterGui.SetCoreGuiEnabled, StarterGui, Enum.CoreGuiType.Backpack, not touch) then
+					return
+				end
+				task.wait(1)
+			end
+		end)
+	end
+	applyMode(UIPlatform.get().inputMode == "Touch")
 	UIPlatform.onChanged(function(profile)
-		WashButton.setEnabled(profile.inputMode == "Touch")
+		applyMode(profile.inputMode == "Touch")
 	end)
 	-- Losing focus mid-hold shouldn't leave the hose stuck on. Cancel covers most cases.
 	UserInputService.WindowFocusReleased:Connect(function()
@@ -734,6 +754,7 @@ local function onHeartbeat()
 	local root = getRoot()
 	local locked = cutsceneLocked()
 	WashButton.setBlocked(locked)
+	WashButton.setReady(washing and jobId ~= nil and player:GetAttribute("CleanBlocked") ~= true)
 	if not camera or not root or locked then
 		stopEffects()
 		return
@@ -764,6 +785,9 @@ local function onHeartbeat()
 
 	-- Aim assist (touch/gamepad only): if the reticle isn't on an animal, snap to the nearest
 	-- dirty patch on screen that the hose can actually reach, including a neighbor's wash.
+	-- Holding WASH on a phone locks on from much further out: hold it near an animal and
+	-- the water finds the mud, no precise aiming needed.
+	local assistRadius = if touchHeld then GameConfig.TouchAimAssistRadius else GameConfig.AimAssistRadius
 	local assistUsed = false
 	if assisted and not aimed then
 		local bays = Workspace:FindFirstChild("WashBays")
@@ -774,7 +798,7 @@ local function onHeartbeat()
 			for _, bay in bays:GetChildren() do
 				local model = bay:FindFirstChild("Animal")
 				if model and model:IsA("Model") and typeof(model:GetAttribute("JobId")) == "string" then
-					local assist = findAssistTarget(camera, model, origin, screenPoint, params)
+					local assist = findAssistTarget(camera, model, origin, screenPoint, params, assistRadius)
 					if assist then
 						local projected = camera:WorldToViewportPoint(assist.Position)
 						local distance = (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude

@@ -14,6 +14,9 @@
 --   WashButton.start(onHold)   onHold(true) when the finger lands, onHold(false) on release
 --   WashButton.setEnabled(on)  shows it for touch input, hides it otherwise
 --   WashButton.setBlocked(on)  hides it while a cutscene owns the camera
+--   WashButton.setReady(on)    an animal is waiting to be washed: full size, glowing ring,
+--                              and a HOLD! hint until the first press. Otherwise it shrinks
+--                              and fades so it stays out of the way.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -46,6 +49,9 @@ local WATER_BOTTOM = Color3.fromRGB(30, 120, 230)
 local HELD_TOP = Color3.fromRGB(170, 240, 255)
 local HELD_BOTTOM = Color3.fromRGB(60, 160, 255)
 local RIM = Color3.fromRGB(255, 255, 255)
+local IDLE_SIZE = 0.86
+local IDLE_FADE = 0.45
+local READY_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
 local gui: ScreenGui
 local button: ImageButton
@@ -56,10 +62,18 @@ local ring: Frame
 local ringStroke: UIStroke
 local knob: Frame
 local drop: TextLabel
+local label: TextLabel
+local rim: UIStroke
+local innerStroke: UIStroke
+local readyScale: UIScale
+local fade: NumberValue
+local hint: TextLabel
 
 local onHold: ((boolean) -> ())? = nil
 local enabled = false
 local blocked = false
+local ready = false
+local hintArmed = false
 local activeTouch: InputObject? = nil
 local lastPosition = Vector2.zero
 local startPosition = Vector2.zero
@@ -125,7 +139,10 @@ local function build()
 	faceGradient.Color = ColorSequence.new(WATER_TOP, WATER_BOTTOM)
 	faceGradient.Parent = face
 	-- Cartoon rim: white inside, black outside, like the rest of the HUD.
-	local rim = Instance.new("UIStroke")
+	readyScale = Instance.new("UIScale")
+	readyScale.Scale = IDLE_SIZE
+	readyScale.Parent = face
+	rim = Instance.new("UIStroke")
 	rim.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	rim.Color = Color3.new(0, 0, 0)
 	rim.Thickness = 4
@@ -139,7 +156,7 @@ local function build()
 	inner.ZIndex = 2
 	inner.Parent = face
 	corner(inner)
-	local innerStroke = Instance.new("UIStroke")
+	innerStroke = Instance.new("UIStroke")
 	innerStroke.Color = RIM
 	innerStroke.Thickness = 3
 	innerStroke.Transparency = 0.25
@@ -167,7 +184,7 @@ local function build()
 	drop.Parent = face
 	UIStyle.text(drop, nil, nil, 0)
 
-	local label = Instance.new("TextLabel")
+	label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
 	label.Position = UDim2.fromScale(0.5, 0.66)
@@ -176,6 +193,30 @@ local function build()
 	label.ZIndex = 3
 	label.Parent = face
 	UIStyle.text(label, nil, nil, 2.5)
+
+	-- "HOLD!" bubble above the button, the first time an animal is waiting.
+	hint = Instance.new("TextLabel")
+	hint.Name = "Hint"
+	hint.AnchorPoint = Vector2.new(0.5, 1)
+	hint.Position = UDim2.new(0.5, 0, 0, -6)
+	hint.Size = UDim2.fromScale(1.1, 0.34)
+	hint.Text = "HOLD!"
+	hint.Visible = false
+	hint.ZIndex = 5
+	hint.Parent = button
+	UIStyle.text(hint, Color3.fromRGB(255, 240, 120), nil, 2.5)
+
+	-- One number drives the idle fade of every piece of the face.
+	fade = Instance.new("NumberValue")
+	fade.Value = IDLE_FADE
+	fade.Changed:Connect(function(value)
+		face.BackgroundTransparency = value
+		rim.Transparency = value
+		innerStroke.Transparency = 0.25 + 0.75 * value
+		label.TextTransparency = value * 0.6
+		drop.TextTransparency = value
+	end)
+	face.BackgroundTransparency = IDLE_FADE
 
 	gui.Parent = player:WaitForChild("PlayerGui")
 end
@@ -250,8 +291,12 @@ end
 local function setHeldLook(held: boolean)
 	local info = TweenInfo.new(if held then 0.12 else 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	TweenService:Create(ringStroke, info, { Transparency = if held then 0.35 else 1 }):Play()
+	TweenService:Create(ring, info, { Size = UDim2.fromScale(1.55, 1.55) }):Play()
 	TweenService:Create(ring, info, { BackgroundTransparency = if held then 0.82 else 1 }):Play()
 	TweenService:Create(knob, info, { BackgroundTransparency = if held then 0.35 else 1 }):Play()
+	-- Solid and full size while held, even when nothing is waiting to be washed.
+	TweenService:Create(fade, info, { Value = if held or ready then 0 else IDLE_FADE }):Play()
+	TweenService:Create(readyScale, READY_INFO, { Scale = if held or ready then 1 else IDLE_SIZE }):Play()
 	faceGradient.Color = if held
 		then ColorSequence.new(HELD_TOP, HELD_BOTTOM)
 		else ColorSequence.new(WATER_TOP, WATER_BOTTOM)
@@ -280,6 +325,8 @@ local function press(input: InputObject)
 		return
 	end
 	activeTouch = input
+	hintArmed = false
+	hint.Visible = false
 	startPosition = Vector2.new(input.Position.X, input.Position.Y)
 	lastPosition = startPosition
 	pendingLook = Vector2.zero
@@ -364,12 +411,25 @@ function WashButton.start(callback: (boolean) -> ())
 	UserInputService.WindowFocusReleased:Connect(release)
 	RunService:BindToRenderStep("WashLook", Enum.RenderPriority.Camera.Value + 1, applyLook)
 
-	-- Gentle idle bob on the droplet so the button reads as alive.
+	-- Idle life: the droplet bobs; while an animal waits, the ring breathes and the
+	-- HOLD! hint bounces. A held button leaves the ring to setHeldLook's tweens.
 	RunService.RenderStepped:Connect(function()
-		if gui.Enabled and not activeTouch then
-			local t = os.clock()
-			drop.Position = UDim2.fromScale(0.5, 0.3 + math.sin(t * 2.4) * 0.025)
-			drop.Rotation = math.sin(t * 1.7) * 6
+		if not gui.Enabled or activeTouch then
+			return
+		end
+		local t = os.clock()
+		drop.Position = UDim2.fromScale(0.5, 0.3 + math.sin(t * 2.4) * 0.025)
+		drop.Rotation = math.sin(t * 1.7) * 6
+		if ready then
+			local pulse = (math.sin(t * 4) + 1) / 2
+			ringStroke.Transparency = 0.25 + 0.5 * pulse
+			ring.Size = UDim2.fromScale(1.12 + 0.12 * pulse, 1.12 + 0.12 * pulse)
+		else
+			ringStroke.Transparency = 1
+		end
+		hint.Visible = ready and hintArmed
+		if hint.Visible then
+			hint.Position = UDim2.new(0.5, 0, 0, -6 - math.abs(math.sin(t * 5)) * 8)
 		end
 	end)
 
@@ -397,6 +457,19 @@ function WashButton.setBlocked(on: boolean)
 	end
 	blocked = on
 	refresh()
+end
+
+function WashButton.setReady(on: boolean)
+	if ready == on or not gui then
+		return
+	end
+	ready = on
+	if on then
+		hintArmed = true
+	end
+	local solid = on or activeTouch ~= nil
+	TweenService:Create(readyScale, READY_INFO, { Scale = if solid then 1 else IDLE_SIZE }):Play()
+	TweenService:Create(fade, TweenInfo.new(0.25), { Value = if solid then 0 else IDLE_FADE }):Play()
 end
 
 function WashButton.isHeld(): boolean

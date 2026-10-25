@@ -72,7 +72,10 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 
 - [ ] A large round WASH button sits right above the jump button and doesn't overlap the thumbstick or jump.
 - [ ] Holding WASH sprays. Dragging the same finger turns the camera and the reticle while the water keeps flowing. Letting go anywhere stops it.
-- [ ] Landscape phone: `PlayerGui.UIFormFactor` reads **Mobile**. Cash sits top left, with INDEX / DAILY / SHOP under it, and nothing overlaps.
+- [ ] Landscape phone: `PlayerGui.UIFormFactor` reads **Mobile**. Cash sits top left with a narrow column of icon buttons (📖 🎁 🛒) under it, all the same size, and nothing overlaps.
+- [ ] The thumbstick starts anywhere in the lower left without hitting a button. No hotbar slot at the bottom.
+- [ ] The event counter never covers the Roblox menu, chat or voice buttons.
+- [ ] WASH is faded and smaller with no animal; full size with a breathing ring and a HOLD! hint when one walks in. Holding it near the animal washes mud without aiming.
 - [ ] Moving with the thumbstick while holding WASH works (two thumbs).
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
 - [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.

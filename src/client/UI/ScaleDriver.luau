@@ -39,6 +39,10 @@ local GAME_GUIS: { [string]: boolean } = {
 	LiveOps = true,
 	LiveOpsPopups = true,
 	FriendLuck = true,
+	CheckIn = true,
+	GuideInstruction = true,
+	OverflowPrompt = true,
+	PaidConfirm = true,
 }
 
 type Record = {

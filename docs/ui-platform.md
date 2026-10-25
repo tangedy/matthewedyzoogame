@@ -36,7 +36,7 @@ The scaler does **not** touch every ScreenGui. `PlayerGui` also holds engine and
 
 | ScreenGui | Scaled | Why |
 | --- | --- | --- |
-| HUD, Shop, Index, Zoo, Onboarding, Tension, Monetization, LiveOps, LiveOpsPopups | Yes | Named game HUD. Child pop-scales multiply with the screen scale. |
+| HUD, Shop, Index, Zoo, Onboarding, Tension, Monetization, LiveOps, LiveOpsPopups, FriendLuck, CheckIn, GuideInstruction, OverflowPrompt, PaidConfirm | Yes | Named game HUD. Child pop-scales multiply with the screen scale. |
 | SprayControls | No | The reticle position is a viewport pixel. |
 | MobileControls | No | The WASH button is sized and placed from the engine jump button, in physical pixels. |
 | TensionSplat | No | Mud blotches are sized from `ViewportSize`. |
@@ -179,18 +179,22 @@ On touch, Spray is a custom button, not an engine action button. An engine butto
 - Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), slower than the default touch camera so aiming stays fine.
 - Letting go anywhere on screen stops the water. A ring and a knob show while held, so the player sees the finger is steering.
 - It hides during the opening cutscene, and sits under every menu: the menu dimmers block it while a panel is open.
+- While an animal is waiting to be washed it is full size with a breathing ring, and a bouncing **HOLD!** shows until the first press. Otherwise it shrinks to 86% and fades, so it stays out of the way.
+- Holding it locks onto mud from much further out (`GameConfig.TouchAimAssistRadius`, 0.6 of the short side, against 0.18 for a gamepad). Holding WASH near an animal washes it without precise aiming.
 
-## Phone layout
+## Touch layout
 
-`UIPlatform.Layout` holds the fixed HUD positions for three cases: **Phone** (Mobile form factor), **TabletTouch**, and **Desktop**. A controller calls `Layout.watch(fn)` and places its piece from the spec it gets.
+`UIPlatform.Layout` holds the fixed HUD positions for two cases: **Touch** (every phone and tablet, plus any Mobile-width window) and **Desktop** (keyboard or gamepad). A controller calls `Layout.watch(fn)` and places its piece from the spec it gets. The touch layout keeps the thumbs' corners empty: bottom left is the thumbstick, bottom right is jump and WASH.
 
-| Piece | Desktop | Phone |
+| Piece | Desktop | Touch |
 | --- | --- | --- |
 | Cash and income | Bottom left | Top left, under the top bar |
-| INDEX / DAILY / SHOP | Left middle, 170×42, 48 apart | Under the cash, 176×68, 76 apart (about 40px drawn) |
-| Boost timers | Right of the rail | Right of the rail |
+| INDEX / DAILY / SHOP | Left middle text buttons, 170×42, 48 apart | Narrow column of 90×90 icon buttons (📖 🎁 🛒) under the cash, 100 apart (about 50px drawn) |
+| Boost timers | Right of the rail | Right of the icon column |
 | Invite box | Right middle | Top right |
+| Event counter | Free part of the top bar | Same, or just under the bar when Roblox's buttons leave too little room (`GuiService.TopbarInset`) |
 | Toasts, carry PUT DOWN / SELL | 140 / 190 up from the bottom | 28 / 24 up, between the thumbstick and WASH |
+| Hotbar (Backpack) | Shown | Hidden: the hose re-equips itself, so the slot only covered the screen |
 
 The left-rail buttons register with `Layout.rail(button, order)`. The rail owns their position and size, and a hidden button (DAILY before it unlocks) gives its slot to the next one.
 

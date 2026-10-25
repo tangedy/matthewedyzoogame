@@ -1,5 +1,5 @@
 -- One short strip in the top bar: what's live now, and the next event.
--- Sits in the free centre of the Roblox top bar, at EVENT_SCALE of its original 22px. The server titles
+-- Sits in the free part of the Roblox top bar (or just under it), at EVENT_SCALE of its original 22px. The server titles
 -- decide what is current; the clocks only count down.
 -- Odds and pity counters are not shown. Mud Storm shares this strip when it is the
 -- thing happening now or the soonest thing coming up.
@@ -50,15 +50,38 @@ local function colorOf(): Color3
 	return if typeof(value) == "Color3" then value else Color3.fromRGB(255, 210, 70)
 end
 
+-- GuiService.TopbarInset is the strip of the top bar Roblox leaves free (between its
+-- own buttons on the left and right). The counter fits inside it. When that strip is
+-- too narrow (a phone's top bar is mostly menu buttons), it drops just under the bar,
+-- centred, so it never sits on the menu, chat or voice buttons.
+local MIN_INSIDE_WIDTH = 300
+local MARGIN = 8
+
 local function place()
-	local inset = GuiService:GetGuiInset()
 	local camera = Workspace.CurrentCamera
-	local width = if camera then camera.ViewportSize.X else 800
-	-- Leave the Roblox menu buttons on both ends of the top bar alone.
-	local maxWidth = math.clamp(width - 200, 180, 440 * EVENT_SCALE)
-	strip.Size = UDim2.fromOffset(maxWidth, math.round(22 * EVENT_SCALE))
-	local y = if inset.Y >= 26 then inset.Y / 2 else math.round(14 * EVENT_SCALE)
-	strip.Position = UDim2.fromScale(0.5, 0) + UDim2.fromOffset(0, y)
+	local screenWidth = if camera then camera.ViewportSize.X else 800
+	local height = math.round(22 * EVENT_SCALE)
+	local wanted = 440 * EVENT_SCALE
+	local free = GuiService.TopbarInset
+	local freeWidth = free.Max.X - free.Min.X - MARGIN * 2
+	local textSize = math.round(13 * EVENT_SCALE)
+	if free.Height > 0 and freeWidth >= MIN_INSIDE_WIDTH then
+		local width = math.min(wanted, freeWidth)
+		strip.Size = UDim2.fromOffset(width, height)
+		strip.Position = UDim2.fromOffset((free.Min.X + free.Max.X) / 2, (free.Min.Y + free.Max.Y) / 2)
+	else
+		-- Half the screen: clear of the cash on the left and the invite box on the right.
+		local width = math.clamp(screenWidth * 0.5, 180, wanted)
+		local below = if free.Height > 0 then free.Max.Y else GuiService:GetGuiInset().Y
+		strip.Size = UDim2.fromOffset(width, height)
+		strip.Position = UDim2.fromOffset(screenWidth / 2, below + MARGIN + height / 2)
+		textSize = math.round(12 * EVENT_SCALE)
+	end
+	for _, child in strip:GetChildren() do
+		if child:IsA("TextLabel") then
+			child.TextSize = textSize
+		end
+	end
 end
 
 local function label(name: string, color: Color3): TextLabel
@@ -115,6 +138,7 @@ local function build(gui: ScreenGui)
 	nextLabel.Position = UDim2.new(0.5, 4, 0, 0)
 
 	place()
+	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
 	local camera = Workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(place)
