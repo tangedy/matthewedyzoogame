@@ -44,7 +44,7 @@ local function count(): number
 end
 
 local function refresh()
-	-- Touch shows the 📖 icon above a short caption.
+	-- Touch shows the book icon above a short caption.
 	local prefix = if UIPlatform.Layout.get().rail.compact then "" else "INDEX "
 	button.Text = `{prefix}{count()}/{total()}`
 	for key, cell in cells do
@@ -80,7 +80,7 @@ local function buildGui()
 	buttonPad.PaddingTop = UDim.new(0, 6)
 	buttonPad.PaddingBottom = UDim.new(0, 6)
 	buttonPad.Parent = button
-	UIPlatform.Layout.rail(button, 1, "📖")
+	UIPlatform.Layout.rail(button, 1, "Book")
 	UIPlatform.Feedback.button(button)
 
 	panel = Instance.new("Frame")

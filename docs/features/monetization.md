@@ -15,6 +15,7 @@ Robux developer products and game passes, from the shop button to the grant. The
 | `src/client/Features/MonetizationController.luau` | Client state, boost timers, offers, notices, kiosk buys. |
 | `src/server/Features/FavoritePrompt.luau` / `src/client/Features/FavoritePrompt.luau` | After the first Legendary-or-rarer wash (once ever, `data.Extra.FavoritePrompted`), Roblox's favourite dialog opens 3 s later. |
 | `src/client/Features/MonetizationShop.luau` | SHOP button and the tabbed shop panel (pure view). |
+| `src/client/Features/MonetizationQuickBuy.luau` | The one-tap quick-buy buttons on the right (`MonetizationConfig.QuickBuy`, pure view). |
 
 The helper modules have no `init`, so the feature autoloaders just require them.
 
@@ -78,6 +79,16 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - **Calm Treat:** when the Tension feature fires `PatienceLow` for the player.
 - Each kind has a `CooldownSeconds` (240) cooldown, with `MaxPerSession` (6) in total. The popup sits at the right middle (clear of SPRAY), has an X, and hides itself after 12 s.
 - **The shop panel never opens by itself.** Only the SHOP button and the plaza booth open it, and the booth needs a 0.3 s hold so walking past or a stray tap doesn't.
+
+## Quick buy
+
+Up to three square icon buttons on the right (`MonetizationConfig.QuickBuy`: 2x Speed, Auto-Collect, Bag of Cash), each with a Robux price chip under it. One tap sends `MonetizationBuy(key)`, so Roblox's purchase dialog is the only confirm. The caption shows the time left on a running boost, or what a cash pack pays right now.
+
+- On touch they make a row under the invite box. A column ran into WASH on a landscape phone.
+- On desktop they make a column that grows up from just above the invite box.
+- Hidden for the first `Offers.QuietSeconds` and while an offer popup is up. They sit in their own ScreenGui under every menu.
+
+Shop icons (cards, tabs, prices, rail buttons) come from `src/client/UI/Icons.luau`. They're drawn from rounded frames, with no emoji and no uploaded images.
 
 ## Kiosks
 

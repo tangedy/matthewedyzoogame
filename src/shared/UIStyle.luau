@@ -231,11 +231,16 @@ function UIStyle.overhead(billboard: BillboardGui, head: BasePart, slot: string,
 end
 
 -- Lifts the animal's nameplate above the clean meter, or drops it back to rest.
+-- A lifted plate is Pinned: the client's AnimalFocus keeps it showing while you wash,
+-- wherever the camera points.
+UIStyle.PinnedAttribute = "Pinned"
+
 function UIStyle.liftNameplate(head: BasePart, lifted: boolean)
 	local plate = head:FindFirstChild("Nameplate")
 	if not plate or not plate:IsA("BillboardGui") then
 		return
 	end
+	plate:SetAttribute(UIStyle.PinnedAttribute, if lifted then true else nil)
 	if lifted then
 		UIStyle.overhead(plate, head, UIStyle.Overhead.Name)
 	else
@@ -286,7 +291,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 		label:SetAttribute("OpenText", table.concat(rows, "\n"))
 		label:SetAttribute("OpenLines", #rows)
 		label:SetAttribute("Lines", lines)
-		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `🔒 {info.Needs}`))
+		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `Needs {info.Needs}`))
 		label:SetAttribute("LockText", table.concat(rows, "\n"))
 	end
 	label.Text = table.concat(rows, "\n")

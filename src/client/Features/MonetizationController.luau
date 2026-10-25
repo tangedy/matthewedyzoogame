@@ -1,6 +1,7 @@
 -- Client side of Monetization: keeps the shop's state from the server, shows active boost
--- timers next to the cash, the server's contextual offers (small and dismissible), purchase
--- notices, and the Robux kiosks around the plot. The shop panel only opens when the player
+-- timers next to the cash, the one-tap quick-buy column on the right (MonetizationQuickBuy),
+-- the server's contextual offers (small and dismissible), purchase notices, and the Robux
+-- kiosks around the plot. The shop panel only opens when the player
 -- asks (SHOP button or the plaza booth), never by itself. Nothing here decides a price or a
 -- grant: BUY only sends a product key, and offers never show in a session's first QuietSeconds.
 
@@ -17,6 +18,7 @@ local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.Moneti
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local MonetizationQuickBuy = require(script.Parent.MonetizationQuickBuy)
 local MonetizationShop = require(script.Parent.MonetizationShop)
 local Modals = require(script.Parent.Parent.UI.Modals)
 local UIPlatform = require(script.Parent.Parent.UI)
@@ -223,6 +225,7 @@ end
 
 local function hideOffer()
 	offerKey = nil
+	MonetizationQuickBuy.setBlocked("Offer", false)
 	if offerFrame.Visible then
 		local tween = TweenService:Create(
 			offerFrame,
@@ -253,6 +256,8 @@ local function showOffer(kind: string, key: string)
 	offerTitle.Text = OFFER_TITLES[kind] or product.DisplayName
 	offerText.Text = product.Description
 	offerBuy.Text = `BUY R$ {product.Robux}`
+	-- The offer takes the quick-buy column's spot on the right while it is up.
+	MonetizationQuickBuy.setBlocked("Offer", true)
 	offerFrame.Visible = true
 	offerFrame.Position = UDim2.new(1, 300, 0.5, -70)
 	TweenService:Create(
@@ -277,6 +282,7 @@ local function applyState(value: any)
 	state = value :: ShopState
 	refreshTimers()
 	MonetizationShop.refresh(state)
+	MonetizationQuickBuy.refresh(state)
 end
 
 local function requestState()
@@ -413,6 +419,18 @@ local function buildGui()
 			requestState() -- cash pack amounts follow the zoo's income
 		end,
 	})
+
+	-- Nothing to buy on screen until the quiet start is over.
+	MonetizationQuickBuy.build({ onBuy = buy })
+	MonetizationQuickBuy.refresh(state)
+	local quietLeft = MonetizationConfig.Offers.QuietSeconds - (os.clock() - startedAt)
+	if quietLeft > 0 then
+		MonetizationQuickBuy.setBlocked("Quiet", true)
+		task.delay(quietLeft, function()
+			MonetizationQuickBuy.setBlocked("Quiet", false)
+			requestState() -- fresh cash pack amounts for the captions
+		end)
+	end
 end
 
 function MonetizationController.init(_initial: Types.InitialState)
@@ -460,6 +478,7 @@ function MonetizationController.init(_initial: Types.InitialState)
 			task.wait(1)
 			refreshTimers()
 			MonetizationShop.tick()
+			MonetizationQuickBuy.tick()
 		end
 	end)
 end

@@ -67,6 +67,7 @@ Client controllers:
 - **PenCashController** animates the cash counter above each pen pad: it bobs, glows, counts up with a bounce, and pops a floating "+$X" with sparkles.
 - **IndexController** shows the Index button and panel (species × mutation) and new-discovery toasts.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
+- **AnimalFocus** (Features) only shows an animal's nameplate while it's the one nearest the middle of the screen (plus the one you're washing), so full pens don't stack labels.
 
 ## Feature systems (big-push branch)
 

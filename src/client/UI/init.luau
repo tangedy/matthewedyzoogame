@@ -7,6 +7,7 @@
 --   setExcluded()  opt a viewport-pixel ScreenGui out of ResponsiveScale
 --   Layout       per-device HUD placement (phone, touch tablet, desktop) and the left rail
 --   Feedback     hover / press / release motion and click sound for buttons
+--   Icons        custom drawn HUD icons (no emoji, no uploaded images)
 --   WorldLabels  shrinks billboards over animals and pens on small screens
 
 local UserInputService = game:GetService("UserInputService")
@@ -16,6 +17,7 @@ local ActionMap = require(script.ActionMap)
 local Constraints = require(script.Constraints)
 local DeviceProfile = require(script.DeviceProfile)
 local Feedback = require(script.Feedback)
+local Icons = require(script.Icons)
 local Layout = require(script.Layout)
 local ScaleDriver = require(script.ScaleDriver)
 local WorldLabels = require(script.WorldLabels)
@@ -25,6 +27,7 @@ local UIPlatform = {}
 UIPlatform.ActionMap = ActionMap
 UIPlatform.Layout = Layout
 UIPlatform.Feedback = Feedback
+UIPlatform.Icons = Icons
 UIPlatform.WorldLabels = WorldLabels
 
 export type FormFactor = DeviceProfile.FormFactor

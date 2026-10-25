@@ -5,7 +5,7 @@
 --
 --   top left      cash and income, then a narrow column of square icon buttons
 --                 (INDEX, DAILY, SHOP). Narrow, so the thumbstick area stays clear.
---   top right     the invite box
+--   top right     the invite box, then the quick-buy column (MonetizationQuickBuy)
 --   bottom left   nothing: the thumbstick
 --   bottom right  jump and WASH (UI/WashButton)
 --   bottom centre one hint line, and the carry PUT DOWN / SELL row
@@ -15,9 +15,11 @@
 --   Layout.get()                the spec for the current profile
 --   Layout.watch(fn)            calls fn(spec) now and whenever the spec changes
 --   Layout.rail(b, order, icon) stacks a left-rail button by order, skipping hidden
---                               ones, across ScreenGuis. icon shows in compact mode.
+--                               ones, across ScreenGuis. icon is a UI/Icons name: on
+--                               top of a caption in compact mode, left of the text otherwise.
 
 local DeviceProfile = require(script.Parent.DeviceProfile)
+local Icons = require(script.Parent.Icons)
 
 local Layout = {}
 
@@ -26,6 +28,9 @@ export type Spec = {
 	wallet: { anchor: Vector2, position: UDim2, size: Vector2, cashHeight: number },
 	rail: { anchor: Vector2, x: number, top: UDim, step: number, size: Vector2, compact: boolean },
 	boostTimers: { anchor: Vector2, position: UDim2 },
+	-- One-tap Robux buys on the right. size is each square button; gap leaves room for the
+	-- price chip that hangs off its bottom edge (a column) or between buttons (a row).
+	quickBuy: { anchor: Vector2, position: UDim2, size: number, gap: number, row: boolean },
 	invite: { anchor: Vector2, position: UDim2 },
 	dataWarning: UDim2,
 	-- Full-screen menus (Robux shop, index, daily). columns: shop grid columns, nil = by width.
@@ -52,6 +57,8 @@ local DESKTOP: Spec = {
 		compact = false,
 	},
 	boostTimers = { anchor = Vector2.new(0, 0.5), position = UDim2.new(0, 196, 0.5, 14) },
+	-- Grows up from just above the invite box, under the player list.
+	quickBuy = { anchor = Vector2.new(1, 1), position = UDim2.new(1, -16, 0.5, 24), size = 72, gap = 20, row = false },
 	invite = { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -16, 0.5, 70) },
 	dataWarning = UDim2.new(0, 16, 0.5, 140),
 	panel = { scale = Vector2.new(0.94, 0.86), maxSize = Vector2.new(680, 480), columns = nil },
@@ -81,6 +88,10 @@ local TOUCH: Spec = {
 		compact = true,
 	},
 	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(112, 90) },
+	-- A row under the invite box. On a 380px-tall landscape phone, WASH (on top of jump)
+	-- starts about 144px down, so a column here ran into it. Same 84 size as the rail
+	-- buttons (about 38px drawn); the row ends near 85px.
+	quickBuy = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 80), size = 84, gap = 14, row = true },
 	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
 	dataWarning = UDim2.fromOffset(270, 10),
 	panel = { scale = Vector2.new(0.96, 0.95), maxSize = Vector2.new(1120, 640), columns = 2 },
@@ -93,7 +104,7 @@ local TOUCH: Spec = {
 local current: Spec = DESKTOP
 local watchers: { (Spec) -> () } = {}
 
-type RailEntry = { button: GuiButton, order: number, icon: string?, iconLabel: TextLabel? }
+type RailEntry = { button: GuiButton, order: number, icon: string?, iconFrame: Frame? }
 local railEntries: { RailEntry } = {}
 
 local ICON_SHARE = 0.58 -- top part of a compact button that holds the icon
@@ -106,34 +117,53 @@ local function specFor(profile: DeviceProfile.Profile): Spec
 end
 
 -- Compact: icon on top, the button's own text shrinks to a caption underneath.
-local function styleEntry(entry: RailEntry, compact: boolean)
+-- Wide: icon in a square on the left, text beside it.
+-- The button's UIPadding moves its text and also its children, so the icon's position
+-- takes the padding back off (offsets: the rail size is in fixed design units).
+local function styleEntry(entry: RailEntry, compact: boolean, size: Vector2)
 	local button = entry.button
+	local height = size.Y
+	local padTop, padLeft = 0, 0
 	local pad = button:FindFirstChildOfClass("UIPadding")
 	if pad then
 		if pad:GetAttribute("RailTop") == nil then
 			pad:SetAttribute("RailTop", pad.PaddingTop.Offset)
+			pad:SetAttribute("RailLeft", pad.PaddingLeft.Offset)
 		end
-		local original = pad:GetAttribute("RailTop") :: number
-		pad.PaddingTop = if compact and entry.icon then UDim.new(ICON_SHARE, 0) else UDim.new(0, original)
+		padTop = pad:GetAttribute("RailTop") :: number
+		padLeft = pad:GetAttribute("RailLeft") :: number
+		if entry.icon then
+			if compact then
+				padTop = math.floor(height * ICON_SHARE)
+			else
+				padLeft = height - 4
+			end
+		end
+		pad.PaddingTop = UDim.new(0, padTop)
+		pad.PaddingLeft = UDim.new(0, padLeft)
 	end
 	if not entry.icon then
 		return
 	end
-	if compact and not entry.iconLabel then
-		local icon = Instance.new("TextLabel")
-		icon.Name = "RailIcon"
-		icon.AnchorPoint = Vector2.new(0.5, 0)
-		icon.Position = UDim2.fromScale(0.5, 0.06)
-		icon.Size = UDim2.fromScale(0.62, ICON_SHARE - 0.06)
-		icon.BackgroundTransparency = 1
-		icon.Text = entry.icon
-		icon.TextScaled = true
-		icon.ZIndex = button.ZIndex + 1
-		icon.Parent = button
-		entry.iconLabel = icon
+	if not entry.iconFrame then
+		local holder = Instance.new("Frame")
+		holder.Name = "RailIcon"
+		holder.BackgroundTransparency = 1
+		holder.ZIndex = button.ZIndex + 1
+		holder.Parent = button
+		Icons.make(entry.icon, holder, { outline = 2.5 })
+		entry.iconFrame = holder
 	end
-	if entry.iconLabel then
-		entry.iconLabel.Visible = compact
+	local holder = entry.iconFrame :: Frame
+	if compact then
+		local side = math.floor(height * (ICON_SHARE - 0.08))
+		holder.AnchorPoint = Vector2.new(0.5, 0)
+		holder.Position = UDim2.new(0.5, 0, 0, math.floor(height * 0.07) - padTop)
+		holder.Size = UDim2.fromOffset(side, side)
+	else
+		holder.AnchorPoint = Vector2.new(0, 0.5)
+		holder.Position = UDim2.new(0, 6 - padLeft, 0.5, 0)
+		holder.Size = UDim2.fromOffset(height - 10, height - 10)
 	end
 end
 
@@ -148,7 +178,7 @@ local function restackRail()
 		button.AnchorPoint = rail.anchor
 		button.Size = UDim2.fromOffset(rail.size.X, rail.size.Y)
 		button.Position = UDim2.new(0, rail.x, rail.top.Scale, rail.top.Offset + slot * rail.step)
-		styleEntry(entry, rail.compact)
+		styleEntry(entry, rail.compact, rail.size)
 		if button.Visible then
 			slot += 1
 		end

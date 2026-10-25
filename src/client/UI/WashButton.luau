@@ -32,6 +32,7 @@ local Workspace = game:GetService("Workspace")
 
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Feedback = require(script.Parent.Feedback)
+local Icons = require(script.Parent.Icons)
 
 local WashButton = {}
 
@@ -64,7 +65,7 @@ local faceGradient: UIGradient
 local pressScale: UIScale
 local ring: Frame
 local ringStroke: UIStroke
-local drop: TextLabel
+local drop: Frame
 local label: TextLabel
 local rim: UIStroke
 local innerStroke: UIStroke
@@ -161,15 +162,10 @@ local function build()
 	innerStroke.Transparency = 0.25
 	innerStroke.Parent = inner
 
-	drop = Instance.new("TextLabel")
+	drop = Icons.make("Drop", face, { outline = 2, zIndex = 3 })
 	drop.Name = "Drop"
-	drop.AnchorPoint = Vector2.new(0.5, 0.5)
 	drop.Position = UDim2.fromScale(0.5, 0.3)
 	drop.Size = UDim2.fromScale(0.42, 0.3)
-	drop.Text = "💦"
-	drop.ZIndex = 3
-	drop.Parent = face
-	UIStyle.text(drop, nil, nil, 0)
 
 	label = Instance.new("TextLabel")
 	label.Name = "Label"
@@ -201,7 +197,7 @@ local function build()
 		rim.Transparency = value
 		innerStroke.Transparency = 0.25 + 0.75 * value
 		label.TextTransparency = value * 0.6
-		drop.TextTransparency = value
+		Icons.setTransparency(drop, value)
 	end)
 	face.BackgroundTransparency = IDLE_FADE
 

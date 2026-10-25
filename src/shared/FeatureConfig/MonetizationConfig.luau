@@ -312,6 +312,9 @@ return {
 	PassesByKey = passesByKey,
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },
 	ShopColor = PINK,
+	-- One-tap buttons down the right side of the screen (MonetizationQuickBuy), top first.
+	-- Kept to three so a phone screen stays clear; everything else is in the shop.
+	QuickBuy = { "SpeedBoost", "AutoCollect2h", "CashMedium" },
 
 	SuperSoap = {
 		PowerMultiplier = 2, -- applied through Hooks "CleaningPower"

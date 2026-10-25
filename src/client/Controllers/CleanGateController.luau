@@ -2,7 +2,7 @@
 -- spraying does nothing. This offers the two ways forward: send it away, or pay to wash it now.
 -- The offer floats over the animal and only shows while you stand close to it (within the
 -- hose's reach), like a proximity prompt.
--- Also hides the 🔒 gear line on walk-in nameplates once your gear can already wash them.
+-- Also hides the NEEDS gear line on walk-in nameplates once your gear can already wash them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

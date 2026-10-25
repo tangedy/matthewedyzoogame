@@ -272,7 +272,7 @@ local function buildTruck(): (Model, TruckParts)
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.fromScale(0.94, 0.8)
 		label.Position = UDim2.fromScale(0.03, 0.1)
-		label.Text = "🐾 ANIMAL DELIVERY 🐾"
+		label.Text = "ANIMAL DELIVERY"
 		label.Parent = gui
 		UIStyle.text(label, colors.Cab, stroke, 3)
 		gui.Parent = on
