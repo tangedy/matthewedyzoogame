@@ -37,7 +37,7 @@ local GameConfig = {
 	-- Touch/gamepad aiming (client only; the server still validates every spray)
 	CenterAimHeight = 0.4, -- reticle height as a fraction of the screen, above the character
 	AimAssistRadius = 0.18, -- snap to a dirty patch within this fraction of the screen's short side
-	TouchAimAssistRadius = 0.6, -- while WASH is held on touch: lock onto mud almost anywhere on screen
+	TouchAimAssistRadius = 0.14, -- while WASH is held on touch: a light nudge when just off the animal
 
 	-- Dirt
 	-- Seconds of continuous on-target spraying a 1.0x animal needs with the tier 1 hose, if
