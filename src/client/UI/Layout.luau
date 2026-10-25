@@ -173,6 +173,36 @@ function Layout.panel(panel: GuiObject, desktop: { scale: Vector2, maxSize: Vect
 	end)
 end
 
+-- A panel's X is ~20px on a phone, and the panel fills the screen, so there is little dim
+-- around it to tap either. On touch, an invisible target covers the panel's top-right
+-- corner down to the bottom of the X (the header, never the tabs or content under it).
+local CLOSE_TARGET_WIDTH = 120
+function Layout.closeTarget(button: GuiButton, onClose: () -> ())
+	local panel = button.Parent
+	if not panel or not panel:IsA("GuiObject") then
+		return
+	end
+	local target = Instance.new("TextButton")
+	target.Name = "CloseTarget"
+	target.AnchorPoint = Vector2.new(1, 0)
+	target.Position = UDim2.fromScale(1, 0)
+	target.BackgroundTransparency = 1
+	target.Text = ""
+	target.Selectable = false
+	target.ZIndex = button.ZIndex + 1
+	target.Parent = panel
+	local function size()
+		local width = math.max(CLOSE_TARGET_WIDTH, button.Size.X.Offset - button.Position.X.Offset)
+		target.Size = UDim2.fromOffset(width, button.Position.Y.Offset + button.Size.Y.Offset + 4)
+	end
+	button:GetPropertyChangedSignal("Size"):Connect(size)
+	size()
+	target.Activated:Connect(onClose)
+	Layout.watch(function(spec)
+		target.Visible = spec.key == "Touch"
+	end)
+end
+
 -- The design-unit size of a scaled object: AbsoluteSize is screen pixels after
 -- ResponsiveScale, and offsets inside it are design units before it.
 function Layout.designSize(object: GuiObject): Vector2

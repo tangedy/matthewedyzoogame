@@ -26,9 +26,9 @@ local TITLE_HEIGHT = 20
 local BUTTON_HEIGHT = 32
 local BUTTON_GAP = 4
 local PAD = 6
--- Cards over animals and pens draw at this size: smaller so they cover less of the
--- animal and are harder to brush by accident. Touch screens sit closer, so smaller still.
-local CARD_SCALE_TOUCH = 0.8
+-- Cards over animals and pens draw at this size so they cover less of the animal. Touch
+-- keeps the full size: its buttons are thumb targets, and Sell/Swap/Pick up need a hold.
+local CARD_SCALE_TOUCH = 1
 local CARD_SCALE = 0.9
 
 -- Button colour by what the action does: muted so the card sits quietly over the world.
@@ -69,6 +69,7 @@ type Button = {
 
 type Card = {
 	Gui: BillboardGui,
+	Root: Frame,
 	Title: TextLabel,
 	List: Frame,
 	Scale: UIScale,
@@ -154,6 +155,7 @@ local function layout(card: Card)
 	local titleRoom = if title ~= "" then TITLE_HEIGHT + 2 else 0
 	local height = PAD * 2 + titleRoom + count * BUTTON_HEIGHT + math.max(0, count - 1) * BUTTON_GAP
 	card.Gui.Size = UDim2.fromOffset(CARD_WIDTH, math.max(height, 1))
+	card.Root.Size = card.Gui.Size
 	card.List.Position = UDim2.fromOffset(PAD, PAD + titleRoom)
 	card.List.Size = UDim2.new(1, -PAD * 2, 1, -(PAD * 2 + titleRoom))
 end
@@ -208,9 +210,18 @@ local function makeCard(parent: Instance): Card
 	-- Straight under PlayerGui: a BillboardGui nested in a ScreenGui is never drawn.
 	board.Parent = player:WaitForChild("PlayerGui")
 
+	-- A UIScale straight under a BillboardGui does nothing, so the card lives in a centred,
+	-- pixel-sized root frame that carries the scale (pop-in, press pop, card size).
+	local root = Instance.new("Frame")
+	root.Name = "Card"
+	root.AnchorPoint = Vector2.new(0.5, 0.5)
+	root.Position = UDim2.fromScale(0.5, 0.5)
+	root.Size = board.Size
+	root.BackgroundTransparency = 1
+	root.Parent = board
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.6 * cardScale()
-	scale.Parent = board
+	scale.Parent = root
 
 	-- One dark rounded backing for the whole card, so it reads against any scenery.
 	local back = Instance.new("Frame")
@@ -218,7 +229,7 @@ local function makeCard(parent: Instance): Card
 	back.Size = UDim2.fromScale(1, 1)
 	back.BackgroundColor3 = CARD_COLOR
 	back.BackgroundTransparency = 0.15
-	back.Parent = board
+	back.Parent = root
 	local backCorner = Instance.new("UICorner")
 	backCorner.CornerRadius = UDim.new(0, 10)
 	backCorner.Parent = back
@@ -232,14 +243,14 @@ local function makeCard(parent: Instance): Card
 	title.Position = UDim2.fromOffset(PAD, PAD)
 	title.Size = UDim2.new(1, -PAD * 2, 0, TITLE_HEIGHT)
 	title.ZIndex = 2
-	title.Parent = board
+	title.Parent = root
 	UIStyle.text(title, Color3.fromRGB(236, 238, 244), EDGE_COLOR, 1.5)
 
 	local list = Instance.new("Frame")
 	list.Name = "Buttons"
 	list.BackgroundTransparency = 1
 	list.ZIndex = 2
-	list.Parent = board
+	list.Parent = root
 	local listLayout = Instance.new("UIListLayout")
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	listLayout.Padding = UDim.new(0, BUTTON_GAP)
@@ -249,7 +260,7 @@ local function makeCard(parent: Instance): Card
 	TweenService
 		:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = cardScale() })
 		:Play()
-	return { Gui = board, Title = title, List = list, Scale = scale, Buttons = {} }
+	return { Gui = board, Root = root, Title = title, List = list, Scale = scale, Buttons = {} }
 end
 
 local function makeButton(card: Card, prompt: ProximityPrompt): Button

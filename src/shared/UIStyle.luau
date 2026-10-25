@@ -215,10 +215,16 @@ local function slotBottom(head: BasePart, slot: string): number
 	return METER_ROOM + h + GAP + TAG_ROOM -- Callout
 end
 
+-- The client shrinks world labels on small screens (UI/WorldLabels) and keeps the authored
+-- height here. Every row shrinks by the same factor, so placing from the authored height
+-- gives the same SizeOffset fraction and the stack stays lined up at any size.
+UIStyle.OverheadBaseHeight = "OverheadBaseHeight"
+
 -- Places a pixel-sized billboard so its bottom edge sits in `slot` (UIStyle.Overhead) of the
 -- stack above this head. `bob` nudges it up and down in pixels.
 function UIStyle.overhead(billboard: BillboardGui, head: BasePart, slot: string, bob: number?)
-	local height = math.max(1, billboard.Size.Y.Offset)
+	local base = billboard:GetAttribute(UIStyle.OverheadBaseHeight)
+	local height = math.max(1, if typeof(base) == "number" then base else billboard.Size.Y.Offset)
 	local bottom = slotBottom(head, slot)
 	billboard.StudsOffset = Vector3.new(0, overheadLift(head), 0)
 	billboard.SizeOffset = Vector2.new(0, (bottom + (bob or 0) + height / 2) / height)

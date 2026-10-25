@@ -92,8 +92,10 @@ local function buildGui()
 	progressRoot = Instance.new("Frame")
 	progressRoot.Name = "CleanProgress"
 	progressRoot.BackgroundTransparency = 1
-	progressRoot.Size = UDim2.fromScale(1, 1)
+	progressRoot.Size = progressBoard.Size
 	progressRoot.Parent = progressBoard
+	-- Its rows are pixel-sized, so WorldLabels scales this root along with the board.
+	progressBoard:SetAttribute(UIPlatform.WorldLabels.ROOT_ATTRIBUTE, progressRoot.Name)
 	local bar = Instance.new("Frame")
 	bar.Position = UDim2.fromOffset(6, 0)
 	bar.Size = UDim2.new(1, -12, 0, 26)

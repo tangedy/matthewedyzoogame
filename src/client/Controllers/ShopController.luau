@@ -258,6 +258,7 @@ local function buildGui()
 	closeButton.Parent = panel
 	round(closeButton, 8)
 	closeButton.Activated:Connect(close)
+	Layout.closeTarget(closeButton, close)
 
 	-- A turning picture of the next gear: the real tool model, built the same way as the one
 	-- that ends up in the player's hand (HoseBuilder).

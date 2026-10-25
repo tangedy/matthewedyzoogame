@@ -186,6 +186,7 @@ local function buildGui()
 	dim = Modals.dim(gui, closePanel)
 	Modals.bind("Index", closePanel)
 	close.Activated:Connect(closePanel)
+	UIPlatform.Layout.closeTarget(close, closePanel)
 	button.Activated:Connect(function()
 		if panel.Visible then
 			closePanel()

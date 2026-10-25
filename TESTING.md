@@ -93,6 +93,8 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] The first-wash guide names the real animal ("CLEAN THE DUCK"), not always "pig".
 - [ ] Carrying an animal: PUT DOWN and SELL are thumb-sized (about 40px tall) between the thumbstick and WASH.
 - [ ] The Gear shop opens large enough to read on a phone and still fits the screen.
+- [ ] Labels over animals and pens (nameplate, clean meter, pen cash, EMPTY/MAX) are about two-thirds size on a landscape phone, still stacked without overlap, and full size on desktop.
+- [ ] On a phone, a tap a little left of or below a panel's X (Shop, Index, Daily, Gear shop) still closes it; the tabs under it still work.
 - [ ] The Robux shop fills the screen with two columns of cards; INDEX and DAILY panels fill it too. HUD text reads at phone size.
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
 - [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.

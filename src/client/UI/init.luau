@@ -7,6 +7,7 @@
 --   setExcluded()  opt a viewport-pixel ScreenGui out of ResponsiveScale
 --   Layout       per-device HUD placement (phone, touch tablet, desktop) and the left rail
 --   Feedback     hover / press / release motion and click sound for buttons
+--   WorldLabels  shrinks billboards over animals and pens on small screens
 
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -17,12 +18,14 @@ local DeviceProfile = require(script.DeviceProfile)
 local Feedback = require(script.Feedback)
 local Layout = require(script.Layout)
 local ScaleDriver = require(script.ScaleDriver)
+local WorldLabels = require(script.WorldLabels)
 
 local UIPlatform = {}
 
 UIPlatform.ActionMap = ActionMap
 UIPlatform.Layout = Layout
 UIPlatform.Feedback = Feedback
+UIPlatform.WorldLabels = WorldLabels
 
 export type FormFactor = DeviceProfile.FormFactor
 export type InputMode = DeviceProfile.InputMode
@@ -136,6 +139,9 @@ function UIPlatform.start()
 	end
 	started = true
 	playerGui = ScaleDriver.start()
+	if playerGui then
+		WorldLabels.start(playerGui)
+	end
 	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(markDirty)
 	Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 		bindCamera(Workspace.CurrentCamera)

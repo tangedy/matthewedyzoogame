@@ -251,6 +251,7 @@ local function buildGui()
 	UIStyle.border(closeButton, 3)
 	closeButton.Activated:Connect(close)
 	UIPlatform.Feedback.button(closeButton)
+	UIPlatform.Layout.closeTarget(closeButton, close)
 
 	local grid = Instance.new("Frame")
 	grid.Position = UDim2.fromOffset(12, 58)
