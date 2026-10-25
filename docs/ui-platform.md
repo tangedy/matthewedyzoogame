@@ -176,7 +176,7 @@ Clicks that land on an `Active` gui (buttons, text boxes) do not start Spray. Th
 On touch, Spray is a custom button, not an engine action button. An engine button sinks the touch, so the finger holding it can never turn the camera. `UI/WashButton` fixes that:
 
 - It sits centred over the engine jump button, 12px above it, 1.1× its size (at least 76px). It reads `TouchGui > TouchControlFrame > JumpButton` and follows it when the engine moves or resizes it. Until that exists it uses the engine's own jump layout.
-- Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), slower than the default touch camera so aiming stays fine.
+- Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), close to a normal camera swipe. Other fingers still turn the camera the normal way while WASH is held, and the spray only stops when the WASH finger lifts.
 - Letting go anywhere on screen stops the water. A ring and a knob show while held, so the player sees the finger is steering.
 - It hides during the opening cutscene, and sits under every menu: the menu dimmers block it while a panel is open.
 - While an animal is waiting to be washed it is full size with a breathing ring, and a bouncing **HOLD!** shows until the first press. Otherwise it shrinks to 86% and fades, so it stays out of the way.

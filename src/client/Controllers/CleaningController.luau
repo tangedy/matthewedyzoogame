@@ -330,12 +330,13 @@ local function setHint(active: boolean)
 	(hintHighlight :: Highlight).Enabled = true
 end
 
--- Nearest dirty patch to the reticle in screen space, within AimAssistRadius, that the
--- server's own ray from the nozzle would hit (patch itself or the body right next to it).
+-- Nearest dirty patch to the reticle in screen space, within `radius`, that the server would
+-- accept: the camera can see it (the server checks the camera ray, not one from the nozzle,
+-- so the top and back of a tall animal count) and it is within the hose's reach of the player.
 local function findAssistTarget(
 	camera: Camera,
 	animal: Model,
-	origin: Vector3,
+	rootPosition: Vector3,
 	screenPoint: Vector2,
 	params: RaycastParams,
 	radius: number
@@ -351,9 +352,10 @@ local function findAssistTarget(
 			local projected, onScreen = camera:WorldToViewportPoint(patch.Position)
 			local d = (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude
 			if onScreen and d < bestDist then
-				local toPatch = patch.Position - origin
-				if toPatch.Magnitude <= range then
-					local hit = Workspace:Raycast(origin, toPatch.Unit * range, params)
+				local eye = camera.CFrame.Position
+				local toPatch = patch.Position - eye
+				if (patch.Position - rootPosition).Magnitude <= range + GameConfig.AimReachSlack then
+					local hit = Workspace:Raycast(eye, toPatch.Unit * (toPatch.Magnitude + 2), params)
 					if
 						hit
 						and hit.Instance:IsDescendantOf(animal)
@@ -746,9 +748,15 @@ local function bindInput()
 			end
 		end)
 	end
-	applyMode(UIPlatform.get().inputMode == "Touch")
+	-- Any touch screen gets WASH, whatever input the device prefers: plenty of tablets (and
+	-- any with a keyboard case) report keyboard and mouse, and a finger never sends the
+	-- mouse click that mode listens for, so without the button they could not spray at all.
+	local function wantsWash(profile: UIPlatform.Profile): boolean
+		return profile.inputMode == "Touch" or UserInputService.TouchEnabled
+	end
+	applyMode(wantsWash(UIPlatform.get()))
 	UIPlatform.onChanged(function(profile)
-		applyMode(profile.inputMode == "Touch")
+		applyMode(wantsWash(profile))
 	end)
 	-- Losing focus mid-hold shouldn't leave the hose stuck on. Cancel covers most cases.
 	UserInputService.WindowFocusReleased:Connect(function()
@@ -838,10 +846,9 @@ local function onHeartbeat()
 	local aimJob = if aimed then aimed:GetAttribute("JobId") :: string else nil
 	local helping = typeof(aimJob) == "string" and aimJob ~= jobId
 
-	-- Aim assist (touch/gamepad only): if the reticle isn't on an animal, snap to the nearest
-	-- dirty patch on screen that the hose can actually reach, including a neighbor's wash.
-	-- Holding WASH on a phone locks on from much further out: hold it near an animal and
-	-- the water finds the mud, no precise aiming needed.
+	-- Aim assist (touch/gamepad only): the reticle is free aim. Only when it sits just off an
+	-- animal does it nudge onto the nearest dirty patch the hose can reach (a neighbor's wash
+	-- too), so the player can still pick the top or the back by pointing at it.
 	local assistRadius = if touchHeld then GameConfig.TouchAimAssistRadius else GameConfig.AimAssistRadius
 	local assistUsed = false
 	if touchHeld then
@@ -880,7 +887,7 @@ local function onHeartbeat()
 			for _, bay in bays:GetChildren() do
 				local model = bay:FindFirstChild("Animal")
 				if model and model:IsA("Model") and typeof(model:GetAttribute("JobId")) == "string" then
-					local assist = findAssistTarget(camera, model, origin, screenPoint, params, assistRadius)
+					local assist = findAssistTarget(camera, model, root.Position, screenPoint, params, assistRadius)
 					if assist then
 						local projected = camera:WorldToViewportPoint(assist.Position)
 						local distance = (Vector2.new(projected.X, projected.Y) - screenPoint).Magnitude

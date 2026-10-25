@@ -32,9 +32,11 @@ local WashButton = {}
 
 local player = Players.LocalPlayer
 
--- Look speed in radians per pixel of drag. Slower than the default touch camera
--- (about 0.03 rad/px), because this is fine aiming while spraying.
-local LOOK_SPEED = Vector2.new(0.0068, 0.0048)
+-- Look speed in radians per pixel of drag, close to a normal camera swipe so holding
+-- WASH never feels like losing the free camera. The water is locked on the mud, so a
+-- fast turn does not throw the stream around. Other fingers still turn the camera the
+-- normal way; only the WASH finger is handled here.
+local LOOK_SPEED = Vector2.new(0.014, 0.0095)
 local MAX_PITCH = math.rad(80) -- the default camera's limit
 local FIRST_PERSON_DISTANCE = 0.6
 
@@ -410,6 +412,17 @@ function WashButton.start(callback: (boolean) -> ())
 	end)
 	UserInputService.WindowFocusReleased:Connect(release)
 	RunService:BindToRenderStep("WashLook", Enum.RenderPriority.Camera.Value + 1, applyLook)
+	-- The spray runs until that finger lifts, nothing else. This backs up InputEnded in
+	-- case a lift is missed: the finger's own InputObject says when it is gone.
+	RunService.Heartbeat:Connect(function()
+		local touch = activeTouch
+		if
+			touch
+			and (touch.UserInputState == Enum.UserInputState.End or touch.UserInputState == Enum.UserInputState.Cancel)
+		then
+			release()
+		end
+	end)
 
 	-- Idle life: the droplet bobs; while an animal waits, the ring breathes and the
 	-- HOLD! hint bounces. A held button leaves the ring to setHeldLook's tweens.

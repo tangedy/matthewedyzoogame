@@ -224,9 +224,7 @@ local function spentRobux(extra: any): boolean
 	local function positive(value: any): boolean
 		return typeof(value) == "number" and value > 0
 	end
-	return positive(mon.SuperSoapLeft)
-		or positive(mon.AutoCollectLeft)
-		or positive(mon.SpeedEndsAt)
+	return positive(mon.SuperSoapLeft) or positive(mon.AutoCollectLeft) or positive(mon.SpeedEndsAt)
 end
 
 local function sidePastureOpen(raw: any): boolean
