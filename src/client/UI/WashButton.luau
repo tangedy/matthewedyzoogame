@@ -1,7 +1,7 @@
 -- The phone WASH button: a big round button sitting right above the jump button.
--- Hold it to spray. Keep holding and drag the same finger to look around: the camera
--- turns with the drag, the centre reticle turns with it, and the water keeps flowing.
--- Let go anywhere on screen to stop.
+-- Hold it to spray. Keep holding and drag the same finger to look around: only the
+-- camera turns. The water stays locked on the mud (CleaningController picks the patch),
+-- so looking around never moves the stream. Let go anywhere on screen to stop.
 --
 -- The touch that starts on a GUI button is sunk, so the default camera never sees it.
 -- This module turns the camera itself, right after the camera script runs, by rotating

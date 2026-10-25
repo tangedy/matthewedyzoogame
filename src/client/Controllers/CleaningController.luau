@@ -368,6 +368,61 @@ local function findAssistTarget(
 	return best
 end
 
+-- WASH on touch: the hose holds onto one patch until it is clean, then moves to the next
+-- patch nearest the last one. The camera never steers it, so the drag on WASH only turns
+-- the view. Own animal first; a neighbour's wash only when nothing of ours is in reach.
+local lockedPatch: BasePart? = nil
+local lastLockPoint: Vector3? = nil
+local NEIGHBOUR_PENALTY = 1000
+
+local function patchReachable(patch: BasePart, model: Model, origin: Vector3, params: RaycastParams): boolean
+	if patch.Parent == nil or not patch.CanQuery or not patch:IsDescendantOf(model) then
+		return false
+	end
+	local toPatch = patch.Position - origin
+	if toPatch.Magnitude > range or toPatch.Magnitude < 0.01 then
+		return false
+	end
+	local hit = Workspace:Raycast(origin, toPatch.Unit * range, params)
+	return hit ~= nil
+		and hit.Instance:IsDescendantOf(model)
+		and (hit.Position - patch.Position).Magnitude <= GameConfig.SprayRadius
+end
+
+local function lockOnPatch(origin: Vector3, params: RaycastParams): (BasePart?, Model?)
+	local held = lockedPatch
+	if held then
+		local model = washingAnimalFrom(held)
+		if model and patchReachable(held, model, origin, params) then
+			return held, model
+		end
+		lockedPatch = nil
+	end
+	local bays = Workspace:FindFirstChild("WashBays")
+	if not bays then
+		return nil, nil
+	end
+	local from = lastLockPoint or origin
+	local bestPart: BasePart?, bestModel: Model?, bestScore = nil, nil, math.huge
+	for _, bay in bays:GetChildren() do
+		local model = bay:FindFirstChild("Animal")
+		local patches = model and model:FindFirstChild("DirtPatches")
+		if model and model:IsA("Model") and patches and typeof(model:GetAttribute("JobId")) == "string" then
+			local penalty = if model:GetAttribute("JobId") == jobId then 0 else NEIGHBOUR_PENALTY
+			for _, patch in patches:GetChildren() do
+				if patch:IsA("BasePart") then
+					local score = (patch.Position - from).Magnitude + penalty
+					if score < bestScore and patchReachable(patch, model, origin, params) then
+						bestPart, bestModel, bestScore = patch, model, score
+					end
+				end
+			end
+		end
+	end
+	lockedPatch = bestPart
+	return bestPart, bestModel
+end
+
 local HINT_MUD = Color3.fromRGB(92, 64, 40)
 local HINT_GLOW = Color3.fromRGB(255, 200, 60)
 
@@ -789,7 +844,34 @@ local function onHeartbeat()
 	-- the water finds the mud, no precise aiming needed.
 	local assistRadius = if touchHeld then GameConfig.TouchAimAssistRadius else GameConfig.AimAssistRadius
 	local assistUsed = false
-	if assisted and not aimed then
+	if touchHeld then
+		-- The water holds onto the mud; the camera is free to look around.
+		local patch, model = lockOnPatch(origin, params)
+		if patch and model then
+			assistUsed = true
+			animal = model
+			aimJob = model:GetAttribute("JobId") :: string
+			helping = aimJob ~= jobId
+			target = patch.Position
+			lastLockPoint = target
+		else
+			-- No mud in reach: spray ahead of the character, still not where the camera looks.
+			local ahead = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+			local forward = if ahead.Magnitude > 0.01 then ahead.Unit else Vector3.new(0, 0, -1)
+			target = origin + (forward - Vector3.new(0, 0.3, 0)).Unit * range
+			animal = currentAnimal()
+			aimJob = nil
+			helping = false
+		end
+		local projected, onScreen = camera:WorldToViewportPoint(target)
+		screenPoint = Vector2.new(projected.X, projected.Y)
+		reticle.Visible = onScreen and projected.Z > 0
+	else
+		lockedPatch = nil
+		lastLockPoint = nil
+		reticle.Visible = true
+	end
+	if assisted and not aimed and not touchHeld then
 		local bays = Workspace:FindFirstChild("WashBays")
 		local bestPart: BasePart? = nil
 		local bestModel: Model? = nil
@@ -832,10 +914,13 @@ local function onHeartbeat()
 	local direction = toTarget.Unit
 	-- The spray lands wherever the cursor is on the animal, whichever side the player stands
 	-- on, as long as the hose can reach it. The server checks the same camera ray.
-	local aimOrigin = ray.Origin
-	local aimVector = target - aimOrigin
+	-- WASH on touch aims from the nozzle instead (no aimOrigin): the server then casts from
+	-- the same nozzle point, so the camera's position plays no part.
+	local aimOrigin: Vector3? = if touchHeld then nil else ray.Origin
+	local aimVector = target - (aimOrigin or origin)
 	local aimDirection = if aimVector.Magnitude > 0.01 then aimVector.Unit else ray.Direction
-	local cursorOnAnimal = animal ~= nil and (assistUsed or (camHit ~= nil and camHit.Instance:IsDescendantOf(animal)))
+	local cameraOnAnimal = not touchHeld and camHit ~= nil and animal ~= nil and camHit.Instance:IsDescendantOf(animal)
+	local cursorOnAnimal = animal ~= nil and (assistUsed or cameraOnAnimal)
 	local inReach = toTarget.Magnitude <= range + GameConfig.AimReachSlack
 	local sprayHit = Workspace:Raycast(origin, direction * range, params)
 	local impact = if sprayHit then sprayHit.Position else origin + direction * range

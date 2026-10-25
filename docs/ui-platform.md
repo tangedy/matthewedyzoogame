@@ -180,7 +180,7 @@ On touch, Spray is a custom button, not an engine action button. An engine butto
 - Letting go anywhere on screen stops the water. A ring and a knob show while held, so the player sees the finger is steering.
 - It hides during the opening cutscene, and sits under every menu: the menu dimmers block it while a panel is open.
 - While an animal is waiting to be washed it is full size with a breathing ring, and a bouncing **HOLD!** shows until the first press. Otherwise it shrinks to 86% and fades, so it stays out of the way.
-- Holding it locks onto mud from much further out (`GameConfig.TouchAimAssistRadius`, 0.6 of the short side, against 0.18 for a gamepad). Holding WASH near an animal washes it without precise aiming.
+- While it is held, the water locks onto one patch of mud in reach and stays on it until it is clean, then moves to the nearest next patch. Your own animal comes first. The camera never steers the water, so dragging only changes the view. With no mud in reach, it sprays straight ahead of the character. The aim is sent from the nozzle, not the camera, and the server casts from the same point.
 
 ## Touch layout
 
@@ -205,5 +205,5 @@ Buttons get their feel from `UIPlatform.Feedback.button(button)`: grow to 1.06 o
 1. Play with the device emulator. Changing the emulator width updates `PlayerGui.UIFormFactor` and `UIScale`.
 2. The emulator's mouse still reports `PreferredInput` as `KeyboardAndMouse`, so the Spray touch button stays hidden. Switch the emulator to touch input, or test on a phone, to see the native button.
 3. Drag the Studio window across about 600px and about 1024px wide. The HUD should ease to the new scale and not jump backward.
-4. On desktop, hold left mouse to spray and aim with the cursor. On a gamepad, hold R2 and aim with the center reticle. On touch, hold WASH, then drag the same finger to turn the camera while the water keeps flowing.
+4. On desktop, hold left mouse to spray and aim with the cursor. On a gamepad, hold R2 and aim with the center reticle. On touch, hold WASH near an animal: the water locks onto the mud, and dragging the same finger turns only the camera.
 5. Click a shop or index button with the mouse. The hose must not start spraying.
