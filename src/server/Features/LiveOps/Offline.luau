@@ -97,20 +97,23 @@ local function payOut(player: Player)
 	if seconds < Config.MinSeconds then
 		return
 	end
-	local amount = math.floor(ZooService.totalIncome(player) * seconds * Config.Rate)
-	if amount < 1 then
+	if ZooService.totalIncome(player) <= 0 then
 		return
 	end
-	ZooService.addToPads(player, amount)
+	-- Earned per cage (capped by each cage's max), then every cage is collected.
+	local earned, collected = ZooService.payOffline(player, seconds, Config.Rate)
+	if collected < 1 then
+		return
+	end
 	local state = Common.state(player)
 	if state then
-		state.OfflineDouble = amount
+		state.OfflineDouble = earned -- 2x adds this much again
 		PlayerDataService.markDirty(player)
 	end
-	if Offline.onEarned then
-		Offline.onEarned(player, amount)
+	if Offline.onEarned and earned >= 1 then
+		Offline.onEarned(player, earned)
 	end
-	local popup: Popup = { Amount = amount, Seconds = math.floor(seconds) }
+	local popup: Popup = { Amount = collected, Seconds = math.floor(seconds) }
 	if clientReady[player] then
 		Remotes.event("LiveOpsWelcomeBack"):FireClient(player, popup.Amount, popup.Seconds)
 	else

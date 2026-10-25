@@ -468,13 +468,13 @@ local function refreshPens(player: Player)
 		end
 		local label = counter and counter:FindFirstChild("NextLabel", true) :: TextLabel?
 		if label and step then
-			label.Text = `{string.upper(step.Barn)} BARN\n{UIStyle.formatMoney(step.Price)}`
+			label.Text = `FARM UPGRADE\n{UIStyle.formatMoney(step.Price)}`
 		end
 	end
 	if expandPrompt then
 		expandPrompt.Enabled = step ~= nil
 		if step then
-			expandPrompt.ActionText = `{step.Barn} barn ({UIStyle.formatMoney(step.Price)})`
+			expandPrompt.ActionText = `Farm upgrade ({UIStyle.formatMoney(step.Price)})`
 		end
 	end
 end
@@ -828,7 +828,7 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 	if not penOpen(data, penIndex) then
 		local cage = roadCage(penIndex)
 		if cage then
-			purchaseResult:FireClient(player, false, "Buy the Cage barn upgrade to open this pen.")
+			purchaseResult:FireClient(player, false, "Buy the Cage farm upgrade to open this pen.")
 		end
 		return
 	end
@@ -1070,7 +1070,7 @@ local function expand(player: Player)
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
 	Hooks.fire("ZooExpanded", player, data.ZooSize, step.Price, step.Barn)
-	purchaseResult:FireClient(player, true, `{step.Barn} barn unlocked!`)
+	purchaseResult:FireClient(player, true, `Farm upgrade unlocked!`)
 end
 
 -- Washed animals ------------------------------------------------------------------------
@@ -1373,6 +1373,41 @@ function ZooService.addToPads(player: Player, total: number)
 	end
 	PlayerDataService.markDirty(player)
 	refreshPens(player)
+end
+
+-- Offline earnings: every animal earns its own per-second income for `seconds` (times `rate`)
+-- onto its pen's pad, stopping at that pen's cap given the cash already there. Then every pad
+-- is collected. Returns (earned offline, total collected including cash that was waiting).
+function ZooService.payOffline(player: Player, seconds: number, rate: number): (number, number)
+	local data = PlayerDataService.get(player)
+	if not data or #data.Animals == 0 then
+		return 0, 0
+	end
+	local zoo = zoos[player]
+	local earned = 0
+	for _, animal in data.Animals do
+		earned += credit(zoo, data, animal, ZooService.income(animal.Species, animal.Mutation) * seconds * rate)
+	end
+	local collected = 0
+	for i = 1, LAST_PEN do
+		if penOpen(data, i) then
+			local amount = 0
+			for _, animal in animalsInPen(data, i) do
+				local take = math.floor(animal.Pending)
+				if take >= 1 then
+					animal.Pending -= take
+					amount += take
+				end
+			end
+			collected += amount
+		end
+	end
+	if collected >= 1 then
+		EconomyService.addCoins(player, collected)
+	end
+	PlayerDataService.markDirty(player)
+	refreshPens(player)
+	return math.floor(earned), collected
 end
 
 function ZooService.totalIncome(player: Player): number

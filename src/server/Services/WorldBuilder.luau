@@ -87,9 +87,18 @@ local PEN_GROUPS: { { Tier: number, Left: { PenSpec }, Right: { PenSpec } } } = 
 		},
 	},
 	{ Tier = 1, Left = { { Index = 7, Class = "Medium" } }, Right = { { Index = 8, Class = "Medium" } } },
-	{ Tier = 2, Left = { { Index = 9, Class = "Medium" } }, Right = { { Index = 10, Class = "Medium" } } },
-	{ Tier = 3, Left = { { Index = 11, Class = "Giant" } }, Right = { { Index = 12, Class = "Giant" } } },
-	{ Tier = 4, Left = { { Index = 13, Class = "Gargantuan" } }, Right = { { Index = 14, Class = "Gargantuan" } } },
+	{
+		Tier = 2,
+		Left = { { Index = 9, Class = "Medium" }, { Index = 11, Class = "Medium" } },
+		Right = { { Index = 10, Class = "Medium" }, { Index = 12, Class = "Medium" } },
+	},
+	{
+		Tier = 3,
+		Left = { { Index = 13, Class = "Medium" }, { Index = 15, Class = "Medium" }, { Index = 17, Class = "Medium" } },
+		Right = { { Index = 14, Class = "Medium" }, { Index = 16, Class = "Medium" }, { Index = 18, Class = "Medium" } },
+	},
+	{ Tier = 4, Left = { { Index = 19, Class = "Giant" } }, Right = { { Index = 20, Class = "Giant" } } },
+	{ Tier = 5, Left = { { Index = 21, Class = "Gargantuan" } }, Right = { { Index = 22, Class = "Gargantuan" } } },
 }
 
 local function penSize(class: string): Vector2
@@ -831,7 +840,7 @@ local function buildExpandStand(zoo: Folder, at: CFrame)
 	local label = billboardLabel(counter, "", Vector3.new(0, 6, 0), Vector2.new(200, 56), Color3.fromRGB(255, 230, 120))
 	label.Name = "NextLabel"
 	label.TextWrapped = true
-	makePrompt("ExpandPrompt", "Expand Farm", 0.5, counter).ObjectText = "Barn Upgrade"
+	makePrompt("ExpandPrompt", "Expand Farm", 0.5, counter).ObjectText = "Farm Upgrade"
 	stand.PrimaryPart = counter
 	stand.WorldPivot = at
 	stand.Parent = zoo

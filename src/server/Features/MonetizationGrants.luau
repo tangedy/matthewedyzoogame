@@ -273,8 +273,9 @@ function MonetizationGrants.product(
 		if amount < 1 then
 			return compensate(player, "That offline bonus was already used.")
 		end
-		ZooService.addToPads(player, amount)
+		-- Straight to the wallet: the pads are already collected and may be capped.
 		Offline.takeDouble(player)
+		EconomyService.addCoins(player, amount)
 		if player.Parent then
 			Remotes.event("LiveOpsOfflineDoubled"):FireClient(player, amount * 2)
 		end

@@ -86,17 +86,18 @@ local GameConfig = {
 
 	-- Zoo. Pens 1-6 are the face stalls beside the sidewalk. Each later step is a barn.
 	Zoo = {
-		MaxPens = 14,
+		MaxPens = 22,
 		StartPens = 6,
 		-- The old road cages are gone. The list stays (empty) because the save migration reads it.
 		RoadCages = {} :: { { Side: string, Class: string, Unlock: string } },
 		-- In order along the walkway, one pen per side per step so both sides stay even. Each
 		-- step's index is its UnlockSpot in WorldBuilder.
 		Expansions = {
-			{ Pens = 8, Price = 25000, Barn = "Small" }, -- a medium pen each side
-			{ Pens = 10, Price = 500000, Barn = "Medium" }, -- a second medium pen each side
-			{ Pens = 12, Price = 2500000, Barn = "Large" }, -- a giant pen each side
-			{ Pens = 14, Price = 10000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
+			{ Pens = 8, Price = 25000, Barn = "Small" }, -- 2 medium pens, one each side
+			{ Pens = 12, Price = 100000, Barn = "Medium" }, -- 4 medium pens, two each side
+			{ Pens = 18, Price = 500000, Barn = "Grand" }, -- 6 medium pens, three each side
+			{ Pens = 20, Price = 2500000, Barn = "Large" }, -- a giant pen each side
+			{ Pens = 22, Price = 10000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
 		} :: { { Pens: number?, RoadCages: boolean?, Price: number, Barn: string } },
 	},
 
@@ -177,7 +178,7 @@ local GameConfig = {
 	-- Fire Hose with Super Soap peaks on Rare and Epic, with Common ~22% and Secret ~0.01%.
 	SpawnCurve = {
 		StartTop = 2,
-		PeakPerTier = 0.5,
+		PeakPerTier = 0.44,
 		PeakOffset = -1,
 		LeftWidth = 1.0,
 		LeftWidthPerTier = 0.12,
