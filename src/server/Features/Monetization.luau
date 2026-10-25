@@ -202,10 +202,6 @@ local function buyProduct(player: Player, product: Product)
 		truck.Bought = { Species = offer.Species, Mutation = offer.Mutation }
 		PlayerDataService.markDirty(player)
 	end
-	if product.Kind == "SidePasture" and MonetizationState.sidePastureOpen(player) then
-		MonetizationState.notify(player, "Already owned.", false)
-		return
-	end
 	if product.Kind == "Limited" then
 		if not (product.Species and AnimalConfig.Animals[product.Species]) then
 			MonetizationState.notify(player, "Coming soon!", false)

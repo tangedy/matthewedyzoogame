@@ -327,23 +327,6 @@ function MonetizationState.unlockPasture(player: Player): boolean
 	return true
 end
 
--- The first large road cage. Buying the Axolotl, or an older right-pasture receipt.
-function MonetizationState.unlockSidePasture(player: Player): boolean
-	local saved = MonetizationState.saved(player)
-	if not saved or saved.SidePastureUnlocked then
-		return false
-	end
-	saved.SidePastureUnlocked = true
-	PlayerDataService.markDirty(player)
-	ZooService.refresh(player)
-	return true
-end
-
-function MonetizationState.sidePastureOpen(player: Player): boolean
-	local saved = MonetizationState.saved(player)
-	return saved ~= nil and saved.SidePastureUnlocked == true
-end
-
 function MonetizationState.soapActive(player: Player): boolean
 	local session = sessions[player]
 	return session ~= nil and session.SoapEndsAt > Workspace:GetServerTimeNow()

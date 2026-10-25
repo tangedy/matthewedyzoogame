@@ -28,7 +28,7 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id> -DryRun
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id>
    ```
-   It creates the 24 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
+   It creates the 23 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
 3. Make the VIP Keeper game pass (399) by hand under Monetization > Passes and paste its id into `MonetizationIds.Passes.VIPKeeper`.
 4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number. A re-run of the script never changes the price of a product that already exists: change it on the Creator Dashboard.
 5. Game Settings > Security: **Enable Studio Access to API Services** must be on (receipts save through DataStores).
@@ -52,7 +52,6 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | `HoseTier2`–`HoseTier5` | Product, hidden | 19 / 29 / 99 / 249 | Exactly the next hose (Scrub Brush, Garden Hose, Power Washer, Foam Cannon). Never a skip. The Foam Cannon costs more than Vault of Cash so the cash packs stay worth buying. |
 | `TruckAnimal` | Product, hidden | 199 | The animal on the Delivery Truck (DeliveryTruck feature). |
 | `OfflineDouble` | Product, hidden | 25 | Welcome-back only: doubles the offline payout already on the pads. |
-| `SidePasture` | Product, hidden, once | 149 | Legacy: opens the road cages. Nothing in the world prompts it any more. |
 | `LimitedAxolotl` | Product, limited | 1000 | One Axolotl (`Species`/`Mutation` in config) into the cache. Global stock of 1000, never restocked. Shown as COMING SOON until `AnimalConfig.Animals.Axolotl` exists. |
 | `VIPKeeper` | Game pass | 399 | Income x1.25 (Hooks `IncomeMultiplier`) and a gold "VIP" tag over the head. |
 

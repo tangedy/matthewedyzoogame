@@ -18,7 +18,7 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SidePasture" | "SpeedBoost" | "IncredibleLuck" | "OfflineDouble" | "HoseTier"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SpeedBoost" | "IncredibleLuck" | "OfflineDouble" | "HoseTier"
 	ToolTier: number?, -- HoseTier: the single next hose this product grants. Never a skip.
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
@@ -250,21 +250,6 @@ local products: { Product } = {
 		Species = "Axolotl",
 		Mutation = "Normal",
 		Stock = 1000,
-		OncePerPlayer = true,
-	},
-	-- Kept so a receipt for the old right pasture is still honoured: it opens the road cages.
-	-- Nothing in the world prompts this any more.
-	{
-		Key = "SidePasture",
-		Id = 0,
-		Robux = 149,
-		DisplayName = "Large Cage",
-		Description = "Opens the road cages.",
-		Tab = "Boosts",
-		Order = 50,
-		Kind = "SidePasture",
-		Color = GOLD,
-		Hidden = true,
 		OncePerPlayer = true,
 	},
 	-- Welcome-back only. Doubles the offline payout that is already on the pads.

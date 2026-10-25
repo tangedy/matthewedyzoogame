@@ -306,10 +306,6 @@ function MonetizationGrants.product(
 			return true, "Cleaned!"
 		end
 		return true, "Saved for your next too-dirty animal."
-	elseif kind == "SidePasture" then
-		MonetizationState.unlockSidePasture(player)
-		ZooService.openRoadCages(player)
-		return true, "Road cages unlocked!"
 	end
 	warn(`[Monetization] Unknown product kind {kind} for {product.Key}`)
 	return false, nil

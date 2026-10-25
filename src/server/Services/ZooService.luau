@@ -575,17 +575,6 @@ local function refreshAll(player: Player)
 	sendCarry(player)
 end
 
--- Opens the road cages without the barn upgrade (an old Robux receipt for a cage).
-function ZooService.openRoadCages(player: Player)
-	local data = PlayerDataService.get(player)
-	if not data or roadCagesOpen(data) then
-		return
-	end
-	openRoadCages(data)
-	PlayerDataService.markDirty(player)
-	ZooService.refresh(player)
-end
-
 function ZooService.refresh(player: Player)
 	refreshAll(player)
 end

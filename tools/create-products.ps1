@@ -48,7 +48,6 @@ $products = @(
 	@{ Key = "CleanNow4"; Name = "Clean Now +4"; Price = 399; Description = "Wash a too-dirty animal now." },
 	@{ Key = "TruckAnimal"; Name = "Delivery Truck Animal"; Price = 199; Description = "The animal on your truck." },
 	@{ Key = "LimitedAxolotl"; Name = "Limited Axolotl"; Price = 1000; Description = "Limited Mythic. Only 1,000 ever." },
-	@{ Key = "SidePasture"; Name = "Large Cage"; Price = 149; Description = "Opens the road cages." },
 	@{ Key = "OfflineDouble"; Name = "2x Offline"; Price = 25; Description = "Double your away earnings." },
 	@{ Key = "HoseTier2"; Name = "Scrub Brush"; Price = 19; Description = "Your next hose." },
 	@{ Key = "HoseTier3"; Name = "Garden Hose"; Price = 29; Description = "Your next hose." },
