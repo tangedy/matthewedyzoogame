@@ -1,8 +1,8 @@
 -- Client side of Monetization: keeps the shop's state from the server, shows active boost
 -- timers next to the cash, the server's contextual offers (small and dismissible), purchase
--- notices, and auto-opens the Cash tab after repeated failed cash purchases (hose or barn,
--- at most CashAutoOpenMax times a session). Nothing here decides a price or a grant: BUY only sends
--- a product key, and offers / auto-opens never show in a session's first QuietSeconds.
+-- notices, and the Robux kiosks around the plot. The shop panel only opens when the player
+-- asks (SHOP button or the plaza booth), never by itself. Nothing here decides a price or a
+-- grant: BUY only sends a product key, and offers never show in a session's first QuietSeconds.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -11,7 +11,6 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
@@ -49,7 +48,6 @@ local gui: ScreenGui
 local buffPills: { [string]: TextLabel } = {}
 local buffEnds: { [string]: number } = {}
 local buffJanitors: { [string]: Janitor.Janitor } = {}
-local pendingCashOpen = false
 local notice: TextLabel
 local noticeScale: UIScale
 local noticeToken = 0
@@ -59,11 +57,6 @@ local offerText: TextLabel
 local offerBuy: TextButton
 local offerKey: string? = nil
 local offerToken = 0
-local failedHoseBuys = 0
-local autoOpens = 0
-local coins = 0
-local toolTier = 1
-local toolLevel = 0 -- sub-tier on the current hose
 local clickSound: Sound
 local buySound: Sound
 
@@ -302,62 +295,6 @@ local function buy(key: string)
 	buyRemote:FireServer(key)
 end
 
--- Cash-pack auto-open ----------------------------------------------------------------------
-
-local function tryCashOpen()
-	if not pendingCashOpen or autoOpens >= MonetizationConfig.Offers.CashAutoOpenMax then
-		return
-	end
-	if quiet() or MonetizationShop.isOpen() then
-		return
-	end
-	pendingCashOpen = false
-	autoOpens += 1
-	MonetizationShop.open("Cash")
-end
-
-local function onCurrencyFailed()
-	failedHoseBuys += 1
-	local cfg = MonetizationConfig.Offers
-	if failedHoseBuys % cfg.CashAutoOpenEvery == 0 and autoOpens < cfg.CashAutoOpenMax then
-		pendingCashOpen = true
-		tryCashOpen()
-	end
-end
-
-local function isCurrencyFailure(message: string): boolean
-	return string.find(message, "^Not enough cash") ~= nil or string.find(message, "^Expanding needs") ~= nil
-end
-
--- Waits for a child without a timeout and without the "infinite yield" warning (the core
--- hose shop may be renamed or never built; then this thread just stays parked).
-local function waitChild(parent: Instance, name: string): Instance
-	while true do
-		local child = parent:FindFirstChild(name)
-		if child then
-			return child
-		end
-		parent.ChildAdded:Wait()
-	end
-end
-
--- Best effort: catches hose buys the core ShopController refuses locally (no PurchaseResult is
--- sent then). Coupled to ShopController's private names ("Shop" / "ShopPanel" / "Buy for");
--- the PurchaseResult listener stays the primary signal.
-local function watchHoseShop()
-	local panel = waitChild(waitChild(player:WaitForChild("PlayerGui"), "Shop"), "ShopPanel")
-	for _, child in panel:GetChildren() do
-		if child:IsA("TextButton") then
-			child.Activated:Connect(function()
-				local nextStep = GearLadder.next(toolTier, toolLevel)
-				if string.sub(child.Text, 1, 7) == "Buy for" and nextStep and coins < nextStep.Price then
-					onCurrencyFailed()
-				end
-			end)
-		end
-	end
-end
-
 -- Build -------------------------------------------------------------------------------------
 
 local function buildGui()
@@ -478,10 +415,7 @@ local function buildGui()
 	})
 end
 
-function MonetizationController.init(initial: Types.InitialState)
-	coins = initial.Coins
-	toolTier = initial.ToolTier
-	toolLevel = initial.ToolUpgrade or 0
+function MonetizationController.init(_initial: Types.InitialState)
 	buyRemote = Remotes.event("MonetizationBuy")
 	stateFunction = Remotes.func("GetMonetizationState")
 	buildGui()
@@ -507,30 +441,16 @@ function MonetizationController.init(initial: Types.InitialState)
 		end
 	end)
 
-	-- Failed hose purchases. The server answers "Not enough cash" through PurchaseResult, but the
-	-- hose shop usually refuses locally without asking it, so taps on its Buy button while short
-	-- of cash count too (same affordability check as ShopController).
-	Remotes.event("PurchaseResult").OnClientEvent:Connect(function(success: boolean, message: string)
-		if not success and typeof(message) == "string" and isCurrencyFailure(message) then
-			onCurrencyFailed()
-		end
-	end)
-	Remotes.event("CoinsChanged").OnClientEvent:Connect(function(value: number)
-		coins = value
-	end)
-	Remotes.event("WashCompleted").OnClientEvent:Connect(function(_jobId: string, _reward: number, value: number)
-		coins = value
-	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
-		toolTier = value
-		toolLevel = newLevel or 0
-	end)
-	task.spawn(watchHoseShop)
-
-	-- The blue Robux shop on the plaza opens the same panel as the SHOP button.
+	-- The blue Robux shop on the plaza opens the same panel as the SHOP button; each kiosk
+	-- around the plot buys its one item straight away (Roblox still asks to confirm).
 	ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt)
 		if prompt.Name == "RobuxShopPrompt" then
 			MonetizationShop.open(nil)
+		elseif prompt.Name == "RobuxKioskPrompt" then
+			local key = prompt:GetAttribute("ProductKey")
+			if typeof(key) == "string" then
+				buy(key)
+			end
 		end
 	end)
 
@@ -539,7 +459,6 @@ function MonetizationController.init(initial: Types.InitialState)
 		while gui.Parent do
 			task.wait(1)
 			refreshTimers()
-			tryCashOpen()
 			MonetizationShop.tick()
 		end
 	end)

@@ -12,7 +12,8 @@ Robux developer products and game passes, from the shop button to the grant. The
 | `src/server/Features/MonetizationState.luau` | `data.Extra.Monetization` (validated on read), per-session state, rate limits, test-mode decision, client payload. |
 | `src/server/Features/MonetizationGrants.luau` | What each item does once paid: boosts, cash, limited animal delivery, VIP tag, Fire-Hose Rig unlock. |
 | `src/server/Features/MonetizationStock.luau` | Global limited stock (DataStore, idempotent per PurchaseId). |
-| `src/client/Features/MonetizationController.luau` | Client state, boost timers, offers, notices, cash-pack auto-open. |
+| `src/client/Features/MonetizationController.luau` | Client state, boost timers, offers, notices, kiosk buys. |
+| `src/server/Features/FavoritePrompt.luau` / `src/client/Features/FavoritePrompt.luau` | After the first Legendary-or-rarer wash (once ever, `data.Extra.FavoritePrompted`), Roblox's favourite dialog opens 3 s later. |
 | `src/client/Features/MonetizationShop.luau` | SHOP button and the tabbed shop panel (pure view). |
 
 The helper modules have no `init`, so the feature autoloaders just require them.
@@ -40,7 +41,7 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | Key | Type | Robux | Effect |
 | --- | --- | --- | --- |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
-| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Sold at the blue ROBUX SHOP booth on the plaza. |
+| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Also sold at its own kiosk where the walkway to the pens starts. |
 | `SpeedBoost` | Product | 19 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
 | `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 5 / 20 / 60, capped at `CapFraction` (10% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
 | `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 39 / 79 / 149 / 249 / 399 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
@@ -76,9 +77,20 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 
 - **Calm Treat:** when the Tension feature fires `PatienceLow` for the player.
 - Each kind has a `CooldownSeconds` (240) cooldown, with `MaxPerSession` (6) in total. The popup sits at the right middle (clear of SPRAY), has an X, and hides itself after 12 s.
-- **Cash tab auto-open:** every 3rd failed hose purchase, at most 3 times a session. A failure is either:
-  - a "Not enough cash" PurchaseResult from the server, or
-  - a tap on the hose shop's "Buy for" button while short of cash. The hose shop refuses that locally without asking the server.
+- **The shop panel never opens by itself.** Only the SHOP button and the plaza booth open it, and the booth needs a 0.3 s hold so walking past or a stray tap doesn't.
+
+## Kiosks
+
+`WorldBuilder.KIOSKS` puts four single-item stands around each plot, each where the item matters. Holding a kiosk's `RobuxKioskPrompt` (0.3 s) sends its `ProductKey` attribute through `MonetizationBuy`, so Roblox's own purchase dialog still asks to confirm.
+
+| Kiosk | Where |
+| --- | --- |
+| `SpeedBoost` | front edge of the spawn plaza |
+| `AutoCollect2h` | back edge of the plaza, at the walkway to the pens |
+| `CashMedium` | road side of the gear shop |
+| `VIPKeeper` | road side of the showcase podium |
+
+Everything else is only in the shop panel.
 
 ## Test mode
 
@@ -96,7 +108,7 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - `CalmTreatSeconds`.
 - `VIP.IncomeMultiplier`, `.TagText`, `.TagColor`.
 - `SoldOutCompensation`.
-- `Offers.*`: quiet time, cooldown, per-session cap, auto-hide, cash auto-open cadence and cap.
+- `Offers.*`: quiet time, cooldown, per-session cap, auto-hide.
 - `ReceiptsKept`, `PendingDeliverySeconds`, `StockStoreName` / `StudioStockStoreName`, `StockRefreshSeconds`, `StockRecheckSeconds`, `BuyCooldown`, `StateCooldown`, `SimulateUnconfiguredLive`.
 
 ## Remotes
@@ -116,10 +128,6 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - Sells `AnimalConfig.Animals.Axolotl` only if it exists (added by the Models feature).
 - Owns `MarketplaceService.ProcessReceipt`. Only one handler can exist per game, so any other feature that sells developer products must go through this one.
 
-## Coupling points (merge watch)
-
-- The cash-pack auto-open also counts hose buys the core `ShopController` refuses locally. It finds them through ShopController's private UI: the ScreenGui `Shop`, its child `ShopPanel`, and button text starting with `Buy for`. This is best effort. If those names change, only the local-refusal path stops counting; the "Not enough cash" `PurchaseResult` listener keeps working. A cleaner fix for core: have ShopController fire a client BindableEvent (e.g. ReplicatedStorage `HosePurchaseRefused`) and listen to that instead.
-
 ## Check in Studio
 
 - [ ] Play solo. A pink SHOP button sits under INDEX on the left. Tapping it pops open the panel with Boosts / Cash / Passes / Limited tabs and a TEST MODE line.
@@ -131,7 +139,9 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - [ ] Passes: VIP Keeper adds a gold VIP tag over your head (it survives a respawn) and pen income is 25% higher. Fire-Hose Rig swaps in the top hose immediately, and the HUD hose label updates. Both cards then read OWNED.
 - [ ] Offers stay silent for the first 90 s of a session. After that:
   - [ ] with Tension merged, low patience pops the Calm Treat offer.
-- [ ] After 90 s, tap the hose shop's Buy while short of cash 3 times. The SHOP opens on the Cash tab. It opens at most 3 times per session.
+- [ ] Tap the hose shop's Buy while short of cash many times: the SHOP panel never opens by itself.
+- [ ] Each plot has the four kiosks (Speed, Auto-Collect, Bag of Cash, VIP) clear of the wash, cache, pens and podium; holding one buys that item (simulated in Studio).
+- [ ] In a published test server, wash a Legendary: about 3 s later Roblox asks to favourite the game. It never asks again.
 - [ ] Spamming BUY doesn't double-grant (rate limit). Firing `MonetizationBuy` with a junk key or a non-string from the command bar does nothing.
 - [ ] Phone emulator (landscape and portrait): the SHOP button, panel tabs, BUY and X buttons are easy to tap, and nothing covers SPRAY or the thumbstick.
 - [ ] Before publishing: put the real product and pass ids and prices in MonetizationConfig and confirm `SimulateUnconfiguredLive = false`.

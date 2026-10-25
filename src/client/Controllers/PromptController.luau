@@ -47,6 +47,7 @@ local COLORS: { [string]: Color3 } = {
 	UnlockPrompt = CASH,
 	TruckPrompt = ROBUX,
 	RobuxShopPrompt = ROBUX,
+	RobuxKioskPrompt = ROBUX,
 	PetPrompt = PET,
 	PetPrompt2 = PET,
 }

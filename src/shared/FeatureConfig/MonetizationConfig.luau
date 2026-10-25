@@ -339,12 +339,10 @@ return {
 		-- The side pop-up (Calm Treat before a mud shake) is off.
 		-- The products stay in the shop and on the "too dirty" prompt.
 		Enabled = false,
-		QuietSeconds = 90, -- no offer or auto-opened shop this early in a session
+		QuietSeconds = 90, -- no offer this early in a session
 		CooldownSeconds = 240, -- per offer kind
 		MaxPerSession = 6,
 		AutoHideSeconds = 12,
-		CashAutoOpenEvery = 3, -- failed cash purchases (hose or barn) per auto-open
-		CashAutoOpenMax = 3, -- auto-opens per session
 	},
 
 	ReceiptsKept = 100, -- PurchaseIds remembered per player so a receipt is never granted twice

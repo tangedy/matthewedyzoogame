@@ -13,7 +13,8 @@
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
---   RobuxShop.Counter              Robux shop prompt (+ auto-collect, Monetization)
+--   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
+--   RobuxKiosk{Key}.Counter        single-item Robux stands around the plot (RobuxKioskPrompt)
 --   Zoo.Pen19 / 23 / 24  the three gargantuan yards across the back
 --   Zoo.Pen25-28   the Robux pastures, right after the starting stalls
 
@@ -23,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local PenTiers = require(ReplicatedStorage.Shared.PenTiers)
 local PlotLayout = require(ReplicatedStorage.Shared.PlotLayout)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -318,6 +320,7 @@ type BoothSpec = {
 	PromptName: string,
 	PromptAction: string,
 	PromptObject: string,
+	Hold: number, -- seconds; the Robux booth needs a short hold so walking past never opens it
 	Keeper: string,
 }
 
@@ -333,10 +336,11 @@ local GEAR_BOOTH: BoothSpec = {
 	PromptName = "UpgradePrompt",
 	PromptAction = "Upgrade Gear",
 	PromptObject = "Gear Shop",
+	Hold = 0,
 	Keeper = "Shop",
 }
 
--- Every Robux purchase in the world lives here (Monetization adds the auto-collect prompt).
+-- The full Robux shop panel opens here; a few items also have their own kiosks (KIOSKS).
 local ROBUX_BOOTH: BoothSpec = {
 	Name = "RobuxShop",
 	Lateral = -SHOP_LAT,
@@ -349,6 +353,7 @@ local ROBUX_BOOTH: BoothSpec = {
 	PromptName = "RobuxShopPrompt",
 	PromptAction = "Open Robux Shop",
 	PromptObject = "Robux Shop",
+	Hold = 0.3,
 	Keeper = "Robux Shop",
 }
 
@@ -565,7 +570,7 @@ local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: Bo
 	)
 	block("Hook2", Vector3.new(0.3, 2, 0.4), CFrame.new(0, 6, 3.3), Color3.fromRGB(170, 115, 60), { CanQuery = false })
 	block("Hook3", Vector3.new(0.5, 0.5, 1.6), CFrame.new(2.6, 6, 3.1), spec.Stripe, { CanQuery = false })
-	local prompt = makePrompt(spec.PromptName, spec.PromptAction, 0, counter)
+	local prompt = makePrompt(spec.PromptName, spec.PromptAction, spec.Hold, counter)
 	prompt.ObjectText = spec.PromptObject
 	prompt.MaxActivationDistance = 12
 	station.Parent = parent
@@ -1092,6 +1097,85 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 	model.Parent = bay
 end
 
+-- Robux kiosks: a few single-item stands spread over the plot, each where its item matters,
+-- so they're seen without opening the shop. Everything else stays in the ROBUX SHOP panel.
+-- Holding the prompt sends its ProductKey (Monetization client); the server then shows
+-- Roblox's own purchase dialog, so a stray tap never spends anything.
+type KioskSpec = { Key: string, Depth: number, Lateral: number, Label: string }
+local KIOSKS: { KioskSpec } = {
+	-- Front edge of the spawn plaza, on the way out to the drive.
+	{ Key = "SpeedBoost", Depth = PLAZA_DEPTH - PLAZA_HALF_DEPTH + 2, Lateral = 7, Label = "2X SPEED" },
+	-- Back edge of the plaza, where the walkway to the pens starts.
+	{
+		Key = "AutoCollect2h",
+		Depth = PLAZA_DEPTH + PLAZA_HALF_DEPTH - 2,
+		Lateral = WALK_HALF + 4,
+		Label = "AUTO-COLLECT",
+	},
+	-- Road side of the gear shop: for when the next hose is out of reach.
+	{ Key = "CashMedium", Depth = SHOP_DEPTH - 9, Lateral = SHOP_LAT, Label = "BAG OF CASH" },
+	-- Road side of the showcase podium, where passers-by see it.
+	{ Key = "VIPKeeper", Depth = SHOWCASE_DEPTH - 13, Lateral = SHOWCASE_LAT, Label = "VIP KEEPER" },
+}
+
+local function buildKiosk(plot: PlotLayout.PlotFrame, parent: Instance, spec: KioskSpec)
+	local item: { Robux: number, DisplayName: string, Color: Color3 }? = MonetizationConfig.ProductsByKey[spec.Key]
+		or MonetizationConfig.PassesByKey[spec.Key]
+	if not item then
+		warn(`[WorldBuilder] No Robux item {spec.Key} for a kiosk`)
+		return
+	end
+	local station = Instance.new("Model")
+	station.Name = "RobuxKiosk" .. spec.Key
+	local base = PlotLayout.point(plot, spec.Depth, spec.Lateral, 0)
+	local frame = CFrame.lookAt(base, PlotLayout.point(plot, PLAZA_DEPTH, 0, 0))
+	makePart({
+		Name = "Pedestal",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.6, 5, 5),
+		CFrame = frame * CFrame.new(0, 0.3, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = Color3.fromRGB(245, 245, 240),
+		Parent = station,
+	})
+	local counter = makePart({
+		Name = "Counter",
+		Size = Vector3.new(3.4, 3, 1.6),
+		CFrame = frame * CFrame.new(0, 2.1, 0),
+		Color = UIStyle.Colors.Robux,
+		Parent = station,
+	})
+	-- A glowing token in the item's colour floats over the counter.
+	makePart({
+		Name = "Token",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.4, 2.4, 2.4),
+		CFrame = frame * CFrame.new(0, 5.2, 0) * CFrame.Angles(0, math.rad(90), 0),
+		Color = item.Color,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Parent = station,
+	})
+	local name = billboardLabel(counter, spec.Label, Vector3.new(0, 5.6, 0), Vector2.new(180, 34), item.Color)
+	local price = billboardLabel(counter, `R$ {item.Robux}`, Vector3.new(0, 5.6, 0), Vector2.new(120, 30))
+	local nameGui = name.Parent :: BillboardGui
+	local priceGui = price.Parent :: BillboardGui
+	-- Same anchor as the name, one row lower in pixels, so the two never overlap at any range.
+	priceGui.SizeOffset = Vector2.new(0, -1.15)
+	nameGui.MaxDistance = 70
+	priceGui.MaxDistance = 70
+	local prompt = makePrompt("RobuxKioskPrompt", `Buy R$ {item.Robux}`, 0.3, counter)
+	prompt.ObjectText = item.DisplayName
+	prompt:SetAttribute("ProductKey", spec.Key)
+	station.Parent = parent
+end
+
+local function buildKiosks(plot: PlotLayout.PlotFrame, bay: Model)
+	for _, spec in KIOSKS do
+		buildKiosk(plot, bay, spec)
+	end
+end
+
 function WorldBuilder.buildBay(index: number): Model
 	local plot = PlotLayout.frame(index)
 	local bay = Instance.new("Model")
@@ -1103,6 +1187,7 @@ function WorldBuilder.buildBay(index: number): Model
 	buildZoo(plot, bay)
 	buildSidewalk(plot, bay)
 	buildShowcase(plot, bay)
+	buildKiosks(plot, bay)
 
 	-- In the middle of the hub plaza, facing the wash.
 	local spawnPos = PlotLayout.point(plot, PLAZA_DEPTH, 0, FLOOR_Y)
