@@ -159,7 +159,7 @@ Verified in a merged Studio playtest:
 - [x] ✅ **Tension:** the dev shake brought mud back (69% → 57% clean), flung the nearby player, showed the mud splat overlay, and the patience bar drained.
 - [x] ✅ **Mud Storm:** the dev toggle shows the banner countdown and murky lighting, and lighting goes back to normal afterwards.
 - [x] ✅ **Studio test-mode purchases:**
-  - Super Soap and Lucky Soap both show timers.
+  - Super Soap and 2x Speed both show timers.
   - The cash pack paid out.
   - VIP shows its overhead tag.
   - The Limited Axolotl appeared in the cache and stock dropped from 1000 to 999.

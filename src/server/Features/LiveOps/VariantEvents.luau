@@ -177,7 +177,7 @@ local function eventOneIn(mutation: string): number?
 	return best
 end
 
--- 1-in-N after Mud Storm / Lucky Soap have had a say about the everyday rate.
+-- 1-in-N after Mud Storm has had a say about the everyday rate.
 -- An event boost is a flat rate from the JSON, not stacked on top of that.
 local function chance(player: Player, mutation: string): number?
 	local entry = baseEntry(mutation)

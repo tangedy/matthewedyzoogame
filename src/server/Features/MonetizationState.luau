@@ -24,10 +24,8 @@ export type Saved = {
 	Receipts: { string }, -- most recent PurchaseIds, oldest first
 	SuperSoapLeft: number, -- seconds; only counts down while the player is online
 	AutoCollectLeft: number, -- seconds; only counts down while the player is online
-	LuckyLeft: number, -- walk-ins
 	-- Absolute os.time() expiries. 0 means the buff is off. They keep counting while offline.
 	SpeedEndsAt: number, -- 2x walk speed
-	LuckEndsAt: number, -- Incredible Luck (rare-animal drop weights)
 	Passes: { [string]: boolean }, -- passes granted by this server (purchase, or a Studio simulation)
 	Once: { [string]: boolean }, -- once-only products bought
 	PendingAnimals: { PendingAnimal }, -- bought animals waiting for a cache slot
@@ -41,7 +39,6 @@ export type Session = {
 	JoinedAt: number, -- os.clock()
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow(); 0 when inactive
 	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
-	LuckyRolled: boolean, -- a walk-in was rolled while Lucky Soap was active
 	PendingOnce: { [string]: boolean }, -- once-only products with a prompt open or a receipt due
 	PendingOffline: boolean, -- a 2x offline prompt is open or its receipt is still due
 	OwnedPasses: { [string]: boolean }, -- UserOwnsGamePassAsync results and grants
@@ -97,9 +94,7 @@ local function sanitize(raw: any): Saved
 		Receipts = {},
 		SuperSoapLeft = 0,
 		AutoCollectLeft = 0,
-		LuckyLeft = 0,
 		SpeedEndsAt = 0,
-		LuckEndsAt = 0,
 		Passes = {},
 		Once = {},
 		PendingAnimals = {},
@@ -123,9 +118,7 @@ local function sanitize(raw: any): Saved
 	end
 	saved.SuperSoapLeft = count(raw.SuperSoapLeft, MonetizationConfig.SuperSoap.MaxSeconds)
 	saved.AutoCollectLeft = count(raw.AutoCollectLeft, MonetizationConfig.AutoCollect.MaxSeconds)
-	saved.LuckyLeft = math.floor(count(raw.LuckyLeft, MonetizationConfig.LuckySoap.MaxWalkIns))
 	saved.SpeedEndsAt = unixEnd(raw.SpeedEndsAt, MonetizationConfig.Speed.MaxSeconds)
-	saved.LuckEndsAt = unixEnd(raw.LuckEndsAt, MonetizationConfig.IncredibleLuck.MaxSeconds)
 	saved.Passes = flags(raw.Passes, MonetizationConfig.PassesByKey)
 	saved.Once = flags(raw.Once, MonetizationConfig.ProductsByKey)
 	if typeof(raw.PendingAnimals) == "table" then
@@ -157,9 +150,7 @@ local function sanitize(raw: any): Saved
 		or anyFlag(saved.Once)
 		or saved.SuperSoapLeft > 0
 		or saved.AutoCollectLeft > 0
-		or saved.LuckyLeft > 0
 		or saved.SpeedEndsAt > 0
-		or saved.LuckEndsAt > 0
 	local pendingAxolotl = false
 	for _, entry in saved.PendingAnimals do
 		if entry.Species == "Axolotl" then
@@ -249,7 +240,6 @@ function MonetizationState.session(player: Player): Session
 			JoinedAt = os.clock(),
 			SoapEndsAt = 0,
 			AutoCollectEndsAt = 0,
-			LuckyRolled = false,
 			PendingOnce = {},
 			PendingOffline = false,
 			OwnedPasses = {},
@@ -376,8 +366,6 @@ function MonetizationState.payload(player: Player): MonetizationConfig.ShopState
 			then session.AutoCollectEndsAt
 			else 0,
 		SpeedEndsAt = if saved then toServerClock(saved.SpeedEndsAt) else 0,
-		LuckEndsAt = if saved then toServerClock(saved.LuckEndsAt) else 0,
-		LuckyLeft = if saved then saved.LuckyLeft else 0,
 		Passes = {},
 		Once = if saved then table.clone(saved.Once) else {},
 		Stock = {},

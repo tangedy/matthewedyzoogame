@@ -8,9 +8,7 @@
 --     returned only after the grant is recorded and a save is queued.
 --   * Game passes: UserOwnsGamePassAsync on join (cached per session) plus
 --     PromptGamePassPurchaseFinished.
---   * Boosts plug into the core through Hooks: Super Soap (CleaningPower), Lucky Soap
---     (SpawnWeight / MutationWeight, counted down on WashStarted), Incredible Luck
---     (SpawnWeight for Rare+ while its timestamp lasts), VIP (IncomeMultiplier),
+--   * Boosts plug into the core through Hooks: Super Soap (CleaningPower), VIP (IncomeMultiplier),
 --     Calm Treat (fires "CalmTreat" for the Tension feature). Speed is a timed WalkSpeed buff.
 --   * Contextual offers, never in a session's first 90 seconds: Calm Treat on "PatienceLow",
 --     Super Soap when a big animal is still mostly dirty 8 seconds into its wash.
@@ -308,16 +306,6 @@ local function isPlayer(value: any): boolean
 	return typeof(value) == "Instance" and value:IsA("Player")
 end
 
-local function luckyActive(player: Player): boolean
-	local saved = MonetizationState.saved(player)
-	local session = MonetizationState.peek(player)
-	if saved and session and saved.LuckyLeft > 0 then
-		session.LuckyRolled = true -- this walk-in's roll used the boost
-		return true
-	end
-	return false
-end
-
 local function connectHooks()
 	Hooks.modify("CleaningPower", function(power: number, player: Player)
 		if MonetizationState.soapActive(player) then
@@ -337,65 +325,11 @@ local function connectHooks()
 		return mult
 	end)
 
-	Hooks.modify("SpawnWeight", function(weight: number, player: Player, species: string)
-		local boosted = weight
-		local def = AnimalConfig.Animals[species]
-		local rarity = def and RarityConfig.ByKey[def.Rarity]
-		if luckyActive(player) and rarity and rarity.Order >= MonetizationConfig.LuckySoap.MinRarityOrder then
-			boosted *= MonetizationConfig.LuckySoap.SpawnWeightMultiplier
-		end
-		local saved = MonetizationState.saved(player)
-		local luck = MonetizationConfig.IncredibleLuck
-		if saved and saved.LuckEndsAt > os.time() and rarity and rarity.Order >= luck.MinRarityOrder then
-			boosted *= luck.SpawnWeightMultiplier
-		end
-		return boosted
-	end)
-
-	Hooks.modify("MutationWeight", function(weight: number, player: Player, mutation: string)
-		if mutation ~= "Normal" and luckyActive(player) then
-			return weight * MonetizationConfig.LuckySoap.MutationWeightMultiplier
-		end
-		return weight
-	end)
-
-	Hooks.modify("VariantOneIn", function(oneIn: number, player: Player, mutation: string): number
-		if mutation ~= "Normal" and typeof(oneIn) == "number" and oneIn > 1 and luckyActive(player) then
-			return math.max(1, math.floor(oneIn / MonetizationConfig.LuckySoap.MutationWeightMultiplier))
-		end
-		return oneIn
-	end)
-
-	-- Registered a frame later so it runs after the NextAnimal modifiers other features add in
-	-- their init: a walk-in replaced by an override wasn't rolled with Lucky Soap, so it mustn't
-	-- use a charge.
-	task.defer(function()
-		Hooks.modify("NextAnimal", function(override: any, player: Player, _isFirst: boolean)
-			if typeof(override) == "table" and AnimalConfig.Animals[override.Species] then
-				local session = MonetizationState.peek(player)
-				if session then
-					session.LuckyRolled = false
-				end
-			end
-			return override
-		end)
-	end)
-
 	Hooks.on("WashStarted", function(player: Player, info: Hooks.WashInfo)
 		local session = MonetizationState.peek(player)
 		local saved = MonetizationState.saved(player)
 		if not session or not saved then
 			return
-		end
-		-- Lucky Soap counts the walk-ins that were rolled with it (not the fixed first animal).
-		if session.LuckyRolled then
-			session.LuckyRolled = false
-			saved.LuckyLeft = math.max(0, saved.LuckyLeft - 1)
-			PlayerDataService.markDirty(player)
-			MonetizationState.push(player)
-			if saved.LuckyLeft == 0 then
-				MonetizationState.notify(player, "Lucky Soap used up!", true)
-			end
 		end
 		-- Super Soap offer: a big animal that's still mostly dirty a few seconds in.
 		local def = AnimalConfig.Animals[info.Species]

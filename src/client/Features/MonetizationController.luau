@@ -35,8 +35,6 @@ local state: ShopState = {
 	SoapEndsAt = 0,
 	AutoCollectEndsAt = 0,
 	SpeedEndsAt = 0,
-	LuckEndsAt = 0,
-	LuckyLeft = 0,
 	Passes = {},
 	Once = {},
 	Stock = {},
@@ -47,7 +45,6 @@ local state: ShopState = {
 }
 
 local gui: ScreenGui
-local luckyPill: TextLabel
 local buffPills: { [string]: TextLabel } = {}
 local buffEnds: { [string]: number } = {}
 local buffJanitors: { [string]: Janitor.Janitor } = {}
@@ -201,9 +198,6 @@ local function refreshTimers()
 		speedEnds,
 		if speedLeft > 0 then `{MonetizationConfig.Speed.Multiplier}X SPEED {clock(speedLeft)}` else ""
 	)
-	local luckEnds = state.LuckEndsAt or 0
-	local luckLeft = luckEnds - now
-	syncTimed("Luck", 3, Color3.fromRGB(170, 90, 255), luckEnds, if luckLeft > 0 then `LUCK {clock(luckLeft)}` else "")
 	-- LiveOps NewPlayer: the first-five-minutes rarity boost.
 	local newEnds = player:GetAttribute("NewPlayerBoostEndsAt")
 	newEnds = if typeof(newEnds) == "number" then newEnds else 0
@@ -215,7 +209,6 @@ local function refreshTimers()
 		newEnds,
 		if newLeft > 0 then `BOOST {clock(newLeft)}` else ""
 	)
-	setPill(luckyPill, if state.LuckyLeft > 0 then `LUCKY x{state.LuckyLeft}` else nil)
 end
 
 -- Notices and offers ------------------------------------------------------------------------
@@ -392,7 +385,6 @@ local function buildGui()
 	timerList.Padding = UDim.new(0, 8)
 	timerList.SortOrder = Enum.SortOrder.LayoutOrder
 	timerList.Parent = timers
-	luckyPill = pill(4, Color3.fromRGB(230, 170, 20))
 
 	-- Purchase notices, under the index toast
 	notice = Instance.new("TextLabel")

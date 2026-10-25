@@ -43,10 +43,8 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | `SuperSoap` | Product | 9 | 2x cleaning power for 10 minutes (Hooks `CleaningPower`). Time stacks up to 4 hours, counts down only while online, and is saved. |
 | `SuperSoapLarge` | Product | 25 | Super Soap for 30 minutes (`Seconds` on the product). Same stacking cap. |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
-| `LuckySoap` | Product | 29 | The next 5 walk-ins: Legendary+ `SpawnWeight` x4, non-Normal `MutationWeight` x3. Stacks up to 50. A charge is used only by a walk-in that was actually rolled with the boost (counted on `WashStarted`). The fixed first animal of a session doesn't use one, and neither does a walk-in replaced by another feature's `NextAnimal` override (e.g. LiveOps' daily or Mud Storm animal). |
 | `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Sold at the blue ROBUX SHOP booth on the plaza. |
 | `SpeedBoost` | Product | 19 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
-| `IncredibleLuck` | Product | 79 | Rare+ walk-ins x5 `SpawnWeight` for 10 minutes. Stacks up to 4 hours. |
 | `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 5 / 20 / 60, capped at `CapFraction` (10% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
 | `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 39 / 79 / 149 / 249 / 399 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
 | `HoseTier2`–`HoseTier5` | Product, hidden | 19 / 29 / 99 / 249 | Exactly the next hose (Scrub Brush, Garden Hose, Power Washer, Foam Cannon). Never a skip. The Foam Cannon costs more than Vault of Cash so the cash packs stay worth buying. |
@@ -101,7 +99,6 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 - `Passes[*]`: `Id`, `Robux`, text.
 - `SuperSoap.PowerMultiplier`, `.Seconds`, `.MaxSeconds`.
 - `CalmTreatSeconds`.
-- `LuckySoap.WalkIns`, `.MaxWalkIns`, `.MinRarityOrder`, `.SpawnWeightMultiplier`, `.MutationWeightMultiplier`.
 - `VIP.IncomeMultiplier`, `.TagText`, `.TagColor`.
 - `SoldOutCompensation`.
 - `Offers.*`: quiet time, cooldown, per-session cap, auto-hide, Super Soap offer thresholds, cash auto-open cadence and cap.
@@ -127,14 +124,12 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 ## Coupling points (merge watch)
 
 - The cash-pack auto-open also counts hose buys the core `ShopController` refuses locally. It finds them through ShopController's private UI: the ScreenGui `Shop`, its child `ShopPanel`, and button text starting with `Buy for`. This is best effort. If those names change, only the local-refusal path stops counting; the "Not enough cash" `PurchaseResult` listener keeps working. A cleaner fix for core: have ShopController fire a client BindableEvent (e.g. ReplicatedStorage `HosePurchaseRefused`) and listen to that instead.
-- Lucky Soap's `NextAnimal` modifier is registered one frame after `init` so it runs after the overrides other features register in their own `init`. A feature that registers a `NextAnimal` modifier later than that would make an overridden walk-in use a charge.
 
 ## Check in Studio
 
 - [ ] Play solo. A pink SHOP button sits under INDEX on the left. Tapping it pops open the panel with Boosts / Cash / Passes / Limited tabs and a TEST MODE line.
 - [ ] Boosts: Super Soap shows 5 ROBUX at first. BUY grants it (notice "[TEST] Super Soap!") and a "SOAP 2X 9:59" pill appears right of INDEX. The card now shows 9 ROBUX. Buying again stacks the time.
 - [ ] With Super Soap active, washing is visibly ~2x faster. Rejoin: the remaining time is kept (with Studio API access enabled).
-- [ ] Lucky Soap: BUY, and the "LUCKY: 5 LEFT" pill appears. It counts down by one per walk-in after purchase. Rarer/mutated animals show up noticeably more often. With LiveOps merged, a daily/Mud Storm override walk-in doesn't use a charge.
 - [ ] Calm Treat: BUY with no animal at the wash spot: refused with "Start washing an animal first!". BUY during a wash: if the Tension feature is merged, patience freezes for 60 s. Without it, only the notice shows.
 - [ ] Cash: the cards show amounts, and each is at most 15% / 30% / 50% of the next hose price. BUY adds exactly that much cash.
 - [ ] Limited: the Axolotl card shows COMING SOON until the Models branch adds `Axolotl` to AnimalConfig. Once it's there:

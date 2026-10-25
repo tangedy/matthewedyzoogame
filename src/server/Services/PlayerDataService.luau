@@ -30,7 +30,7 @@ local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 -- v5: the Spray Hose became tier 2, so every bought tier above Basic moved up one.
 -- v6: intro washes, the spawn cutscene, and overflow animals that a full cache no longer drops.
 -- v7: consumable buffs store absolute expiry timestamps in Extra.Monetization
--- (SpeedEndsAt, LuckEndsAt). Removed passes are dropped when that table is read,
+-- (SpeedEndsAt). Removed passes are dropped when that table is read,
 -- because they are no longer in the pass catalog.
 -- v8: the two flex road pastures became four cages (large, medium, medium, large).
 -- v9: the four road cages open together as the Pasture barn upgrade (Extra.RoadCages.Open).
@@ -226,9 +226,7 @@ local function spentRobux(extra: any): boolean
 	end
 	return positive(mon.SuperSoapLeft)
 		or positive(mon.AutoCollectLeft)
-		or positive(mon.LuckyLeft)
 		or positive(mon.SpeedEndsAt)
-		or positive(mon.LuckEndsAt)
 end
 
 local function sidePastureOpen(raw: any): boolean

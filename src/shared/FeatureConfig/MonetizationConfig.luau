@@ -18,7 +18,7 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "LuckySoap" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SpeedBoost" | "IncredibleLuck" | "OfflineDouble" | "HoseTier"
+	Kind: string, -- "SuperSoap" | "CalmTreat" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SpeedBoost" | "OfflineDouble" | "HoseTier"
 	ToolTier: number?, -- HoseTier: the single next hose this product grants. Never a skip.
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
@@ -52,8 +52,6 @@ export type ShopState = {
 	SoapEndsAt: number, -- Workspace:GetServerTimeNow() when Super Soap runs out; 0 when inactive
 	AutoCollectEndsAt: number, -- same clock; 0 when the timed auto-collect is off
 	SpeedEndsAt: number, -- same clock; 0 when the 2x speed buff is off
-	LuckEndsAt: number, -- same clock; 0 when Incredible Luck is off
-	LuckyLeft: number, -- walk-ins left on Lucky Soap
 	Passes: { [string]: boolean }, -- owned game passes
 	Once: { [string]: boolean }, -- once-only products already bought
 	Stock: { [string]: number }, -- remaining stock per limited (missing while unknown)
@@ -124,17 +122,6 @@ local products: { Product } = {
 		Color = GREEN,
 	},
 	{
-		Key = "LuckySoap",
-		Id = 0,
-		Robux = 29,
-		DisplayName = "Lucky Soap",
-		Description = "Next 5 walk-ins: rarer, more mutations.",
-		Tab = "Boosts",
-		Order = 4,
-		Kind = "LuckySoap",
-		Color = GOLD,
-	},
-	{
 		Key = "AutoCollect2h",
 		Id = 0,
 		Robux = 49,
@@ -156,17 +143,6 @@ local products: { Product } = {
 		Order = 6,
 		Kind = "SpeedBoost",
 		Color = ORANGE,
-	},
-	{
-		Key = "IncredibleLuck",
-		Id = 0,
-		Robux = 79,
-		DisplayName = "Incredible Luck",
-		Description = "Rare+ walk-ins far likelier for 10 min.",
-		Tab = "Boosts",
-		Order = 7,
-		Kind = "IncredibleLuck",
-		Color = PURPLE,
 	},
 	-- Cash
 	{
@@ -379,13 +355,6 @@ return {
 		MaxSeconds = 4 * 3600, -- stacking cap
 	},
 	CalmTreatSeconds = 60, -- sent with Hooks "CalmTreat"; the Tension feature freezes patience
-	LuckySoap = {
-		WalkIns = 5, -- per purchase; purchases stack
-		MaxWalkIns = 50,
-		MinRarityOrder = 4, -- RarityConfig order: Legendary and above
-		SpawnWeightMultiplier = 4,
-		MutationWeightMultiplier = 3, -- every mutation except Normal
-	},
 	VIP = {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",
@@ -394,12 +363,6 @@ return {
 		Multiplier = 2, -- WalkSpeed while the consumable is active
 		Seconds = 600, -- per purchase; purchases stack
 		MaxSeconds = 4 * 3600,
-	},
-	IncredibleLuck = {
-		Seconds = 600,
-		MaxSeconds = 4 * 3600,
-		MinRarityOrder = 2, -- Rare and above
-		SpawnWeightMultiplier = 5,
 	},
 	AutoCollect = {
 		MaxSeconds = 2 * 3600, -- stacked 30-minute purchases stop here

@@ -1,6 +1,6 @@
 -- What each paid item does once it's paid for: boosts, cash, the limited animal (into the cache,
--- or queued until a slot frees) and the VIP game pass. Speed and Incredible Luck are timed
--- consumables. A Janitor owns the speed boost's respawn listener and expiry timer.
+-- or queued until a slot frees) and the VIP game pass. Speed is a timed consumable. A Janitor owns the
+-- speed boost's respawn listener and expiry timer.
 -- Called from Monetization for real receipts and Studio-simulated purchases alike.
 -- Part of the Monetization feature (no init of its own).
 
@@ -245,10 +245,6 @@ function MonetizationGrants.product(
 	elseif kind == "CalmTreat" then
 		Hooks.fire("CalmTreat", player, MonetizationConfig.CalmTreatSeconds)
 		return true, `Patience frozen · {MonetizationConfig.CalmTreatSeconds}s`
-	elseif kind == "LuckySoap" then
-		local cfg = MonetizationConfig.LuckySoap
-		saved.LuckyLeft = math.min(saved.LuckyLeft + cfg.WalkIns, cfg.MaxWalkIns)
-		return true, `Lucky Soap · {saved.LuckyLeft} walk-ins`
 	elseif kind == "Cash" then
 		local amount = MonetizationState.cashAmount(player, product)
 		if not EconomyService.addCoins(player, amount) then
@@ -260,10 +256,6 @@ function MonetizationGrants.product(
 		saved.SpeedEndsAt = extendUnix(saved.SpeedEndsAt, cfg.Seconds, cfg.MaxSeconds)
 		MonetizationGrants.watchSpeed(player)
 		return true, `{cfg.Multiplier}x Speed · {clock(saved.SpeedEndsAt - os.time())}`
-	elseif kind == "IncredibleLuck" then
-		local cfg = MonetizationConfig.IncredibleLuck
-		saved.LuckEndsAt = extendUnix(saved.LuckEndsAt, cfg.Seconds, cfg.MaxSeconds)
-		return true, `Incredible Luck · {clock(saved.LuckEndsAt - os.time())}`
 	elseif kind == "OfflineDouble" then
 		local data = PlayerDataService.get(player)
 		if not data or #data.Animals == 0 then
@@ -427,11 +419,6 @@ function MonetizationGrants.syncBuffs(player: Player)
 		changed = true
 		dropSpeed(player)
 		MonetizationState.notify(player, "Speed boost ran out!", false)
-	end
-	if saved.LuckEndsAt > 0 and saved.LuckEndsAt <= now then
-		saved.LuckEndsAt = 0
-		changed = true
-		MonetizationState.notify(player, "Incredible Luck ran out!", false)
 	end
 	if changed then
 		PlayerDataService.markDirty(player)

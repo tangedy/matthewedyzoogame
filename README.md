@@ -88,7 +88,7 @@ These plug in through `src/server/Services/Hooks.luau` and the Features folders.
   - zoo stars, leaderstats and the plaza leaderboard
   - onboarding analytics
 - [Monetization](docs/features/monetization.md):
-  - products: Super Soap, Calm Treat, Lucky Soap and cash packs
+  - products: Super Soap, Calm Treat and cash packs
   - game passes: VIP and the Fire-Hose Rig early unlock
   - Limited Axolotl with a global stock
   - purchase handling that never grants twice
