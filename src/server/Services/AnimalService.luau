@@ -88,12 +88,12 @@ end
 function AnimalService.pickNext(toolTier: number, player: Player?): string
 	local tool = ToolConfig[toolTier]
 	local base = if tool then tool.CleaningPower else 0
-	local power = if player then CleanGateService.washPower(player, toolTier) else base
+	local power = if player then CleanGateService.washPower(player) else base
 	local washable: { string } = {}
 	local tierWeight: { [number]: number } = {}
 	for key, def in AnimalConfig.Animals do
-		-- Tool tier is the usual gate. Super Soap can also wash the next tier, and those
-		-- animals join the normal pool instead of the Clean Now chances.
+		-- Tool tier is the usual gate. A sub-tier that raises power (Titan Spec) also washes
+		-- the next tier, and those animals join the normal pool instead of the Clean Now chances.
 		local unlocked = def.RequiredToolTier <= toolTier and CleanPower.canClean(base, def.Rarity)
 		if
 			(unlocked or CleanPower.canClean(power, def.Rarity))
@@ -347,7 +347,7 @@ function AnimalService.spawn(
 	sound.Volume = 0.6
 	sound.Parent = model:FindFirstChild("Body")
 
-	addNameplate(model, animalKey, mutationKey, 80, look, CleanPower.gearNeeded(def.Rarity, def.RequiresSoap))
+	addNameplate(model, animalKey, mutationKey, 80, look, CleanPower.gearNeeded(def.Rarity))
 
 	model.Parent = parent
 

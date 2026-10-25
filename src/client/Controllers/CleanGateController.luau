@@ -1,4 +1,4 @@
--- When the animal in the bay needs more clean power than the hose has (Super Soap included),
+-- When the animal in the bay needs more clean power than the hose has (at its sub-tier),
 -- spraying does nothing. This offers the two ways forward: send it away, or pay to wash it now.
 -- The offer floats over the animal and only shows while you stand close to it (within the
 -- hose's reach), like a proximity prompt.
@@ -11,6 +11,7 @@ local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
@@ -29,7 +30,7 @@ local LEAVE_COLOR = UIStyle.Colors.Muted
 local WASH_COLOR = UIStyle.Colors.Robux
 
 local tier = 1
-local soapEndsAt = 0
+local level = 0 -- sub-tier on the current hose
 local bay: Types.BaySnapshot? = nil
 local blocked = false
 local nextClickAt = 0
@@ -40,15 +41,11 @@ local title: TextLabel
 local cleanButton: TextButton
 
 local function hosePower(): number
-	local tool = ToolConfig[tier] or ToolConfig[1]
-	local boosted = soapEndsAt > Workspace:GetServerTimeNow()
-	local mult = if boosted then MonetizationConfig.SuperSoap.PowerMultiplier else 1
-	return tool.CleaningPower * mult
+	return GearLadder.power(tier, level)
 end
 
 local function canWash(def: AnimalConfig.AnimalDefinition): boolean
-	local soaped = soapEndsAt > Workspace:GetServerTimeNow()
-	return CleanPower.canClean(hosePower(), def.Rarity) and (not def.RequiresSoap or soaped)
+	return CleanPower.canClean(hosePower(), def.Rarity)
 end
 
 local function bayAnimal(): Model?
@@ -59,12 +56,6 @@ local function bayAnimal(): Model?
 	local model = bays and bays:FindFirstChild(bay.BayName)
 	local animal = model and model:FindFirstChild("Animal")
 	return if animal and animal:IsA("Model") then animal else nil
-end
-
-local function soapOnly(): boolean
-	local species = bay and bay.Species
-	local def = if typeof(species) == "string" then AnimalConfig.Animals[species] else nil
-	return def ~= nil and def.RequiresSoap == true
 end
 
 -- Nameplates (UIStyle.nameplate) keep the text without the lock line in OpenText.
@@ -102,25 +93,16 @@ end
 
 local function refresh()
 	local rarityKey = bay and bay.Rarity
-	local soaped = soapEndsAt > Workspace:GetServerTimeNow()
-	local needsSoap = soapOnly() and not soaped
 	blocked = bay ~= nil
 		and bay.State == "Washing"
 		and typeof(rarityKey) == "string"
-		and (not CleanPower.canClean(hosePower(), rarityKey) or needsSoap)
+		and not CleanPower.canClean(hosePower(), rarityKey)
 	player:SetAttribute("CleanBlocked", blocked)
 	if not blocked or typeof(rarityKey) ~= "string" then
 		panel.Visible = false
 		return
 	end
 	-- Kept short: what's wrong, then the two buttons (let it go / wash now for R$).
-	if needsSoap and CleanPower.canClean(hosePower(), rarityKey) then
-		local offer = MonetizationConfig.ProductsByKey.CleanNow
-		cleanKey = offer.Key
-		title.Text = "Needs Super Soap"
-		cleanButton.Text = `Wash now · {offer.Robux} R$`
-		return
-	end
 	local steps = CleanPower.stepsAbove(hosePower(), rarityKey) or 0
 	local offer = MonetizationConfig.productForCleanSteps(steps) or MonetizationConfig.ProductsByKey.CleanNow
 	cleanKey = offer.Key
@@ -216,6 +198,7 @@ end
 
 function CleanGateController.init(initial: Types.InitialState)
 	tier = initial.ToolTier
+	level = initial.ToolUpgrade or 0
 	build()
 	bay = initial.Bay
 	refresh()
@@ -233,17 +216,11 @@ function CleanGateController.init(initial: Types.InitialState)
 		bay = snapshot
 		refresh()
 	end)
-	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number)
+	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
 		tier = value
+		level = newLevel or 0
 		refresh()
 		applyAllLocks()
-	end)
-	Remotes.event("MonetizationState").OnClientEvent:Connect(function(state)
-		if typeof(state) == "table" and typeof(state.SoapEndsAt) == "number" then
-			soapEndsAt = state.SoapEndsAt
-			refresh()
-			applyAllLocks()
-		end
 	end)
 end
 

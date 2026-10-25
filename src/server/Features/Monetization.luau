@@ -8,10 +8,10 @@
 --     returned only after the grant is recorded and a save is queued.
 --   * Game passes: UserOwnsGamePassAsync on join (cached per session) plus
 --     PromptGamePassPurchaseFinished.
---   * Boosts plug into the core through Hooks: Super Soap (CleaningPower), VIP (IncomeMultiplier),
+--   * Boosts plug into the core through Hooks: VIP (IncomeMultiplier),
 --     Calm Treat (fires "CalmTreat" for the Tension feature). Speed is a timed WalkSpeed buff.
---   * Contextual offers, never in a session's first 90 seconds: Calm Treat on "PatienceLow",
---     Super Soap when a big animal is still mostly dirty 8 seconds into its wash.
+--   * Contextual offers, never in a session's first 90 seconds: Calm Treat on "PatienceLow".
+--     (Super Soap was removed; its saved seconds still drain but no longer boost anything.)
 -- Split across MonetizationState (data), MonetizationGrants (effects), MonetizationStock.
 
 local HttpService = game:GetService("HttpService")
@@ -295,11 +295,6 @@ local function offer(player: Player, kind: string, productKey: string)
 	offerRemote:FireClient(player, kind, productKey)
 end
 
-local function superSoapKey(player: Player): string
-	local saved = MonetizationState.saved(player)
-	return if saved and not saved.Once.SuperSoapStarter then "SuperSoapStarter" else "SuperSoap"
-end
-
 -- Hooks ---------------------------------------------------------------------------------
 
 local function isPlayer(value: any): boolean
@@ -307,46 +302,11 @@ local function isPlayer(value: any): boolean
 end
 
 local function connectHooks()
-	Hooks.modify("CleaningPower", function(power: number, player: Player)
-		if MonetizationState.soapActive(player) then
-			return power * MonetizationConfig.SuperSoap.PowerMultiplier
-		end
-		return power
-	end)
-
-	Hooks.modify("SoapActive", function(active: boolean, player: Player)
-		return active or MonetizationState.soapActive(player)
-	end)
-
 	Hooks.modify("IncomeMultiplier", function(mult: number, player: Player)
 		if MonetizationState.ownsPass(player, "VIPKeeper") then
 			return mult * MonetizationConfig.VIP.IncomeMultiplier
 		end
 		return mult
-	end)
-
-	Hooks.on("WashStarted", function(player: Player, info: Hooks.WashInfo)
-		local session = MonetizationState.peek(player)
-		local saved = MonetizationState.saved(player)
-		if not session or not saved then
-			return
-		end
-		-- Super Soap offer: a big animal that's still mostly dirty a few seconds in.
-		local def = AnimalConfig.Animals[info.Species]
-		local cfg = MonetizationConfig.Offers
-		if def and def.WashTimeMultiplier >= cfg.BigAnimalWashTime then
-			task.delay(cfg.SuperSoapCheckDelay, function()
-				local job = CleaningService.getActiveJob(player)
-				if
-					job
-					and job.Id == info.JobId
-					and job.Progress < cfg.SuperSoapMaxProgress
-					and not MonetizationState.soapActive(player)
-				then
-					offer(player, "SuperSoap", superSoapKey(player))
-				end
-			end)
-		end
 	end)
 
 	-- From the Tension feature, once per wash when patience drops under 20%.
@@ -381,9 +341,6 @@ local function connectHooks()
 		local saved = MonetizationState.saved(player)
 		if not saved then
 			return
-		end
-		if session.SoapEndsAt == 0 and saved.SuperSoapLeft > 0 then
-			session.SoapEndsAt = Workspace:GetServerTimeNow() + saved.SuperSoapLeft
 		end
 		if session.AutoCollectEndsAt == 0 and saved.AutoCollectLeft > 0 then
 			session.AutoCollectEndsAt = Workspace:GetServerTimeNow() + saved.AutoCollectLeft

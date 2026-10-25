@@ -126,7 +126,7 @@ function UIStyle.vipChatTitle(text: string): string
 	return `<stroke color="#000000" thickness="2" joins="round">{table.concat(parts)}</stroke>`
 end
 
--- Colours a label for a rarity tier: tier colour, Zoo God rainbow, Secret black/white.
+-- Colours a label for a rarity tier: tier colour, Zoo God rainbow, Secret white/black.
 function UIStyle.rarity(label: TextLabel, rarityKey: string)
 	local rarity = RarityConfig.ByKey[rarityKey] or RarityConfig.ByKey.Common
 	UIStyle.text(label, if rarity.Rainbow then Color3.new(1, 1, 1) else rarity.Color, rarity.StrokeColor)
@@ -264,8 +264,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	label.Name = "Label"
 	label.Size = UDim2.fromScale(1, 1)
 	label.Parent = billboard
-	local textColor = if rarity.Key == "Secret" then rarity.Color else Color3.new(1, 1, 1)
-	UIStyle.text(label, textColor, if rainbowLabel then Color3.new(0, 0, 0) else rarity.StrokeColor, 3.5)
+	UIStyle.text(label, Color3.new(1, 1, 1),if rainbowLabel then Color3.new(0, 0, 0) else rarity.StrokeColor, 3.5)
 	label.RichText = true
 
 	local function span(color: Color3, text: string): string

@@ -16,7 +16,7 @@ local UIPlatform = require(script.Parent.Parent.UI)
 type ShopState = MonetizationConfig.ShopState
 
 type Card = {
-	Key: string, -- the product or pass this card shows (Super Soap swaps to its intro product)
+	Key: string, -- the product or pass this card shows (swaps to an intro product while one is unused)
 	Tab: string,
 	Order: number,
 	Frame: Frame,
@@ -175,7 +175,7 @@ local function refreshCard(card: Card, state: ShopState)
 	local statusColor = Color3.new(1, 1, 1)
 	local pass = MonetizationConfig.PassesByKey[card.Key]
 	local product = MonetizationConfig.ProductsByKey[card.Key]
-	-- Super Soap shows its cheaper intro product until that has been used.
+	-- A product with an intro price shows that cheaper product until it has been used.
 	if product and product.IntroKey and not state.Once[product.IntroKey] then
 		card.Key = product.IntroKey
 		product = MonetizationConfig.ProductsByKey[product.IntroKey]
@@ -204,10 +204,7 @@ local function refreshCard(card: Card, state: ShopState)
 			statusColor = OWNED_COLOR
 		end
 	elseif product then
-		if product.Kind == "SuperSoap" and state.SoapEndsAt > 0 then
-			statusText = `ACTIVE {clock(state.SoapEndsAt - Workspace:GetServerTimeNow())}`
-			statusColor = Color3.fromRGB(150, 230, 255)
-		elseif product.Kind == "SpeedBoost" and (state.SpeedEndsAt or 0) > Workspace:GetServerTimeNow() then
+		if product.Kind == "SpeedBoost" and (state.SpeedEndsAt or 0) > Workspace:GetServerTimeNow() then
 			statusText = `ACTIVE {clock(state.SpeedEndsAt - Workspace:GetServerTimeNow())}`
 			statusColor = Color3.fromRGB(255, 170, 80)
 		elseif product.Kind == "AutoCollect" and state.AutoCollectEndsAt > Workspace:GetServerTimeNow() then

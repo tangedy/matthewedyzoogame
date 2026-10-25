@@ -16,7 +16,7 @@ export type Tier = {
 	Text: Color3, -- MAX label colour, readable over the sky and grass
 }
 
--- Lowest first. Caps today: stall 1K, medium 10K, giant 100K, gargantuan 1M.
+-- Lowest first. Caps today: stall 2.5K, medium 25K, giant 100K, gargantuan 1M.
 PenTiers.List = {
 	{ Name = "Oak", MinCap = 0, Wood = Color3.fromRGB(150, 110, 70), Text = Color3.fromRGB(230, 200, 160) },
 	{ Name = "Redwood", MinCap = 10000, Wood = Color3.fromRGB(170, 66, 44), Text = Color3.fromRGB(255, 140, 110) },

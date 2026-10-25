@@ -79,10 +79,10 @@ local GameConfig = {
 	-- Most uncollected cash a pen's pad holds, by pen class (bigger pen, bigger pad). A full pad
 	-- stops filling until it is collected.
 	PenCashCap = {
-		Standard = 1000, -- small stall
-		Medium = 10000,
-		Large = 10000, -- same footprint as Medium
-		PastureMedium = 10000,
+		Standard = 2500, -- small stall
+		Medium = 25000,
+		Large = 25000, -- same footprint as Medium
+		PastureMedium = 25000,
 		Giant = 100000,
 		PastureLarge = 100000,
 		Gargantuan = 1000000,
@@ -179,7 +179,7 @@ local GameConfig = {
 	-- both sides. PeakOffset moves the whole peak (in tiers; it never goes left of Common).
 	-- Species inside a tier still split its share by SpawnWeight.
 	-- Rough shares: sponge 80/20 Common/Rare; Power Washer 67/30/3, Legendary 0.06%;
-	-- Fire Hose with Super Soap peaks on Rare and Epic, with Common ~22% and Secret ~0.01%.
+	-- Fire Hose Titan Spec peaks on Rare and Epic, with Common ~22% and Secret ~0.01%.
 	SpawnCurve = {
 		StartTop = 2,
 		PeakPerTier = 0.44,

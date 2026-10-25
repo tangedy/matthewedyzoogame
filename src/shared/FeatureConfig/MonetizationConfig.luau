@@ -18,11 +18,11 @@ export type Product = {
 	Description: string,
 	Tab: string,
 	Order: number,
-	Kind: string, -- "SuperSoap" | "CalmTreat" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SpeedBoost" | "OfflineDouble" | "HoseTier"
+	Kind: string, -- "CalmTreat" | "Cash" | "Limited" | "AutoCollect" | "CleanNow" | "Truck" | "SpeedBoost" | "OfflineDouble" | "HoseTier"
 	ToolTier: number?, -- HoseTier: the single next hose this product grants. Never a skip.
 	Hidden: boolean?, -- offered in the moment (not a shop card)
 	CleanSteps: number?, -- Clean Now: rarity steps above the cheapest animal this hose cannot wash
-	Seconds: number?, -- AutoCollect and Super Soap: play-time added per purchase (Super Soap defaults to SuperSoap.Seconds)
+	Seconds: number?, -- AutoCollect: play-time added per purchase
 	Color: Color3,
 	OncePerPlayer: boolean?, -- can only be bought once (an intro price)
 	IntroKey: string?, -- the shop shows this cheaper once-only product instead, until it's used
@@ -74,42 +74,6 @@ local ORANGE = Color3.fromRGB(255, 140, 40)
 
 local products: { Product } = {
 	-- Boosts
-	{
-		Key = "SuperSoapStarter",
-		Id = 0,
-		Robux = 5,
-		DisplayName = "Super Soap",
-		Description = "2x clean power for 10 min.",
-		Tab = "Boosts",
-		Order = 1,
-		Kind = "SuperSoap",
-		Color = BLUE,
-		OncePerPlayer = true,
-	},
-	{
-		Key = "SuperSoap",
-		Id = 0,
-		Robux = 9,
-		DisplayName = "Super Soap",
-		Description = "2x clean power for 10 min. Stacks.",
-		Tab = "Boosts",
-		Order = 1,
-		Kind = "SuperSoap",
-		Color = BLUE,
-		IntroKey = "SuperSoapStarter",
-	},
-	{
-		Key = "SuperSoapLarge",
-		Id = 0,
-		Robux = 25,
-		DisplayName = "Super Soap x3",
-		Description = "2x clean power for 30 min. Stacks.",
-		Tab = "Boosts",
-		Order = 2,
-		Kind = "SuperSoap",
-		Color = BLUE,
-		Seconds = 30 * 60,
-	},
 	{
 		Key = "CalmTreat",
 		Id = 0,
@@ -372,16 +336,13 @@ return {
 	SoldOutCompensation = { Minutes = 120, Floor = 5000, CapFraction = 1 },
 
 	Offers = {
-		-- The side pop-ups (Super Soap on a big wash, Calm Treat before a mud shake) are off.
+		-- The side pop-up (Calm Treat before a mud shake) is off.
 		-- The products stay in the shop and on the "too dirty" prompt.
 		Enabled = false,
 		QuietSeconds = 90, -- no offer or auto-opened shop this early in a session
 		CooldownSeconds = 240, -- per offer kind
 		MaxPerSession = 6,
 		AutoHideSeconds = 12,
-		BigAnimalWashTime = 2, -- Super Soap offer: AnimalConfig WashTimeMultiplier at least this
-		SuperSoapCheckDelay = 8, -- seconds into the wash
-		SuperSoapMaxProgress = 0.5, -- still less clean than this
 		CashAutoOpenEvery = 3, -- failed cash purchases (hose or barn) per auto-open
 		CashAutoOpenMax = 3, -- auto-opens per session
 	},

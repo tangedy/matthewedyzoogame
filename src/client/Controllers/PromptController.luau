@@ -26,9 +26,9 @@ local TITLE_HEIGHT = 20
 local BUTTON_HEIGHT = 32
 local BUTTON_GAP = 4
 local PAD = 6
--- Cards over animals and pens draw at this size so they cover less of the animal. Touch
--- keeps the full size: its buttons are thumb targets, and Sell/Swap/Pick up need a hold.
-local CARD_SCALE_TOUCH = 1
+-- Cards over animals and pens draw at this size so they cover less of the animal. On a
+-- phone screen the full-size card swamped the view, so touch draws it smaller too.
+local CARD_SCALE_TOUCH = 0.8
 local CARD_SCALE = 0.9
 
 -- Button colour by what the action does: muted so the card sits quietly over the world.
@@ -85,13 +85,17 @@ local holding: { [ProximityPrompt]: boolean } = {}
 -- engine runs the hold on the client, so the local value is the one that counts.
 local TOUCH_HOLD = 0.75
 local TOUCH_HOLD_ACTIONS = { "Sell", "Swap", "Pick up" }
+-- Picking up from the cache only moves a washed animal into your hands, so it stays a tap.
+local TOUCH_TAP_PROMPTS: { [string]: boolean } = {
+	PickupPrompt = true,
+}
 local serverHold: { [ProximityPrompt]: number } = {}
 -- What we last wrote. Property signals are deferred, so a flag set around the write is
 -- already cleared when the change fires; comparing against our own value is not.
 local localHold: { [ProximityPrompt]: number } = {}
 
 local function wantsTouchHold(prompt: ProximityPrompt): boolean
-	if UIPlatform.get().inputMode ~= "Touch" then
+	if UIPlatform.get().inputMode ~= "Touch" or TOUCH_TAP_PROMPTS[prompt.Name] then
 		return false
 	end
 	for _, prefix in TOUCH_HOLD_ACTIONS do

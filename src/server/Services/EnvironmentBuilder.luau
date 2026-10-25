@@ -37,7 +37,7 @@ local POND_CENTER = Vector3.new(130, 0, 330)
 local POND_SIZE = Vector2.new(56, 56) -- X, Z (round)
 
 local WORLD_HALF_LENGTH = 370 -- along Z, just past the plots and the truck's drive-in
-local BOARD_Z = -350 -- LiveOpsConfig.Board.Position, kept clear of trees
+local BOARD_Z = 0 -- LiveOpsConfig.Board.Position, kept clear of trees
 
 local rng = Random.new(20261022)
 local folder: Folder

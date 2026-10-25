@@ -2,15 +2,15 @@
 -- completed wash, taken from Common. Every rarity above that is FlatChance on every
 -- walk-in and does not grow. Seeing any unwashable resets the growing count to 0.
 -- Hose upgrades no longer schedule a separate animal: the set is whatever this
--- hose, including Super Soap, still cannot wash.
+-- hose (and its sub-tier) still cannot wash.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local AnimalBuilder = require(script.Parent.AnimalBuilder)
 local Hooks = require(script.Parent.Hooks)
 local PlayerDataService = require(script.Parent.PlayerDataService)
@@ -19,13 +19,15 @@ local CleanGateService = {}
 
 local rng = Random.new()
 
-function CleanGateService.washPower(player: Player, tier: number): number
-	local tool = ToolConfig[tier] or ToolConfig[1]
-	local boosted = Hooks.apply("CleaningPower", tool.CleaningPower, player)
+-- The player's hose power at their current sub-tier (the Fire Hose's last one unlocks Secret).
+function CleanGateService.washPower(player: Player): number
+	local data = PlayerDataService.get(player)
+	local base = if data then GearLadder.power(data.ToolTier, data.ToolUpgrade) else GearLadder.power(1)
+	local boosted = Hooks.apply("CleaningPower", base, player)
 	if typeof(boosted) == "number" and boosted == boosted and boosted > 0 and boosted < math.huge then
 		return boosted
 	end
-	return tool.CleaningPower
+	return base
 end
 
 local function speciesOfRarity(rarityKey: string): string?
@@ -121,7 +123,7 @@ function CleanGateService.observe(player: Player, species: string): boolean
 	if not data or not def then
 		return false
 	end
-	local power = CleanGateService.washPower(player, data.ToolTier)
+	local power = CleanGateService.washPower(player)
 	if CleanPower.canClean(power, def.Rarity) then
 		return false
 	end
@@ -137,7 +139,7 @@ function CleanGateService.onWashed(player: Player)
 	if not data then
 		return
 	end
-	local power = CleanGateService.washPower(player, data.ToolTier)
+	local power = CleanGateService.washPower(player)
 	if #lockedRarities(power) == 0 then
 		return
 	end

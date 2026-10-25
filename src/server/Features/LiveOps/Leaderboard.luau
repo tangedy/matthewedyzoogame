@@ -1,6 +1,6 @@
 -- Native leaderstats (Cash, Income, Stars) for the player list, and a physical "TOP ZOOS"
--- board behind the welcome plaza fountain ranking everyone in the server by income per
--- second. LiveOps owns each player's leaderstats folder.
+-- board in the middle of the world (centre of the road) ranking everyone in the server by
+-- income per second. It reads from both sides of the road. LiveOps owns each player's leaderstats folder.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,7 +21,7 @@ type Row = { Rank: TextLabel, Vip: Frame, Name: TextLabel, Income: TextLabel, St
 
 local Leaderboard = {}
 
-local rows: { Row } = {}
+local rows: { { Row } } = {} -- one list per board face
 
 -- Income per second as the pens actually pay it (base income x income modifiers).
 local function incomeOf(player: Player): number
@@ -113,44 +113,14 @@ local function label(parent: Instance, props: { [string]: any }, color: Color3?,
 	return l
 end
 
--- The board stands on two posts at the south end of the road and faces -X.
-local function buildBoard()
-	local existing = Workspace:FindFirstChild("LiveOpsLeaderboard")
-	if existing then
-		existing:Destroy()
-	end
-	local model = Instance.new("Model")
-	model.Name = "LiveOpsLeaderboard"
-	local base = Config.Position
-	local size = Config.Size
-	local wood = Color3.fromRGB(130, 90, 55)
-	local board = part({
-		Name = "Board",
-		Size = size,
-		Position = base + Vector3.new(0, Config.Height + size.Y / 2, 0),
-		Color = Color3.fromRGB(40, 70, 130),
-		Material = Enum.Material.SmoothPlastic,
-	}, model)
-	part({
-		Name = "Frame",
-		Size = size + Vector3.new(0.2, 0.8, 0.8),
-		Position = board.Position + Vector3.new(0.2, 0, 0),
-		Color = wood,
-		Material = Enum.Material.Wood,
-	}, model)
-	for _, dz in { -size.Z / 2 + 1, size.Z / 2 - 1 } do
-		part({
-			Name = "Post",
-			Size = Vector3.new(0.8, Config.Height + 1, 0.8),
-			Position = base + Vector3.new(0.2, (Config.Height + 1) / 2, dz),
-			Color = wood,
-			Material = Enum.Material.Wood,
-		}, model)
-	end
+-- One face's "TOP ZOOS" sign and rows.
+local function buildFace(board: BasePart, face: Enum.NormalId)
+	local faceRows: { Row } = {}
+	table.insert(rows, faceRows)
 
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "Leaderboard"
-	gui.Face = Enum.NormalId.Left
+	gui.Face = face
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 40
 	gui.LightInfluence = 0
@@ -211,7 +181,7 @@ local function buildBoard()
 			Text = MonetizationConfig.VIP.TagText,
 		}, Color3.new(1, 1, 1), 2)
 		UIStyle.rainbow(vipText)
-		table.insert(rows, {
+		table.insert(faceRows, {
 			Frame = frame,
 			Rank = label(frame, {
 				Position = UDim2.fromScale(0.01, 0.1),
@@ -239,6 +209,46 @@ local function buildBoard()
 			}, nil, 3),
 		})
 	end
+end
+
+-- The board stands on two posts in the middle of the road, with a face toward each side.
+local function buildBoard()
+	local existing = Workspace:FindFirstChild("LiveOpsLeaderboard")
+	if existing then
+		existing:Destroy()
+	end
+	local model = Instance.new("Model")
+	model.Name = "LiveOpsLeaderboard"
+	local base = Config.Position
+	local size = Config.Size
+	local wood = Color3.fromRGB(130, 90, 55)
+	local board = part({
+		Name = "Board",
+		Size = size,
+		Position = base + Vector3.new(0, Config.Height + size.Y / 2, 0),
+		Color = Color3.fromRGB(40, 70, 130),
+		Material = Enum.Material.SmoothPlastic,
+	}, model)
+	part({
+		Name = "Frame",
+		-- Thinner than the board so both faces stay in front of it.
+		Size = size + Vector3.new(-0.2, 0.8, 0.8),
+		Position = board.Position,
+		Color = wood,
+		Material = Enum.Material.Wood,
+	}, model)
+	for _, dz in { -size.Z / 2 + 1, size.Z / 2 - 1 } do
+		part({
+			Name = "Post",
+			Size = Vector3.new(0.8, Config.Height + 1, 0.8),
+			Position = base + Vector3.new(0, (Config.Height + 1) / 2, dz),
+			Color = wood,
+			Material = Enum.Material.Wood,
+		}, model)
+	end
+
+	buildFace(board, Enum.NormalId.Left)
+	buildFace(board, Enum.NormalId.Right)
 	model.Parent = Workspace
 end
 
@@ -255,17 +265,19 @@ local function updateBoard()
 		end
 		return a.Player.UserId < b.Player.UserId
 	end)
-	for i, row in rows do
-		local entry = entries[i]
-		row.Frame.Visible = entry ~= nil
-		if entry then
-			local vip = entry.Player:GetAttribute("Vip") == true
-			row.Vip.Visible = vip
-			row.Name.Position = if vip then UDim2.fromScale(0.25, 0.12) else UDim2.fromScale(0.11, 0.12)
-			row.Name.Size = if vip then UDim2.fromScale(0.3, 0.76) else UDim2.fromScale(0.44, 0.76)
-			row.Name.Text = entry.Player.DisplayName
-			row.Income.Text = UIStyle.formatMoney(entry.Income) .. "/s"
-			row.Stars.Text = Stars.richText(Stars.get(entry.Player))
+	for _, faceRows in rows do
+		for i, row in faceRows do
+			local entry = entries[i]
+			row.Frame.Visible = entry ~= nil
+			if entry then
+				local vip = entry.Player:GetAttribute("Vip") == true
+				row.Vip.Visible = vip
+				row.Name.Position = if vip then UDim2.fromScale(0.25, 0.12) else UDim2.fromScale(0.11, 0.12)
+				row.Name.Size = if vip then UDim2.fromScale(0.3, 0.76) else UDim2.fromScale(0.44, 0.76)
+				row.Name.Text = entry.Player.DisplayName
+				row.Income.Text = UIStyle.formatMoney(entry.Income) .. "/s"
+				row.Stars.Text = Stars.richText(Stars.get(entry.Player))
+			end
 		end
 	end
 end

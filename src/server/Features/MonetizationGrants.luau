@@ -233,16 +233,7 @@ function MonetizationGrants.product(
 	if product.OncePerPlayer then
 		saved.Once[product.Key] = true
 	end
-	if kind == "SuperSoap" then
-		local cfg = MonetizationConfig.SuperSoap
-		local left = math.min(MonetizationGrants.soapLeft(player) + (product.Seconds or cfg.Seconds), cfg.MaxSeconds)
-		saved.SuperSoapLeft = left
-		local session = MonetizationState.peek(player)
-		if session then
-			session.SoapEndsAt = Workspace:GetServerTimeNow() + left
-		end
-		return true, `Super Soap · {clock(left)}`
-	elseif kind == "CalmTreat" then
+	if kind == "CalmTreat" then
 		Hooks.fire("CalmTreat", player, MonetizationConfig.CalmTreatSeconds)
 		return true, `Patience frozen · {MonetizationConfig.CalmTreatSeconds}s`
 	elseif kind == "Cash" then

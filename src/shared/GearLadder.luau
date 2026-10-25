@@ -13,7 +13,7 @@ export type Step = {
 	Name: string, -- the hose's name (backpack tool, gates)
 	Label: string, -- shop name, e.g. "Foam Cannon II (Dual-Tank)"
 	Price: number,
-	CleaningPower: number, -- rarity gate; sub-tiers never change it
+	CleaningPower: number, -- rarity gate; only the Fire Hose's Titan Spec raises it
 	Range: number,
 	SprayRadius: number,
 	Speed: number, -- wash speed relative to the sponge
@@ -78,7 +78,7 @@ for _, tool in ToolConfig do
 			Name = tool.Name,
 			Label = `{tool.Name} {ROMAN[level + 1] or level + 1} ({upgrade.Name})`,
 			Price = upgrade.Price,
-			CleaningPower = tool.CleaningPower,
+			CleaningPower = upgrade.CleaningPower or previous.CleaningPower,
 			Range = upgrade.Range or previous.Range,
 			SprayRadius = upgrade.SprayRadius or previous.SprayRadius,
 			Speed = upgrade.Speed,
@@ -104,6 +104,11 @@ function GearLadder.get(tier: number, level: number?): Step
 		wanted -= 1
 	end
 	return levels[wanted]
+end
+
+-- Cleaning power (the rarity gate) at (tier, level).
+function GearLadder.power(tier: number, level: number?): number
+	return GearLadder.get(tier, level).CleaningPower
 end
 
 -- Number of sub-tier upgrades a hose has (0 for the first three).

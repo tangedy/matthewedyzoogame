@@ -203,7 +203,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	end
 
 	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
-	-- A rarity above this hose (even with Super Soap) doesn't take dirt. Clean Now or a
+	-- A rarity above this hose (at its sub-tier) doesn't take dirt. Clean Now or a
 	-- better hose is the way through; letting it go is handled by BayService.
 	-- The owner's hose is the gate for the whole job: a stronger helper cannot wash an
 	-- animal the owner is not allowed to finish, or the last speck would be stuck.

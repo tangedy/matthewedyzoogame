@@ -247,7 +247,6 @@ end
 
 local OFFER_TITLES = {
 	CalmTreat = "About to shake!",
-	SuperSoap = "Wash 2x faster?",
 }
 
 local function showOffer(kind: string, key: string)

@@ -3,7 +3,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 
@@ -67,22 +67,16 @@ function CleanPower.hoseName(rarityKey: string): string?
 end
 
 -- What it takes to wash this animal, for its nameplate and the "too dirty" prompt: the
--- cheapest gear that can, plus Super Soap when only soap gets it there or the animal is
--- soap-only. nil for animals the starting sponge can already wash.
-function CleanPower.gearNeeded(rarityKey: string, requiresSoap: boolean?): string?
+-- cheapest gear step that can (a sub-tier like "Fire Hose III (Titan Spec)" when only that
+-- step's power gets there). nil for animals the starting sponge can already wash.
+function CleanPower.gearNeeded(rarityKey: string): string?
 	local need = CleanPower.required(rarityKey)
-	local soapMult = MonetizationConfig.SuperSoap.PowerMultiplier
-	for _, tool in ToolConfig do
-		if tool.CleaningPower + 1e-4 >= need then
-			if requiresSoap then
-				return `{tool.Name} + Super Soap`
+	for _, step in GearLadder.Steps do
+		if step.CleaningPower + 1e-4 >= need then
+			if step.Tier == 1 then
+				return nil
 			end
-			return if tool.Tier > 1 then tool.Name else nil
-		end
-	end
-	for _, tool in ToolConfig do
-		if tool.CleaningPower * soapMult + 1e-4 >= need then
-			return `{tool.Name} + Super Soap`
+			return if step.Level > 0 then step.Label else step.Name
 		end
 	end
 	return nil

@@ -8,13 +8,15 @@
 -- From the Power Washer on, each hose also has cash sub-tier Upgrades bought in order before
 -- the next hose (GearLadder flattens them into one shop ladder). The hose itself is sub-tier I.
 -- Speed is wash speed relative to the sponge; sub-tiers raise it without touching
--- CleaningPower, so they never unlock the next rarity. Upgrade fields left out carry over
+-- CleaningPower, so they never unlock the next rarity. The one exception is the Fire Hose's
+-- last sub-tier (Titan Spec), which raises CleaningPower to unlock Secrets. Upgrade fields left out carry over
 -- from the step before (WashCashBonus and WashRewardSeconds also carry into the next hose).
 
 export type ToolUpgrade = {
 	Name: string,
 	Price: number,
 	Speed: number,
+	CleaningPower: number?, -- only the Fire Hose's last sub-tier sets this (unlocks Secret)
 	Range: number?,
 	SprayRadius: number?,
 	WashCashBonus: number?, -- extra fraction of wash cash (0.1 = +10%)
@@ -106,10 +108,11 @@ local ToolConfig: { ToolTier } = {
 				Name = "Titan Spec",
 				Price = 3500000,
 				Speed = 28,
+				CleaningPower = 6, -- Secret needs a fully upgraded Fire Hose
 				Range = 38,
 				SprayRadius = 5.2,
 				WashRewardSeconds = 40,
-				Perk = "Mega beam. Washes pay 40s of the animal's income",
+				Perk = "Mega beam. Washes Secrets. Washes pay 40s of the animal's income",
 			},
 		},
 	},

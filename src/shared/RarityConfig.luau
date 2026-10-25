@@ -1,8 +1,8 @@
 -- Rarity tiers, following Steal a Brainrot's ladder. Each species belongs to one tier
 -- (AnimalConfig); tiers set the nameplate colour and whether a walk-in is announced.
--- "Farm God" (key ZooGod) is our Brainrot God: an animated rainbow label. Secret is black with a white edge.
--- RequiredCleaningPower is the hose power (ToolConfig.CleaningPower, after boosts like Super
--- Soap) needed to wash that tier. A walk-in above the player's power can be let go, or cleaned
+-- "Farm God" (key ZooGod) is our Brainrot God: an animated rainbow label. Secret is white with a black edge.
+-- RequiredCleaningPower is the hose power (GearLadder step CleaningPower) needed to wash
+-- that tier. A walk-in above the player's power can be let go, or cleaned
 -- with the Clean Now product.
 
 export type Rarity = {
@@ -81,11 +81,11 @@ local list: { Rarity } = {
 		Key = "Secret",
 		Order = 7,
 		DisplayName = "Secret",
-		Color = Color3.fromRGB(10, 10, 10),
-		StrokeColor = Color3.new(1, 1, 1),
+		Color = Color3.new(1, 1, 1),
+		StrokeColor = Color3.new(0, 0, 0),
 		Rainbow = false,
 		Announce = true,
-		RequiredCleaningPower = 6, -- above the Fire Hose (3.5); Super Soap on it (7) can
+		RequiredCleaningPower = 6, -- only the fully upgraded Fire Hose (Titan Spec, 6)
 	},
 }
 

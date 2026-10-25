@@ -113,7 +113,7 @@ local LiveOpsConfig = {
 	},
 
 	Board = {
-		Position = Vector3.new(0, 0, -350), -- south end of the road, clear of the eight plots
+		Position = Vector3.new(0, 0, 0), -- middle of the world: centre of the road, between the plots
 		Size = Vector3.new(0.6, 9, 13),
 		Height = 3, -- gap under the board
 		Rows = 8,

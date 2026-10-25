@@ -39,9 +39,6 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 
 | Key | Type | Robux | Effect |
 | --- | --- | --- | --- |
-| `SuperSoapStarter` | Product, once per player | 5 | Same as Super Soap. The shop shows it in place of Super Soap until it has been used. While one intro prompt is open (or its receipt is still due) a second one is refused, so it can't be bought twice at the intro price. |
-| `SuperSoap` | Product | 9 | 2x cleaning power for 10 minutes (Hooks `CleaningPower`). Time stacks up to 4 hours, counts down only while online, and is saved. |
-| `SuperSoapLarge` | Product | 25 | Super Soap for 30 minutes (`Seconds` on the product). Same stacking cap. |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
 | `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Sold at the blue ROBUX SHOP booth on the plaza. |
 | `SpeedBoost` | Product | 19 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
@@ -78,7 +75,6 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 None of these show in a session's first `Offers.QuietSeconds` (90). The server and the client both check this.
 
 - **Calm Treat:** when the Tension feature fires `PatienceLow` for the player.
-- **Super Soap** (or the starter price, if unused): the server checks 8 s after `WashStarted` for an animal with `WashTimeMultiplier >= 2`. It offers if the wash is still under 50% clean and Super Soap isn't active.
 - Each kind has a `CooldownSeconds` (240) cooldown, with `MaxPerSession` (6) in total. The popup sits at the right middle (clear of SPRAY), has an X, and hides itself after 12 s.
 - **Cash tab auto-open:** every 3rd failed hose purchase, at most 3 times a session. A failure is either:
   - a "Not enough cash" PurchaseResult from the server, or
@@ -97,11 +93,10 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 
 - `Products[*]`: `Id`, `Robux` (display only, so keep it in sync with the website price), `DisplayName`, `Description`, `Tab`, `Order`, `Color`. Also `Minutes`/`Floor`/`CapFraction` for cash packs and `Species`/`Mutation`/`Stock` for limiteds.
 - `Passes[*]`: `Id`, `Robux`, text.
-- `SuperSoap.PowerMultiplier`, `.Seconds`, `.MaxSeconds`.
 - `CalmTreatSeconds`.
 - `VIP.IncomeMultiplier`, `.TagText`, `.TagColor`.
 - `SoldOutCompensation`.
-- `Offers.*`: quiet time, cooldown, per-session cap, auto-hide, Super Soap offer thresholds, cash auto-open cadence and cap.
+- `Offers.*`: quiet time, cooldown, per-session cap, auto-hide, cash auto-open cadence and cap.
 - `ReceiptsKept`, `PendingDeliverySeconds`, `StockStoreName` / `StudioStockStoreName`, `StockRefreshSeconds`, `StockRecheckSeconds`, `BuyCooldown`, `StateCooldown`, `SimulateUnconfiguredLive`.
 
 ## Remotes
@@ -113,7 +108,7 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 | `MonetizationState` (event) | server to client | `ShopState` |
 | `MonetizationStock` (event) | server to all | `key, remaining` |
 | `MonetizationNotice` (event) | server to client | `text, ok` |
-| `MonetizationOffer` (event) | server to client | `kind ("CalmTreat" or "SuperSoap"), productKey` |
+| `MonetizationOffer` (event) | server to client | `kind ("CalmTreat"), productKey` |
 
 ## Cross-feature contract
 
@@ -128,8 +123,6 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 ## Check in Studio
 
 - [ ] Play solo. A pink SHOP button sits under INDEX on the left. Tapping it pops open the panel with Boosts / Cash / Passes / Limited tabs and a TEST MODE line.
-- [ ] Boosts: Super Soap shows 5 ROBUX at first. BUY grants it (notice "[TEST] Super Soap!") and a "SOAP 2X 9:59" pill appears right of INDEX. The card now shows 9 ROBUX. Buying again stacks the time.
-- [ ] With Super Soap active, washing is visibly ~2x faster. Rejoin: the remaining time is kept (with Studio API access enabled).
 - [ ] Calm Treat: BUY with no animal at the wash spot: refused with "Start washing an animal first!". BUY during a wash: if the Tension feature is merged, patience freezes for 60 s. Without it, only the notice shows.
 - [ ] Cash: the cards show amounts, and each is at most 15% / 30% / 50% of the next hose price. BUY adds exactly that much cash.
 - [ ] Limited: the Axolotl card shows COMING SOON until the Models branch adds `Axolotl` to AnimalConfig. Once it's there:
@@ -137,7 +130,6 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
   - [ ] with a full cache, the notice says it will join when a slot frees, and it appears a few seconds after you place or sell a cache animal.
 - [ ] Passes: VIP Keeper adds a gold VIP tag over your head (it survives a respawn) and pen income is 25% higher. Fire-Hose Rig swaps in the top hose immediately, and the HUD hose label updates. Both cards then read OWNED.
 - [ ] Offers stay silent for the first 90 s of a session. After that:
-  - [ ] a big animal (e.g. Cow or Zebra) left mostly dirty for 8 s pops a Super Soap offer at the right middle. X dismisses it, and it auto-hides after 12 s;
   - [ ] with Tension merged, low patience pops the Calm Treat offer.
 - [ ] After 90 s, tap the hose shop's Buy while short of cash 3 times. The SHOP opens on the Cash tab. It opens at most 3 times per session.
 - [ ] Spamming BUY doesn't double-grant (rate limit). Firing `MonetizationBuy` with a junk key or a non-string from the command bar does nothing.

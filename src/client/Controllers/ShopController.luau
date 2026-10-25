@@ -17,7 +17,6 @@ local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
 local Layout = require(script.Parent.Parent.UI.Layout)
 local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -77,18 +76,13 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- Rarities this gear can wash that the previous one could not.
-local function unlocksText(toolTier: number): string
-	local tool = ToolConfig[toolTier]
-	local prev = ToolConfig[toolTier - 1]
-	if not tool then
-		return ""
-	end
-	local prevPower = if prev then prev.CleaningPower else 0
+-- Rarities the next step can wash that the current one could not.
+local function unlocksText(current: GearLadder.Step, nextStep: GearLadder.Step): string
+	local prevPower = current.CleaningPower
 	local groups = {}
 	for _, rarity in RarityConfig.List do
 		local need = rarity.RequiredCleaningPower
-		if need > prevPower + 1e-4 and CleanPower.canClean(tool.CleaningPower, rarity.Key) then
+		if need > prevPower + 1e-4 and CleanPower.canClean(nextStep.CleaningPower, rarity.Key) then
 			for _, def in AnimalConfig.Animals do
 				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
 					table.insert(groups, rarity.DisplayName)
@@ -143,8 +137,8 @@ local function refresh()
 		nextLabel.Text = `Next: {nextStep.Label}`
 		local reach = if nextStep.Range > current.Range then ` · Reach {nextStep.Range}` else ""
 		local perk = if nextStep.Perk then `\n{nextStep.Perk}` else ""
-		-- Only a new hose raises clean power, so only a new hose unlocks rarer animals.
-		local unlocks = if nextStep.Level == 0 then unlocksText(nextStep.Tier) else ""
+		-- A new hose (or the Fire Hose's Titan Spec) raises clean power and unlocks rarer animals.
+		local unlocks = unlocksText(current, nextStep)
 		gainLabel.Text = `{CleanPower.format(nextStep.Speed)}x speed (+{gain}%){reach}{perk}{unlocks}`
 		buyButton.Visible = true
 		buyButton.Text = `BUY {UIStyle.formatMoney(nextStep.Price)}`
