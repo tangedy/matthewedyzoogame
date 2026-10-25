@@ -37,6 +37,14 @@ local PEN_FOV = 50
 local YARD_FOV = 60
 local SET_WAIT = 20 -- seconds to wait for your bay, then for the set, before giving the camera back
 
+-- Film frame. Touch screens get a boxed 16:9 picture, black on all four sides: the
+-- picture is at most FRAME_MAX_HEIGHT of the screen's height, so a wide phone (19.5:9)
+-- gets large side blocks as well as top and bottom bars. Keyboard and gamepad keep the
+-- thin top and bottom bars.
+local FRAME_ASPECT = 16 / 9
+local FRAME_MAX_HEIGHT = 0.76
+local DESKTOP_BAR = 0.1
+
 local function freeze(humanoid: Humanoid)
 	humanoid.WalkSpeed = 0
 	humanoid.JumpHeight = 0
@@ -256,7 +264,11 @@ function CutsceneController.init(initial: Types.InitialState)
 	gui.Name = "SpawnCutscene"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
-	gui.DisplayOrder = 6
+	-- Edge to edge, notch and home-bar areas included, so the black really is the whole screen.
+	gui.ScreenInsets = Enum.ScreenInsets.None
+	gui.ClipToDeviceSafeArea = false
+	-- Over every game button (rail, shop, invite) so the bars cover them; under RareReveal.
+	gui.DisplayOrder = 45
 	gui.Parent = player:WaitForChild("PlayerGui")
 	janitor:Add(gui)
 
@@ -269,18 +281,46 @@ function CutsceneController.init(initial: Types.InitialState)
 	fade.ZIndex = 5
 	fade.Parent = gui
 
-	-- Letterbox bars slide in for the film look.
-	local bars = {}
-	for _, top in { true, false } do
+	-- Black blocks around the film frame: top, bottom, left, right. Sizes are pixels from
+	-- the gui's real size, redone when the screen turns or resizes.
+	local bars: { [string]: Frame } = {}
+	for _, side in { "Top", "Bottom", "Left", "Right" } do
 		local bar = Instance.new("Frame")
+		bar.Name = "Bar" .. side
 		bar.BackgroundColor3 = Color3.new(0, 0, 0)
 		bar.BorderSizePixel = 0
-		bar.AnchorPoint = Vector2.new(0, if top then 0 else 1)
-		bar.Position = UDim2.fromScale(0, if top then 0 else 1)
-		bar.Size = UDim2.fromScale(1, 0.1)
+		bar.AnchorPoint = Vector2.new(if side == "Right" then 1 else 0, if side == "Bottom" then 1 else 0)
+		bar.Position = UDim2.fromScale(if side == "Right" then 1 else 0, if side == "Bottom" then 1 else 0)
+		bar.ZIndex = 4
 		bar.Parent = gui
-		table.insert(bars, bar)
+		bars[side] = bar
 	end
+	local barsGone = false
+	local function frameBars()
+		if barsGone then
+			return
+		end
+		local screen = gui.AbsoluteSize
+		if screen.X < 1 or screen.Y < 1 then
+			return
+		end
+		local barY, barX
+		if UIPlatform.get().inputMode == "Touch" then
+			local height = math.min(screen.Y * FRAME_MAX_HEIGHT, screen.X / FRAME_ASPECT)
+			local width = math.min(screen.X, height * FRAME_ASPECT)
+			barY = math.ceil((screen.Y - height) / 2)
+			barX = math.ceil((screen.X - width) / 2)
+		else
+			barY = math.ceil(screen.Y * DESKTOP_BAR)
+			barX = 0
+		end
+		bars.Top.Size = UDim2.new(1, 0, 0, barY)
+		bars.Bottom.Size = UDim2.new(1, 0, 0, barY)
+		bars.Left.Size = UDim2.new(0, barX, 1, 0)
+		bars.Right.Size = UDim2.new(0, barX, 1, 0)
+	end
+	frameBars()
+	janitor:Add(gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(frameBars))
 
 	local skip = Instance.new("TextLabel")
 	skip.Name = "Skip"
@@ -720,10 +760,12 @@ function CutsceneController.init(initial: Types.InitialState)
 		-- Letterbox bars leave just before the camera hands back.
 		if t >= duration - 0.6 and not barsOut then
 			barsOut = true
-			for _, bar in bars do
-				TweenService:Create(bar, TweenInfo.new(0.5, Enum.EasingStyle.Quad), { Size = UDim2.fromScale(1, 0) })
-					:Play()
-			end
+			barsGone = true
+			local info = TweenInfo.new(0.5, Enum.EasingStyle.Quad)
+			TweenService:Create(bars.Top, info, { Size = UDim2.fromScale(1, 0) }):Play()
+			TweenService:Create(bars.Bottom, info, { Size = UDim2.fromScale(1, 0) }):Play()
+			TweenService:Create(bars.Left, info, { Size = UDim2.fromScale(0, 1) }):Play()
+			TweenService:Create(bars.Right, info, { Size = UDim2.fromScale(0, 1) }):Play()
 		end
 	end)
 end
