@@ -14,6 +14,7 @@ local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 type State = {
 	Count: number,
@@ -47,9 +48,6 @@ local badge: TextLabel
 local cards: { Card } = {}
 local state: State? = nil
 local stateAt = 0 -- os.clock() when state arrived, for the countdown
--- SHOP sits right under INDEX; while DAILY shows it takes that slot and SHOP moves down one.
-local SHOP_Y = 62
-local SHOP_STEP = 48
 local claimRemote: RemoteEvent
 
 local function pop(scale: UIScale, from: number, seconds: number)
@@ -115,12 +113,8 @@ local function render()
 	end
 	badge.Visible = s.CanClaim
 	dailyButton.Text = if s.CanClaim then "DAILY" else `DAILY {clock(left)}`
-	local show = s.Unlocked == true
-	dailyButton.Visible = show
-	local shop = player.PlayerGui:FindFirstChild("ShopButton", true)
-	if shop and shop:IsA("GuiObject") then
-		shop.Position = UDim2.new(0, 16, 0.5, if show then SHOP_Y + SHOP_STEP else SHOP_Y)
-	end
+	-- Hidden until unlocked; the rail closes the gap so SHOP moves up under INDEX.
+	dailyButton.Visible = s.Unlocked == true
 end
 
 local function close()
@@ -180,13 +174,10 @@ local function buildGui()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Left side, in SHOP's usual slot (render moves SHOP down while this shows).
+	-- Second on the left rail, between INDEX and SHOP.
 	dailyButton = Instance.new("TextButton")
 	dailyButton.Name = "DailyButton"
-	dailyButton.AnchorPoint = Vector2.new(0, 0.5)
-	dailyButton.Position = UDim2.new(0, 16, 0.5, SHOP_Y)
 	dailyButton.Visible = false
-	dailyButton.Size = UDim2.fromOffset(170, 40)
 	dailyButton.BackgroundColor3 = UIStyle.Colors.Action
 	dailyButton.ZIndex = 10
 	dailyButton.Text = "DAILY"
@@ -199,6 +190,8 @@ local function buildGui()
 	pad.Parent = dailyButton
 	dailyScale = Instance.new("UIScale")
 	dailyScale.Parent = dailyButton
+	UIPlatform.Layout.rail(dailyButton, 2)
+	UIPlatform.Feedback.button(dailyButton)
 	badge = textLabel(dailyButton, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.new(1, -4, 0, 2),
@@ -213,7 +206,6 @@ local function buildGui()
 	badgeCorner.CornerRadius = UDim.new(1, 0)
 	badgeCorner.Parent = badge
 	dailyButton.Activated:Connect(function()
-		pop(dailyScale, 0.85, 0.3)
 		if panel.Visible then
 			close()
 		else
@@ -249,8 +241,8 @@ local function buildGui()
 
 	local closeButton = Instance.new("TextButton")
 	closeButton.AnchorPoint = Vector2.new(1, 0)
-	closeButton.Position = UDim2.new(1, -10, 0, 10)
-	closeButton.Size = UDim2.fromOffset(40, 40)
+	closeButton.Position = UDim2.new(1, -10, 0, 8)
+	closeButton.Size = UDim2.fromOffset(46, 46)
 	closeButton.BackgroundColor3 = UIStyle.Colors.Close
 	closeButton.Text = "X"
 	closeButton.ZIndex = 6
@@ -258,6 +250,7 @@ local function buildGui()
 	UIStyle.text(closeButton)
 	UIStyle.border(closeButton, 3)
 	closeButton.Activated:Connect(close)
+	UIPlatform.Feedback.button(closeButton)
 
 	local grid = Instance.new("Frame")
 	grid.Position = UDim2.fromOffset(12, 58)

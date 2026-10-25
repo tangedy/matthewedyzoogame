@@ -6,7 +6,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
@@ -25,6 +24,7 @@ local BAR_DONE_COLOR = Color3.fromRGB(90, 255, 90)
 local PROGRESS_HEIGHT = 56 -- clean bar, then the Tension patience row (y 32)
 
 local gui: ScreenGui
+local wallet: Frame
 local cashLabel: TextLabel
 local incomeLabel: TextLabel
 local progressBoard: BillboardGui
@@ -66,22 +66,17 @@ local function buildGui()
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Bottom left, big: cash, then income. On phones it sits above the thumbstick.
-	local touchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
-	local wallet = Instance.new("Frame")
-	wallet.AnchorPoint = Vector2.new(0, 1)
-	wallet.Position = UDim2.new(0, 16, 1, if touchOnly then -190 else -16)
-	wallet.Size = UDim2.fromOffset(380, 150)
+	-- Big cash, then income. Bottom left on desktop; top left on phones, clear of the
+	-- thumbstick. UIPlatform.Layout moves it (placeWallet).
+	wallet = Instance.new("Frame")
+	wallet.Name = "Wallet"
 	wallet.BackgroundTransparency = 1
 	wallet.Parent = gui
 	cashLabel = textLabel(wallet, {
-		Size = UDim2.new(1, 0, 0, 110),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "$0",
 	}, UIStyle.CashColor)
 	incomeLabel = textLabel(wallet, {
-		Position = UDim2.fromOffset(0, 110),
-		Size = UDim2.new(1, 0, 0, 40),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = "+$0/s",
 	}, UIStyle.CashColor)
@@ -170,11 +165,15 @@ local function buildGui()
 	}, UIStyle.CashColor)
 end
 
--- Phone controls are small and the screen scale already lifts this line. A tablet
--- jump button is tall enough that the same offset sits on top of it.
-local function placeToast(profile: UIPlatform.Profile)
-	local lift = if profile.inputMode == "Touch" and profile.formFactor ~= "Mobile" then 260 else 140
-	toast.Position = UDim2.new(0.5, 0, 1, -lift)
+local function placeWallet(spec: UIPlatform.LayoutSpec)
+	local w = spec.wallet
+	wallet.AnchorPoint = w.anchor
+	wallet.Position = w.position
+	wallet.Size = UDim2.fromOffset(w.size.X, w.size.Y)
+	cashLabel.Size = UDim2.new(1, 0, 0, w.cashHeight)
+	incomeLabel.Position = UDim2.fromOffset(0, w.cashHeight)
+	incomeLabel.Size = UDim2.new(1, 0, 0, w.size.Y - w.cashHeight)
+	toast.Position = UDim2.new(0.5, 0, 1, -spec.toastLift)
 end
 
 local function showToast(text: string?)
@@ -256,7 +255,7 @@ local function refreshToast()
 		if not tutorialCompleted and currentProgress < 0.1 then
 			showToast(
 				if inputMode == "Touch"
-					then "Hold SPRAY to wash off the mud!"
+					then "Hold WASH and drag to look around!"
 					else "Hold to spray. Wash off all the mud!"
 			)
 		elseif hintShowing then
@@ -396,12 +395,12 @@ end
 
 -- Persistent warning: the doc requires explaining when progress can't be saved.
 local function showDataWarning(status: Types.DataStatus)
-	-- Left column, under the SHOP and DAILY buttons. A full-width footer covered the index,
-	-- the shop, and the phone thumbstick.
+	-- Left column under the rail on desktop, beside the cash on phones. A full-width footer
+	-- covered the index, the shop, and the phone thumbstick.
 	local warning = textLabel(gui, {
 		Name = "DataWarning",
 		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 16, 0.5, 140),
+		Position = UIPlatform.Layout.get().dataWarning,
 		Size = UDim2.fromOffset(210, 52),
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -415,17 +414,18 @@ local function showDataWarning(status: Types.DataStatus)
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MaxSize = Vector2.new(220, 64)
 	constraint.Parent = warning
+	UIPlatform.Layout.watch(function(spec)
+		warning.Position = spec.dataWarning
+	end)
 end
 
 function HUDController.init(initial: Types.InitialState)
 	buildGui()
-	local profile = UIPlatform.get()
-	inputMode = profile.inputMode
-	placeToast(profile)
+	inputMode = UIPlatform.get().inputMode
+	UIPlatform.Layout.watch(placeWallet)
 	UIPlatform.onChanged(function(nextProfile)
 		local inputChanged = nextProfile.inputMode ~= inputMode
 		inputMode = nextProfile.inputMode
-		placeToast(nextProfile)
 		if inputChanged then
 			refreshToast()
 		end

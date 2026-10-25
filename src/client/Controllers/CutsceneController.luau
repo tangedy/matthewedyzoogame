@@ -26,6 +26,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Settings = require(ReplicatedStorage.Shared.CutsceneSettings)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local player = Players.LocalPlayer
 
@@ -287,9 +288,7 @@ function CutsceneController.init(initial: Types.InitialState)
 	skip.AnchorPoint = Vector2.new(0.5, 1)
 	skip.Position = UDim2.new(0.5, 0, 1, -24)
 	skip.Size = UDim2.new(0.4, 0, 0, 20)
-	skip.Text = if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-		then "Tap to skip"
-		else "Press E to skip"
+	skip.Text = if UIPlatform.get().inputMode == "Touch" then "Tap to skip" else "Press E to skip"
 	skip.Visible = false
 	skip.ZIndex = 6
 	skip.Parent = gui

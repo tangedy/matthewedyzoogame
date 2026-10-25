@@ -43,8 +43,17 @@ local SCALE_LIMITS: { [FormFactor]: { min: number, max: number } } = {
 local FALLBACK_VIEWPORT = Vector2.new(1280, 720)
 local MIN_VIEWPORT_AXIS = 50
 
-function DeviceProfile.formFactor(viewport: Vector2): FormFactor
+-- A landscape phone is 700-930 wide but under 500 tall. By width alone it reads as a
+-- tablet, and the tablet layout puts controls in the top half of a 390px-tall screen.
+-- So a touch screen whose short side is under PHONE_MAX_SHORT_SIDE is always Mobile.
+-- A short desktop window keeps the width rule.
+local PHONE_MAX_SHORT_SIDE = 500
+
+function DeviceProfile.formFactor(viewport: Vector2, inputMode: InputMode?): FormFactor
 	local width = viewport.X
+	if inputMode == "Touch" and math.min(viewport.X, viewport.Y) < PHONE_MAX_SHORT_SIDE then
+		return "Mobile"
+	end
 	if width < MOBILE_MAX_WIDTH then
 		return "Mobile"
 	elseif width <= TABLET_MAX_WIDTH then
@@ -88,10 +97,11 @@ end
 
 function DeviceProfile.capture(): Profile
 	local viewport = DeviceProfile.viewport()
-	local formFactor = DeviceProfile.formFactor(viewport)
+	local inputMode = DeviceProfile.inputMode()
+	local formFactor = DeviceProfile.formFactor(viewport, inputMode)
 	return {
 		formFactor = formFactor,
-		inputMode = DeviceProfile.inputMode(),
+		inputMode = inputMode,
 		viewport = viewport,
 		scale = DeviceProfile.scaleFor(viewport, formFactor),
 	}

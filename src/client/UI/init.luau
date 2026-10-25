@@ -5,6 +5,8 @@
 --   ActionMap    ContextActionService bindings (Spray is live; Sprint and Interact are templates)
 --   constrain()  UIAspectRatioConstraint / UISizeConstraint on a frame, not on the ScreenGui
 --   setExcluded()  opt a viewport-pixel ScreenGui out of ResponsiveScale
+--   Layout       per-device HUD placement (phone, touch tablet, desktop) and the left rail
+--   Feedback     hover / press / release motion and click sound for buttons
 
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -12,16 +14,21 @@ local Workspace = game:GetService("Workspace")
 local ActionMap = require(script.ActionMap)
 local Constraints = require(script.Constraints)
 local DeviceProfile = require(script.DeviceProfile)
+local Feedback = require(script.Feedback)
+local Layout = require(script.Layout)
 local ScaleDriver = require(script.ScaleDriver)
 
 local UIPlatform = {}
 
 UIPlatform.ActionMap = ActionMap
+UIPlatform.Layout = Layout
+UIPlatform.Feedback = Feedback
 
 export type FormFactor = DeviceProfile.FormFactor
 export type InputMode = DeviceProfile.InputMode
 export type Profile = DeviceProfile.Profile
 export type ConstraintSpec = Constraints.Spec
+export type LayoutSpec = Layout.Spec
 
 local listeners: { (Profile) -> () } = {}
 local snapshot: Profile? = nil
@@ -62,6 +69,7 @@ local function publish(immediate: boolean)
 	-- even when get() already primed an identical snapshot before start().
 	ScaleDriver.setTarget(nextProfile.scale, immediate)
 	ActionMap.applyProfile(nextProfile)
+	Layout.apply(nextProfile)
 	writeAttributes(nextProfile)
 	if previous and nearlySame(previous, nextProfile) then
 		return

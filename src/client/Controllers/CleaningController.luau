@@ -2,7 +2,8 @@
 -- spraying; the server decides what actually gets cleaned.
 --
 -- Desktop: hold left mouse, aim with the pointer. Gamepad: hold R2, aim with the reticle.
--- Touch: hold the native Spray button (ContextActionService), aim with the center reticle.
+-- Touch: hold the WASH button above jump (UI/WashButton), aim with the center reticle, and
+-- drag the same finger to turn the camera while the water keeps flowing.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,6 +18,7 @@ local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIPlatform = require(script.Parent.Parent.UI)
+local WashButton = require(script.Parent.Parent.UI.WashButton)
 
 local player = Players.LocalPlayer
 
@@ -663,8 +665,16 @@ local function updateDrops(dt: number)
 end
 
 local function bindInput()
-	-- Native touch button on phones; mouse and R2 everywhere else. No second Spray button.
+	-- Mouse and R2 through the action map. Touch gets the WASH button instead of the
+	-- engine's action button, because a held engine button cannot steer the camera.
 	UIPlatform.ActionMap.bindTemplate("Spray", onSpray)
+	WashButton.start(function(down)
+		touchHeld = down
+	end)
+	WashButton.setEnabled(UIPlatform.get().inputMode == "Touch")
+	UIPlatform.onChanged(function(profile)
+		WashButton.setEnabled(profile.inputMode == "Touch")
+	end)
 	-- Losing focus mid-hold shouldn't leave the hose stuck on. Cancel covers most cases.
 	UserInputService.WindowFocusReleased:Connect(function()
 		mouseHeld, touchHeld, padHeld = false, false, false
@@ -722,7 +732,9 @@ end
 local function onHeartbeat()
 	local camera = Workspace.CurrentCamera
 	local root = getRoot()
-	if not camera or not root or cutsceneLocked() then
+	local locked = cutsceneLocked()
+	WashButton.setBlocked(locked)
+	if not camera or not root or locked then
 		stopEffects()
 		return
 	end

@@ -70,9 +70,12 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 
 ### Mobile (Studio Device emulator, then a real phone)
 
-- [ ] A large SPRAY button sits above the jump button and doesn't overlap the thumbstick.
+- [ ] A large round WASH button sits right above the jump button and doesn't overlap the thumbstick or jump.
+- [ ] Holding WASH sprays. Dragging the same finger turns the camera and the reticle while the water keeps flowing. Letting go anywhere stops it.
+- [ ] Landscape phone: `PlayerGui.UIFormFactor` reads **Mobile**. Cash sits top left, with INDEX / DAILY / SHOP under it, and nothing overlaps.
+- [ ] Moving with the thumbstick while holding WASH works (two thumbs).
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
-- [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding SPRAY snaps the reticle to the nearest reachable mud patch and cleans it.
+- [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.
 - [ ] Aim assist never snaps to a patch hidden behind the body or out of range.
 - [ ] A full wash is comfortable with thumbs only. Opening the shop with the tap prompt works.
 - [ ] The mud fade looks clear at phone size. This is the doc's #1 technical risk, so note how it feels.

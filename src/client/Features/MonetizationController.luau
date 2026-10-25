@@ -20,6 +20,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local MonetizationShop = require(script.Parent.MonetizationShop)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 type ShopState = MonetizationConfig.ShopState
 
@@ -372,11 +373,13 @@ local function buildGui()
 	clickSound = sound(GameConfig.Sounds.ShopClick, 0.3)
 	buySound = sound(GameConfig.Sounds.ShopBuy, 0.35)
 
-	-- Right of the INDEX / SHOP buttons, just under the cash
+	-- Right of the INDEX / SHOP rail
 	local timers = Instance.new("Frame")
 	timers.Name = "BoostTimers"
-	timers.AnchorPoint = Vector2.new(0, 0.5)
-	timers.Position = UDim2.new(0, 196, 0.5, 14)
+	UIPlatform.Layout.watch(function(spec)
+		timers.AnchorPoint = spec.boostTimers.anchor
+		timers.Position = spec.boostTimers.position
+	end)
 	timers.AutomaticSize = Enum.AutomaticSize.Y
 	timers.Size = UDim2.fromOffset(160, 0)
 	timers.BackgroundTransparency = 1
@@ -441,6 +444,7 @@ local function buildGui()
 	UIStyle.border(close, 3)
 	close.Text = "X"
 	close.Activated:Connect(hideOffer)
+	UIPlatform.Feedback.button(close)
 
 	offerBuy = Instance.new("TextButton")
 	offerBuy.AnchorPoint = Vector2.new(0.5, 1)

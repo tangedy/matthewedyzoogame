@@ -35,15 +35,18 @@ local function square(pixels: number): UDim2
 	return UDim2.fromOffset(pixels, pixels)
 end
 
--- Positions assume the engine button's center anchor. Spray sits above the
--- jump button. Interact stacks above Spray. Sprint sits above the thumbstick.
+-- Positions assume the engine button's center anchor. Interact stacks above the
+-- WASH button. Sprint sits above the thumbstick.
+--
+-- Spray has no engine touch button. On touch, UI/WashButton draws WASH above jump
+-- and lets the held finger steer the camera, which an engine action button cannot.
 ActionMap.Templates = {
 	Spray = {
 		name = "Spray",
 		title = "Spray",
 		keyboardMouse = { Enum.UserInputType.MouseButton1 },
 		gamepad = { Enum.KeyCode.ButtonR2 },
-		touch = true,
+		touch = false,
 		ignoreGuiClicks = true,
 		priority = DEFAULT_PRIORITY,
 		touchPosition = {
@@ -197,6 +200,10 @@ local function mount(spec: ActionSpec)
 	end
 	local showTouch = mode == "Touch" and spec.touch == true
 	local inputs = inputsFor(spec, mode)
+	if #inputs == 0 and not showTouch then
+		-- Touch mode for an action whose touch control lives elsewhere (Spray -> WASH).
+		return
+	end
 	local priority = spec.priority or DEFAULT_PRIORITY
 	ContextActionService:BindActionAtPriority(
 		spec.name,

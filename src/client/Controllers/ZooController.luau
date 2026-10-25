@@ -69,7 +69,6 @@ local function buildGui()
 	-- Just the two choices while carrying: put it back in the cache, or sell it.
 	carryBanner = Instance.new("Frame")
 	carryBanner.AnchorPoint = Vector2.new(0.5, 1)
-	carryBanner.Position = UDim2.new(0.5, 0, 1, -190)
 	carryBanner.Size = UDim2.fromOffset(420, 52)
 	carryBanner.BackgroundTransparency = 1
 	carryBanner.Visible = false
@@ -101,6 +100,7 @@ local function buildGui()
 		button.Activated:Connect(function()
 			carryAction:FireServer(action)
 		end)
+		UIPlatform.Feedback.button(button)
 		return button
 	end
 	carryButton("PUT DOWN", UIStyle.Colors.Action, "drop")
@@ -108,7 +108,6 @@ local function buildGui()
 
 	cacheHint = Instance.new("TextLabel")
 	cacheHint.AnchorPoint = Vector2.new(0.5, 1)
-	cacheHint.Position = UDim2.new(0.5, 0, 1, -190)
 	cacheHint.Size = UDim2.new(0.9, 0, 0, 34)
 	cacheHint.Visible = false
 	cacheHint.Parent = gui
@@ -117,6 +116,12 @@ local function buildGui()
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MaxSize = Vector2.new(720, 34)
 	constraint.Parent = cacheHint
+
+	-- Low in the middle on phones, between the thumbstick and WASH; higher on desktop.
+	UIPlatform.Layout.watch(function(spec)
+		carryBanner.Position = UDim2.new(0.5, 0, 1, -spec.bannerLift)
+		cacheHint.Position = UDim2.new(0.5, 0, 1, -spec.bannerLift)
+	end)
 end
 
 local function onCarry(info: Types.CarryInfo?)

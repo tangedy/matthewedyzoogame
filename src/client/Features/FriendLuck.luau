@@ -1,16 +1,16 @@
 -- Small box on the right: "Invite Friends for 2x LUCK!" opens the Roblox invite prompt.
 -- While a friend is in the server (the FriendLuck attribute the server sets), it turns
 -- green and says the boost is on. Desktop keeps it at right middle, under the contextual
--- offer; touch moves it to the top right, clear of the Spray and Use buttons.
+-- offer; touch moves it to the top right, clear of the jump and WASH buttons.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SocialService = game:GetService("SocialService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.FeatureConfig.FriendLuckConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local FriendLuck = {}
 
@@ -45,20 +45,17 @@ function FriendLuck.init(_initial: any)
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	local touchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local box = Instance.new("TextButton")
 	box.Name = "InviteBox"
 	box.AutoButtonColor = true
 	box.Text = ""
 	box.BackgroundColor3 = Color3.new(1, 1, 1)
 	box.Size = UDim2.fromOffset(200, 62)
-	if touchOnly then
-		box.AnchorPoint = Vector2.new(1, 0)
-		box.Position = UDim2.new(1, -16, 0, 64)
-	else
-		box.AnchorPoint = Vector2.new(1, 0.5)
-		box.Position = UDim2.new(1, -16, 0.5, 70)
-	end
+	-- Right middle on desktop; top right on touch, clear of jump and WASH.
+	UIPlatform.Layout.watch(function(spec)
+		box.AnchorPoint = spec.invite.anchor
+		box.Position = spec.invite.position
+	end)
 	box.Parent = gui
 	UIStyle.border(box, 3)
 	local corner = Instance.new("UICorner")
@@ -93,7 +90,7 @@ function FriendLuck.init(_initial: any)
 		if active then
 			sub.Text = `{here} friend{if here == 1 then "" else "s"} here! Invite more`
 		else
-			sub.Text = if touchOnly then "Tap to invite" else "Click to invite"
+			sub.Text = if UIPlatform.get().inputMode == "Touch" then "Tap to invite" else "Click to invite"
 		end
 	end
 	render()

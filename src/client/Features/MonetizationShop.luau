@@ -11,6 +11,7 @@ local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 type ShopState = MonetizationConfig.ShopState
 
@@ -271,21 +272,19 @@ end
 function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	callbacks = handlers
 
-	-- Under the INDEX button, left side
+	-- Last on the left rail, under INDEX and DAILY
 	local button, buttonScale = chunkyButton(gui, MonetizationConfig.ShopColor, "SHOP")
 	shopButton = button
 	shopButton.Name = "ShopButton"
 	shopButton.ZIndex = 10
-	shopButton.AnchorPoint = Vector2.new(0, 0.5)
-	shopButton.Position = UDim2.new(0, 16, 0.5, 62)
-	shopButton.Size = UDim2.fromOffset(170, 44)
+	UIPlatform.Layout.rail(shopButton, 3)
+	UIPlatform.Feedback.button(shopButton)
 	shopButton.BackgroundColor3 = Color3.new(1, 1, 1)
 	local buttonGradient = Instance.new("UIGradient")
 	buttonGradient.Rotation = 90
 	buttonGradient.Color = ColorSequence.new(Color3.fromRGB(255, 110, 210), Color3.fromRGB(150, 60, 255))
 	buttonGradient.Parent = shopButton
 	shopButton.Activated:Connect(function()
-		pop(buttonScale, 0.85, 0.3)
 		if panel.Visible then
 			MonetizationShop.close()
 		else

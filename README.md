@@ -60,7 +60,7 @@ Server services:
 
 Client controllers:
 
-- **CleaningController** handles input, aiming, the spray beam, splash and sound, the mobile SPRAY button, the reticle and the remaining-dirt highlight.
+- **CleaningController** handles input, aiming, the spray beam, splash and sound, the phone WASH button (hold to spray, drag to look around), the reticle and the remaining-dirt highlight.
 - **OnboardingController** shows the first-wash "Wash me!" marker and the "you can afford an upgrade" hint.
 - **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
 - **ZooController** shows what you're carrying and the "cache full" hint, puts other players' prompts out of reach, and animates rainbow labels.

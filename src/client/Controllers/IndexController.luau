@@ -12,6 +12,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local player = Players.LocalPlayer
 
@@ -23,6 +24,7 @@ local index: { [string]: boolean } = {}
 local speciesOrder: { string } = {}
 
 local button: TextButton
+local panelScale: UIScale
 local panel: Frame
 local dim: TextButton
 local cells: { [string]: TextLabel } = {}
@@ -64,11 +66,9 @@ local function buildGui()
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Under the cash display, left side
+	-- First on the left rail (UIPlatform.Layout places it)
 	button = Instance.new("TextButton")
-	button.AnchorPoint = Vector2.new(0, 0.5)
-	button.Position = UDim2.new(0, 16, 0.5, 14)
-	button.Size = UDim2.fromOffset(170, 40)
+	button.Name = "IndexButton"
 	button.BackgroundColor3 = Color3.fromRGB(255, 190, 40)
 	button.ZIndex = 10
 	button.Parent = gui
@@ -78,6 +78,8 @@ local function buildGui()
 	buttonPad.PaddingTop = UDim.new(0, 6)
 	buttonPad.PaddingBottom = UDim.new(0, 6)
 	buttonPad.Parent = button
+	UIPlatform.Layout.rail(button, 1)
+	UIPlatform.Feedback.button(button)
 
 	panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -89,6 +91,8 @@ local function buildGui()
 	panel.ZIndex = 5
 	panel.Parent = gui
 	UIStyle.border(panel, 4)
+	panelScale = Instance.new("UIScale")
+	panelScale.Parent = panel
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MaxSize = Vector2.new(600, 560)
 	constraint.Parent = panel
@@ -103,14 +107,15 @@ local function buildGui()
 
 	local close = Instance.new("TextButton")
 	close.AnchorPoint = Vector2.new(1, 0)
-	close.Position = UDim2.new(1, -12, 0, 10)
-	close.Size = UDim2.fromOffset(40, 40)
+	close.Position = UDim2.new(1, -12, 0, 8)
+	close.Size = UDim2.fromOffset(46, 46)
 	close.BackgroundColor3 = UIStyle.Colors.Close
 	close.Parent = panel
 	UIStyle.text(close)
 	UIStyle.border(close, 3)
 	close.Text = "X"
 	close.ZIndex = 6
+	UIPlatform.Feedback.button(close)
 
 	-- Header: mutation names
 	local nameWidth = 0.4
@@ -188,6 +193,7 @@ local function buildGui()
 			Modals.claim("Index")
 			dim.Visible = true
 			panel.Visible = true
+			UIPlatform.Feedback.popIn(panelScale)
 		end
 	end)
 end

@@ -12,10 +12,10 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.UI)
 
 local player = Players.LocalPlayer
 
@@ -75,10 +75,11 @@ local cards: { [Instance]: Card } = {}
 local holding: { [ProximityPrompt]: boolean } = {}
 
 local function keyText(prompt: ProximityPrompt): string
-	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+	local mode = UIPlatform.get().inputMode
+	if mode == "Touch" then
 		return "TAP"
 	end
-	if UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled then
+	if mode == "Gamepad" then
 		local name = prompt.GamepadKeyCode.Name
 		return string.gsub(name, "^Button", "")
 	end

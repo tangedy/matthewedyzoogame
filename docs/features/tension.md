@@ -109,4 +109,4 @@ Dev keys work in Studio only, or for the place owner: **K** empties the current 
 - [ ] Leave mid-wash (or stop the client) during a shake or lunge: no errors in the server output, and the bay is released cleanly.
 - [ ] In a live server (not Studio, not the owner), K and L do nothing and send no remote.
 - [ ] A Mythic announcement while the patience row is visible: the row draws on top and stays readable.
-- [ ] Phone emulator: the row is readable and doesn't overlap the SPRAY button or the thumbstick.
+- [ ] Phone emulator: the row is readable and doesn't overlap the WASH button or the thumbstick.
