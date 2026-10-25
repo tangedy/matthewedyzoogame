@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local PenTiers = require(ReplicatedStorage.Shared.PenTiers)
 local PlotLayout = require(ReplicatedStorage.Shared.PlotLayout)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
@@ -31,7 +32,6 @@ local WorldBuilder = {}
 local folder: Folder
 
 local FLOOR_Y = 0.5
-local WOOD = Color3.fromRGB(150, 110, 70)
 -- The dirt drive animals walk in on, out to the wash and back past the cache.
 local PATH_DIRT = Color3.fromRGB(176, 132, 86)
 local PATH_EDGE = Color3.fromRGB(140, 102, 66)
@@ -713,6 +713,8 @@ local function buildFencedPen(
 	local h = math.clamp(latSize * 0.28, 3.5, 8) * heightScale
 	pen:SetAttribute("FenceHeight", h)
 	local y = h / 2
+	-- Fence wood by how much cash the pen's pad holds: oak, redwood, golden, royal.
+	local wood = PenTiers.forClass(pen:GetAttribute("PenClass") :: string?).Wood
 	local halfD, halfL = depthSize / 2, latSize / 2
 	local gate = if math.min(depthSize, latSize) <= 10 then 3 else 4
 	-- Back and sides are solid. The front, toward `look`, is split around a gate.
@@ -728,7 +730,7 @@ local function buildFencedPen(
 			Name = "Fence",
 			Size = Vector3.new(0.4, h, latSize),
 			Position = PlotLayout.point(plot, backDepth, lateral, y),
-			Color = WOOD,
+			Color = wood,
 			Material = Enum.Material.Wood,
 			CanQuery = false,
 			Parent = pen,
@@ -738,7 +740,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(depthSize, h, 0.4),
 				Position = PlotLayout.point(plot, depth, lateral + edge * halfL, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -750,7 +752,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(0.4, h, sideW),
 				Position = PlotLayout.point(plot, frontDepth, lateral + edge * (gate / 2 + sideW / 2), y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -763,7 +765,7 @@ local function buildFencedPen(
 			Name = "Fence",
 			Size = Vector3.new(depthSize, h, 0.4),
 			Position = PlotLayout.point(plot, depth, lateral + sign * halfL, y),
-			Color = WOOD,
+			Color = wood,
 			Material = Enum.Material.Wood,
 			CanQuery = false,
 			Parent = pen,
@@ -773,7 +775,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(0.4, h, latSize),
 				Position = PlotLayout.point(plot, depth + edge * halfD, lateral, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -785,7 +787,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(sideW, h, 0.4),
 				Position = PlotLayout.point(plot, depth + edge * (gate / 2 + sideW / 2), frontLat, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,

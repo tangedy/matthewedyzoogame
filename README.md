@@ -112,6 +112,7 @@ Developer keys (Studio and place owner only): **C** cleans the current animal, *
 - **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead.
 - **Full cache:** while the cache is full, no new animal walks in.
 - **Income:** penned animals earn cash per second onto the green pad in front of their pen. Step on the pad to collect it.
+- **Pen tiers:** each pen's pad holds up to a cap set by its size ($1K, $10K, $100K, $1M). The fence wood shows the tier (oak, redwood, golden, royal; `Shared.PenTiers`), and while an animal is in, a "MAX $X" line in that colour sits under the pad's cash counter.
 - **Rarity:** each of the 22 species has a fixed tier: Common, Rare, Epic, Legendary, Mythic, Zoo God or Secret. Better hoses (5 tiers) unlock rarer tiers.
 - **Mutations:** every walk-in rolls Normal, Gold (×1.25), Diamond (×1.5) or Rainbow (×10).
 - **Index:** 22 species × 4 mutations = 88 entries.

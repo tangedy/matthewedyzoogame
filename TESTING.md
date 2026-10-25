@@ -68,6 +68,12 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] **Queue:** temporarily set `GameConfig.BayCount = 1` and start 2 players. Player 2 sees "All wash bays are taken". When player 1 leaves, player 2 is moved to the bay and an animal arrives.
 - [ ] With 4 players all washing at once, there's no noticeable lag (Shift+F5 shows the frame rate).
 
+### Pen tiers
+
+- [ ] Stall fences are oak brown, medium pens redwood, giant pens golden, gargantuan pens royal purple.
+- [ ] With an animal in a pen, its cash counter shows "MAX $X" underneath in the fence's colour; the counter turns orange with FULL at the cap.
+- [ ] An empty pen still shows "EMPTY / Max $X" on its floor sign and no MAX line on the pad.
+
 ### Mobile (Studio Device emulator, then a real phone)
 
 - [ ] A large round WASH button sits right above the jump button and doesn't overlap the thumbstick or jump.
@@ -77,6 +83,8 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] The event counter never covers the Roblox menu, chat or voice buttons.
 - [ ] WASH is faded and smaller with no animal; full size with a breathing ring and a HOLD! hint when one walks in. Holding it near the animal washes mud without aiming, even while looking around.
 - [ ] Moving with the thumbstick while holding WASH works (two thumbs).
+- [ ] Hold WASH and drag the same finger: the camera turns and stays turned (also while walking). "◀ DRAG TO LOOK ▶" shows on the first hold and goes after the first drag.
+- [ ] The Robux shop fills the screen with two columns of cards; INDEX and DAILY panels fill it too. HUD text reads at phone size.
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
 - [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.
 - [ ] Aim assist never snaps to a patch hidden behind the body or out of range.
