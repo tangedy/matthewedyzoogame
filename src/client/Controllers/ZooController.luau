@@ -15,6 +15,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local UIPlatform = require(script.Parent.Parent.UI)
+local AnimalFocus = require(script.Parent.Parent.Features.AnimalFocus)
 
 local player = Players.LocalPlayer
 
@@ -26,6 +27,8 @@ local OWN_PROMPTS = {
 	SellPrompt = 10,
 	PenSellPrompt = 10,
 	PetPrompt = 10,
+	PenPrompt2 = 10,
+	PetPrompt2 = 10,
 	ExpandPrompt = 10,
 	TruckPrompt = 12, -- the delivery truck parks under your bay model
 }
@@ -36,6 +39,18 @@ local carryBanner: Frame
 local cacheHint: TextLabel
 local carrySellButton: TextButton
 local carryAction = Remotes.event("CarryAction")
+local carrying = false
+
+-- A pen's Pick up / Sell / Set pet card only comes up while you look at that pen's animal,
+-- like its nameplate (AnimalFocus). Carrying one, every pen's Place / Swap stays in reach.
+local function penCardAllowed(prompt: ProximityPrompt): boolean
+	local post = prompt.Parent
+	if not post or post.Name ~= "GatePost" or carrying then
+		return true
+	end
+	local head = AnimalFocus.focusedHead()
+	return head ~= nil and post.Parent ~= nil and head:IsDescendantOf(post.Parent)
+end
 
 -- The server never changes MaxActivationDistance, so this local override sticks even as it
 -- toggles Enabled. Other players' prompts are set to 0 reach.
@@ -46,7 +61,21 @@ local function applyPromptReach(prompt: ProximityPrompt)
 		return
 	end
 	local mine = bays:FindFirstChild(myBay)
-	prompt.MaxActivationDistance = if mine and prompt:IsDescendantOf(mine) then reach else 0
+	local own = mine and prompt:IsDescendantOf(mine)
+	prompt.MaxActivationDistance = if own and penCardAllowed(prompt) then reach else 0
+end
+
+local function applyPenPrompts()
+	local bays = Workspace:FindFirstChild("WashBays")
+	local mine = bays and myBay and bays:FindFirstChild(myBay)
+	local zoo = mine and mine:FindFirstChild("Zoo")
+	if zoo then
+		for _, prompt in zoo:GetDescendants() do
+			if prompt:IsA("ProximityPrompt") then
+				applyPromptReach(prompt)
+			end
+		end
+	end
 end
 
 local function applyAllPrompts()
@@ -66,7 +95,8 @@ local function buildGui()
 	gui.ResetOnSpawn = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Just the two choices while carrying: put it back in the cache, or sell it.
+	-- Just the two choices while carrying: put it down (in the nearest free pen it fits, or
+	-- back in the cache if that is closer), or sell it.
 	carryBanner = Instance.new("Frame")
 	carryBanner.AnchorPoint = Vector2.new(0.5, 1)
 	carryBanner.Size = UDim2.fromOffset(420, 52)
@@ -131,6 +161,8 @@ local function buildGui()
 end
 
 local function onCarry(info: Types.CarryInfo?)
+	carrying = info ~= nil
+	applyPenPrompts()
 	if info then
 		carrySellButton.Text = "SELL " .. UIStyle.formatMoney(info.SellValue or 0)
 		carryBanner.Visible = true
@@ -168,6 +200,7 @@ function ZooController.init(initial: Types.InitialState)
 	end)
 	Remotes.event("BayStateChanged").OnClientEvent:Connect(onBay)
 	Remotes.event("CarryChanged").OnClientEvent:Connect(onCarry)
+	AnimalFocus.onChanged(applyPenPrompts)
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or not carryBanner.Visible then
 			return

@@ -6,6 +6,7 @@
 -- Always shown: a Pinned plate (UIStyle.liftNameplate, the animal you are washing).
 -- Never shown: the animal in your own hands (the carry banner already names it).
 -- Only the local Enabled changes, so every player sees their own focus.
+-- ZooController uses the same focus for each pen's Pick up / Sell / Set pet card.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,6 +28,7 @@ local CHECK_SECONDS = 0.08
 
 local plates: { [BillboardGui]: boolean } = {} -- value: what we last set Enabled to
 local focus: BillboardGui? = nil
+local listeners: { () -> () } = {}
 
 local function setShown(plate: BillboardGui, on: boolean)
 	if plates[plate] ~= on then
@@ -90,10 +92,25 @@ local function check()
 		focus = nil
 	end
 	local camera = Workspace.CurrentCamera
+	local was = focus
 	focus = if camera then pickFocus(camera) else nil
 	for plate in plates do
 		setShown(plate, plate == focus or plate:GetAttribute(UIStyle.PinnedAttribute) == true)
 	end
+	if focus ~= was then
+		for _, listener in listeners do
+			task.spawn(listener)
+		end
+	end
+end
+
+-- The head of the animal you are looking at, if any (pen action cards follow it too).
+function AnimalFocus.focusedHead(): BasePart?
+	return if focus then headOf(focus) else nil
+end
+
+function AnimalFocus.onChanged(listener: () -> ())
+	table.insert(listeners, listener)
 end
 
 function AnimalFocus.init(_initial: any)

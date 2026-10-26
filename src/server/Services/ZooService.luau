@@ -18,10 +18,12 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local StatUpgrades = require(ReplicatedStorage.Shared.StatUpgrades)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local AnimalService = require(script.Parent.AnimalService)
 local EconomyService = require(script.Parent.EconomyService)
+local FarmDecor = require(script.Parent.FarmDecor)
 local MutationPayout = require(script.Parent.MutationPayout)
 local GuideService = require(script.Parent.GuideService)
 local Hooks = require(script.Parent.Hooks)
@@ -43,6 +45,9 @@ type Zoo = {
 	Bay: Model,
 	PenModels: { [string]: Model }, -- animal id -> model standing in its pen
 	CacheModels: { [string]: Model }, -- animal id -> model waiting in the cache
+	-- animal id -> washed model still walking to its cache slot. Its record is already
+	-- waiting (and can be sold or picked up); it joins CacheModels when it gets there.
+	Arriving: { [string]: Model },
 	OverflowModels: { [string]: Model }, -- animal id -> model waiting on a full-cache decision
 	CarriedId: string?, -- cache record currently being carried
 	CarryModel: Model?,
@@ -207,12 +212,14 @@ local function animalsInPen(data: PlayerDataService.SavedData, pen: number): { O
 	return list
 end
 
--- Most uncollected cash this pen's pad holds (GameConfig.PenCashCap by the pen's class).
-local function penCap(zoo: Zoo?, penIndex: number): number
+-- Most uncollected cash this pen's pad holds: GameConfig.PenCashCap by the pen's class, raised
+-- by the owner's Pen Storage level (StatUpgrades).
+local function penCap(zoo: Zoo?, data: PlayerDataService.SavedData, penIndex: number): number
 	local pen = if zoo then penOf(zoo, penIndex) else nil
 	local class = pen and pen:GetAttribute("PenClass")
 	local caps: { [string]: number } = GameConfig.PenCashCap
-	return caps[if typeof(class) == "string" then class else "Standard"] or caps.Standard
+	local base = caps[if typeof(class) == "string" then class else "Standard"] or caps.Standard
+	return StatUpgrades.penCap(base, data.PenCapLevel)
 end
 
 local function penPending(data: PlayerDataService.SavedData, penIndex: number): number
@@ -228,7 +235,7 @@ end
 -- Adds cash to an animal's share of its pen's pad, stopping at the pen's cap. Returns what
 -- actually went in.
 local function credit(zoo: Zoo?, data: PlayerDataService.SavedData, animal: OwnedAnimal, amount: number): number
-	local room = math.max(0, penCap(zoo, animal.Pen) - penPending(data, animal.Pen))
+	local room = math.max(0, penCap(zoo, data, animal.Pen) - penPending(data, animal.Pen))
 	local added = math.min(amount, room)
 	animal.Pending += added
 	return added
@@ -339,7 +346,7 @@ local function refreshPens(player: Player)
 		local text = status and status:FindFirstChild("Label") :: TextLabel?
 		if text then
 			-- An empty pen says how much cash its pad can hold, so bigger pens read as worth more.
-			text.Text = if not unlocked or animal then "" else `EMPTY\nMax {UIStyle.formatMoney(penCap(zoo, i))}`
+			text.Text = if not unlocked or animal then "" else `EMPTY\nMax {UIStyle.formatMoney(penCap(zoo, data, i))}`
 		end
 		local pad = pen:FindFirstChild("CollectPad") :: BasePart?
 		if pad then
@@ -352,7 +359,7 @@ local function refreshPens(player: Player)
 			-- The client renders the counter (count-up, bounce, money pop) from these.
 			pad:SetAttribute("Cash", if #occupants > 0 then math.floor(cash) else nil)
 			pad:SetAttribute("Rate", if #occupants > 0 then rate else nil)
-			pad:SetAttribute("Cap", penCap(zoo, i))
+			pad:SetAttribute("Cap", penCap(zoo, data, i))
 		end
 
 		local post = pen:FindFirstChild("GatePost")
@@ -641,16 +648,36 @@ local function dropCarry(player: Player)
 	zoo.CarriedId = nil
 end
 
--- Pays for a cache animal and walks it forward off the pad, hops a sold beat, then jogs to the street.
+-- Takes a waiting record's model out of the zoo's books: the one standing in its slot, or the
+-- washed one still walking there (that walk then stops at once, see receiveWashed).
+local function takeCacheModel(zoo: Zoo, id: string): Model?
+	local model = zoo.CacheModels[id] or zoo.Arriving[id]
+	zoo.CacheModels[id] = nil
+	zoo.Arriving[id] = nil
+	return model
+end
+
+-- Pays for a cache animal and walks it forward off the pad, hops a sold beat, then jogs to the
+-- street and runs off down it. One sold while still walking (on the drive from the wash, or
+-- out to an overflow spot) first follows the rest of that route except its final spot, so it
+-- leaves along the drive instead of cutting across the grass.
 local function sendSoldHome(zoo: Zoo, model: Model?)
 	if not model then
 		return
 	end
+	model.Name = "SoldAnimal"
 	local sold = zoo.Bay:FindFirstChild("SoldSpot")
 	local back = zoo.Bay:FindFirstChild("RoadReturn")
+	local bay = zoo.Bay
+	local route: { CFrame } = {}
+	local pending = AnimalService.pendingCorners(model)
+	for i = 1, #pending - 1 do
+		table.insert(route, CFrame.new(pending[i]))
+	end
 	task.spawn(function()
 		if sold and sold:IsA("BasePart") and model.Parent then
-			AnimalService.walkCorners(model, { sold.CFrame }, 0.55)
+			table.insert(route, sold.CFrame)
+			AnimalService.walkCorners(model, route, 0.55)
 		end
 		if model.Parent then
 			AnimalService.sold(model)
@@ -658,14 +685,13 @@ local function sendSoldHome(zoo: Zoo, model: Model?)
 		if back and back:IsA("BasePart") and model.Parent then
 			AnimalService.walkCorners(model, { back.CFrame }, 0.7, 0.55)
 		end
-		if model.Parent then
-			model:Destroy()
-		end
+		AnimalService.runOff(model, bay)
 	end)
 end
 
 -- Sells the oldest unpaid animal waiting in the cache and returns its model, still standing
--- in the slot. The caller walks it out, then walks whoever is left into the open slot.
+-- in the slot (or still walking to it). The caller walks it out, then walks whoever is left
+-- into the open slot.
 local function takeOldestUnpaid(player: Player): Model?
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -677,10 +703,7 @@ local function takeOldestUnpaid(player: Player): Model?
 			continue
 		end
 		removeCached(data, record.Id)
-		local model = zoo.CacheModels[record.Id]
-		if model then
-			zoo.CacheModels[record.Id] = nil
-		end
+		local model = takeCacheModel(zoo, record.Id)
 		EconomyService.addCoins(player, ZooService.sellValue(record.Species, record.Mutation))
 		Hooks.fire(
 			"AnimalSold",
@@ -706,12 +729,8 @@ local function makeCacheRoom(player: Player): boolean
 	if #waitingRecords(zoo, data) < GameConfig.Cache.Slots then
 		return true
 	end
-	local model = takeOldestUnpaid(player)
-	if not model then
-		return false
-	end
-	sendSoldHome(zoo, model)
-	return true
+	sendSoldHome(zoo, takeOldestUnpaid(player))
+	return #waitingRecords(zoo, data) < GameConfig.Cache.Slots
 end
 
 local fireOverflow: (player: Player) -> ()
@@ -767,10 +786,10 @@ local function pickUp(player: Player, slotIndex: number)
 	if not record then
 		return
 	end
-	local cached = zoo.CacheModels[record.Id]
+	-- Picked up from its slot, or grabbed while it was still walking there.
+	local cached = takeCacheModel(zoo, record.Id)
 	if cached then
 		cached:Destroy()
-		zoo.CacheModels[record.Id] = nil
 	end
 	zoo.CarriedId = record.Id
 	zoo.CarryModel = AnimalService.buildCarryModel(record.Species, record.Mutation, hand)
@@ -910,12 +929,64 @@ local function sellCarried(player: Player, confirmed: boolean?)
 	refreshAll(player)
 end
 
--- Put Down: back into the cache, or onto the overflow line when the slot is taken.
+-- The open, empty pen nearest the player that this animal fits, and how far it is. Pens
+-- with an animal are skipped: putting down never swaps (that sells).
+local function nearestFreePen(player: Player, record: CachedAnimal, from: Vector3): (number?, number)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data or zoo.Bay:GetAttribute("YardRevealed") ~= true then
+		return nil, math.huge
+	end
+	local bodyClass = AnimalConfig.Animals[record.Species].BodyClass
+	local best, bestDistance = nil, math.huge
+	for i = 1, LAST_PEN do
+		local pen = penOf(zoo, i)
+		if not pen or not penOpen(data, i) or animalInPen(data, i) then
+			continue
+		end
+		local penClassAttr = pen:GetAttribute("PenClass")
+		local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
+		if not AnimalConfig.fits(bodyClass, penClass) then
+			continue
+		end
+		local floor = pen:FindFirstChild("Floor")
+		local at = if floor and floor:IsA("BasePart") then floor.Position else pen:GetPivot().Position
+		local distance = (at - from).Magnitude
+		if distance < bestDistance then
+			best, bestDistance = i, distance
+		end
+	end
+	return best, bestDistance
+end
+
+local function nearestCacheDistance(zoo: Zoo, from: Vector3): number
+	local best = math.huge
+	for i = 1, GameConfig.Cache.Slots do
+		local slot = cacheSlot(zoo, i)
+		if slot then
+			best = math.min(best, (slot.Position - from).Magnitude)
+		end
+	end
+	return best
+end
+
+-- Put Down: into the nearest free pen it fits, or back into the cache when that is closer
+-- (onto the overflow line when the slot is taken).
 local function putDownCarried(player: Player)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
+	local record = carriedRecord(player)
 	if not zoo or not data or not zoo.CarriedId then
 		return
+	end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if record and root then
+		local penIndex, penDistance = nearestFreePen(player, record, root.Position)
+		if penIndex and penDistance <= nearestCacheDistance(zoo, root.Position) then
+			placeCarried(player, penIndex)
+			return
+		end
 	end
 	returnCarryToCache(player)
 end
@@ -995,11 +1066,8 @@ local function sellFromCache(player: Player, slotIndex: number, confirmed: boole
 		record.Mutation,
 		ZooService.sellValue(record.Species, record.Mutation)
 	)
-	local model = zoo.CacheModels[record.Id]
-	if model then
-		zoo.CacheModels[record.Id] = nil
-		sendSoldHome(zoo, model)
-	end
+	-- Also covers an animal sold before it reached its slot: it turns round and leaves.
+	sendSoldHome(zoo, takeCacheModel(zoo, record.Id))
 	PlayerDataService.markDirty(player)
 	refreshAll(player)
 	promoteOverflow(player)
@@ -1069,6 +1137,10 @@ local function expand(player: Player)
 	data.ZooSize = PlayerDataService.pensForTier(data.BarnTier)
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
+	local zoo = zoos[player]
+	if zoo then
+		FarmDecor.apply(zoo.Bay, data.BarnTier, true)
+	end
 	Hooks.fire("ZooExpanded", player, data.ZooSize, step.Price, step.Barn)
 	purchaseResult:FireClient(player, true, `Farm upgrade unlocked!`)
 end
@@ -1117,7 +1189,8 @@ local function parkOverflow(zoo: Zoo, record: CachedAnimal, model: Model, index:
 		-- Fresh from the wash: across the drive to the cache arm, then out to its spot.
 		AnimalService.walkCorners(model, ZooService.fromWash(zoo.Bay, { at }), GameConfig.DepartDuration * 0.6)
 	end
-	if model.Parent then
+	-- Unless it was sold or kept on the way: then it's someone else's to move.
+	if model.Parent and zoo.OverflowModels[record.Id] == model then
 		model:PivotTo(at)
 	end
 end
@@ -1138,8 +1211,13 @@ function promoteOverflow(player: Player)
 		zoo.OverflowModels[record.Id] = nil
 		local slot = cacheSlot(zoo, #waitingRecords(zoo, data))
 		if model and slot then
+			zoo.Arriving[record.Id] = model -- sellable on the way, like a fresh wash (receiveWashed)
 			task.spawn(function()
 				AnimalService.walkCorners(model, { slot.CFrame }, GameConfig.DepartDuration)
+				if zoo.Arriving[record.Id] ~= model then
+					return
+				end
+				zoo.Arriving[record.Id] = nil
 				if model.Parent and zoos[player] == zoo then
 					ZooService.adoptIntoCache(player, record, model)
 				elseif model.Parent then
@@ -1305,7 +1383,7 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 			local route = ZooService.fromWash(zoo.Bay, { sold.CFrame, back.CFrame })
 			AnimalService.walkCorners(model, route, GameConfig.DepartDuration * 0.6)
 		end
-		AnimalService.destroy(model)
+		AnimalService.runOff(model, zoo.Bay)
 		return
 	end
 	-- Same size it was washed at: an animal never changes size between wash, cache and pen.
@@ -1315,23 +1393,7 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 		if soldModel then
 			-- The sale and the shuffle up run alongside, so the washed animal leaves the
 			-- wash spot right after its hop instead of waiting for them.
-			local leaving = soldModel
-			task.spawn(function()
-				local soldSpot = zoo.Bay:FindFirstChild("SoldSpot")
-				if soldSpot and soldSpot:IsA("BasePart") and leaving.Parent then
-					AnimalService.walkCorners(leaving, { soldSpot.CFrame }, 0.55)
-				end
-				if leaving.Parent then
-					AnimalService.sold(leaving)
-				end
-				local road = zoo.Bay:FindFirstChild("RoadReturn")
-				if road and road:IsA("BasePart") and leaving.Parent then
-					AnimalService.walkCorners(leaving, { road.CFrame }, 0.7, 0.55)
-				end
-				if leaving.Parent then
-					leaving:Destroy()
-				end
-			end)
+			sendSoldHome(zoo, soldModel)
 			local current = PlayerDataService.get(player)
 			if current and zoos[player] == zoo then
 				for index, waiting in waitingRecords(zoo, current) do
@@ -1347,7 +1409,14 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 	end
 	local record, slot = ZooService.addToCache(player, species, mutation)
 	if record and slot then
+		-- Its record is already waiting, so it can be sold or picked up on the way. Whoever
+		-- takes it clears Arriving and owns the model from then on (sendSoldHome or pickUp).
+		zoo.Arriving[record.Id] = model
 		AnimalService.walkCorners(model, ZooService.fromWash(zoo.Bay, { slot }), GameConfig.DepartDuration)
+		if zoo.Arriving[record.Id] ~= model then
+			return
+		end
+		zoo.Arriving[record.Id] = nil
 		if zoos[player] == zoo and model.Parent then
 			ZooService.adoptIntoCache(player, record, model)
 			return
@@ -1545,6 +1614,7 @@ function ZooService.attach(player: Player, bay: Model)
 		Bay = bay,
 		PenModels = {},
 		CacheModels = {},
+		Arriving = {},
 		OverflowModels = {},
 		CarriedId = nil,
 		CarryModel = nil,
@@ -1557,6 +1627,7 @@ function ZooService.attach(player: Player, bay: Model)
 		WorldBuilder.setYardShown(bay, true)
 	end
 	if data then
+		FarmDecor.apply(bay, data.BarnTier)
 		for _, animal in data.Animals do
 			placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation), data)
 		end
@@ -1698,6 +1769,36 @@ function ZooService.attach(player: Player, bay: Model)
 	ZooService.sendIndex(player, nil)
 end
 
+-- Dev level keys (DevService): jumps the farm to any barn tier, up or down, to look at each
+-- level's pens and scenery. It's saved like a bought barn. Animals in pens the new level
+-- doesn't have are hidden until it comes back; a save left like that rehomes them to the
+-- cache on the next load.
+function ZooService.devSetBarnTier(player: Player, tier: number)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	if not zoo or not data then
+		return
+	end
+	tier = math.clamp(math.floor(tier), 0, #GameConfig.Zoo.Expansions)
+	data.BarnTier = tier
+	data.ZooSize = PlayerDataService.pensForTier(tier)
+	if data.IntroWashesLeft > 0 then
+		data.IntroWashesLeft = 0
+		WorldBuilder.setYardShown(zoo.Bay, true)
+		yardRevealed:FireClient(player)
+		GuideService.onWashCompleted(player) -- past the wash lesson, on to the pen one
+	end
+	for _, animal in data.Animals do
+		local model = zoo.PenModels[animal.Id]
+		if model then
+			model.Parent = if penOpen(data, animal.Pen) then penOf(zoo, animal.Pen) else nil
+		end
+	end
+	PlayerDataService.markDirty(player)
+	refreshAll(player)
+	FarmDecor.apply(zoo.Bay, tier, true)
+end
+
 function ZooService.detach(player: Player)
 	local zoo = zoos[player]
 	if not zoo then
@@ -1714,12 +1815,21 @@ function ZooService.detach(player: Player)
 	for _, model in zoo.CacheModels do
 		model:Destroy()
 	end
+	for _, model in zoo.Arriving do
+		model:Destroy()
+	end
 	for _, model in zoo.OverflowModels do
 		model:Destroy()
 	end
 end
 
 function ZooService.init()
+	-- A Pen Storage level raises every pad's cap: redraw the caps and EMPTY labels.
+	Hooks.on("StatUpgraded", function(player: Player, kind: string)
+		if kind == "PenCap" then
+			refreshPens(player)
+		end
+	end)
 	-- Choices while carrying: put it back in the cache, or sell it on the spot.
 	local lastAction: { [Player]: number } = {}
 	local choiceJanitor = Janitor.new()

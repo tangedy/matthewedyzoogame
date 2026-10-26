@@ -5,9 +5,9 @@
 --
 --   top left      cash and income, then a narrow column of square icon buttons
 --                 (INDEX, DAILY, SHOP). Narrow, so the thumbstick area stays clear.
---   top right     the invite box, then the quick-buy column (MonetizationQuickBuy)
+--   right side    the invite box, then the quick-buy column under it (MonetizationQuickBuy)
 --   bottom left   nothing: the thumbstick
---   bottom right  jump and WASH (UI/WashButton)
+--   bottom right  jump
 --   bottom centre one hint line, and the carry PUT DOWN / SELL row
 --
 -- Keyboard and gamepad keep the original desktop layout, with text buttons.
@@ -88,10 +88,10 @@ local TOUCH: Spec = {
 		compact = true,
 	},
 	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(112, 90) },
-	-- A row under the invite box. On a 380px-tall landscape phone, WASH (on top of jump)
-	-- starts about 144px down, so a column here ran into it. Same 84 size as the rail
-	-- buttons (about 38px drawn); the row ends near 85px.
-	quickBuy = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 80), size = 84, gap = 14, row = true },
+	-- A column down the right edge under the invite box. On a 380px-tall landscape phone,
+	-- WASH (on top of jump) starts about 288 units (144px) down; two 76 buttons with their
+	-- price chips end near 263, so the column stays clear of it. Keep QuickBuy at two.
+	quickBuy = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 80), size = 76, gap = 18, row = false },
 	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
 	dataWarning = UDim2.fromOffset(270, 10),
 	panel = { scale = Vector2.new(0.96, 0.95), maxSize = Vector2.new(1120, 640), columns = 2 },

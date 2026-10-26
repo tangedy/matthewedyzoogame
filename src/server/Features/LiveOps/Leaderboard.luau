@@ -86,7 +86,11 @@ local function updateLeaderstats(player: Player)
 		stars.Value = Stars.get(player)
 	end
 	if title and title:IsA("StringValue") then
-		title.Value = if player:GetAttribute("Vip") == true then MonetizationConfig.VIP.TagText else ""
+		local staffTitle = player:GetAttribute("StaffTitle")
+		title.Value = if typeof(staffTitle) == "string"
+			then staffTitle
+			elseif player:GetAttribute("Vip") == true then MonetizationConfig.VIP.TagText
+			else ""
 	end
 end
 

@@ -3,6 +3,8 @@
 --   C  finish the current wash      G  grant coins
 --   V  toggle the animal gallery: a platform in the sky with every species, one row per
 --      rarity, built the first time it's opened. Press again to go back.
+--   1-6  farm level 1 (the starting stalls) to 6 (every barn): pens and scenery
+--        (ZooService.devSetBarnTier, FarmDecor). Studio only.
 
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,6 +20,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local CleaningService = require(script.Parent.CleaningService)
 local EconomyService = require(script.Parent.EconomyService)
+local ZooService = require(script.Parent.ZooService)
 
 local DevService = {}
 
@@ -165,10 +168,10 @@ end
 function DevService.init()
 	if RunService:IsStudio() then
 		print(
-			`[Dev] C cleans the current animal. G grants {GameConfig.DevCoinGrant} coins. V toggles the animal gallery.`
+			`[Dev] C cleans the current animal. G grants {GameConfig.DevCoinGrant} coins. V toggles the animal gallery. 1-{#GameConfig.Zoo.Expansions + 1} set the farm level.`
 		)
 	end
-	Remotes.event("DevCommand").OnServerEvent:Connect(function(player: Player, action: any)
+	Remotes.event("DevCommand").OnServerEvent:Connect(function(player: Player, action: any, value: any)
 		if not isDeveloper(player) or typeof(action) ~= "string" then
 			return
 		end
@@ -178,6 +181,9 @@ function DevService.init()
 			EconomyService.grant(player, GameConfig.DevCoinGrant)
 		elseif action == "gallery" then
 			toggleGallery(player)
+		elseif action == "farmLevel" and typeof(value) == "number" and RunService:IsStudio() then
+			-- Studio only: in a live server these are the owner's hotbar keys and real save.
+			ZooService.devSetBarnTier(player, value)
 		end
 	end)
 	game:GetService("Players").PlayerRemoving:Connect(function(player)

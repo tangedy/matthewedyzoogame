@@ -42,9 +42,9 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | Key | Type | Robux | Effect |
 | --- | --- | --- | --- |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
-| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Also sold at its own kiosk where the walkway to the pens starts. |
-| `SpeedBoost` | Product | 19 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
-| `CashSmall` / `CashMedium` / `CashLarge` | Product | 25 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 5 / 20 / 60, capped at `CapFraction` (10% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
+| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Also sold at its own kiosk in the Robux row. |
+| `SpeedBoost` | Product | 16 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
+| `CashSmall` / `CashMedium` / `CashLarge` | Product | 7 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 1 / 20 / 60, capped at `CapFraction` (3% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
 | `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 39 / 79 / 149 / 249 / 399 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
 | `HoseTier2`–`HoseTier5` | Product, hidden | 19 / 29 / 99 / 249 | Exactly the next hose (Scrub Brush, Garden Hose, Power Washer, Foam Cannon). Never a skip. The Foam Cannon costs more than Vault of Cash so the cash packs stay worth buying. |
 | `TruckAnimal` | Product, hidden | 199 | The animal on the Delivery Truck (DeliveryTruck feature). |
@@ -82,7 +82,7 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 
 ## Quick buy
 
-Up to three square icon buttons on the right (`MonetizationConfig.QuickBuy`: 2x Speed, Auto-Collect, Bag of Cash), each with a Robux price chip under it. One tap sends `MonetizationBuy(key)`, so Roblox's purchase dialog is the only confirm. The caption shows the time left on a running boost, or what a cash pack pays right now.
+Two square icon buttons in a column down the right side (above the invite box on desktop, under it on touch) (`MonetizationConfig.QuickBuy`: 2x Speed for 16, Pile of Cash for 7, the two cheapest buys), each with a Robux price chip under it. One tap sends `MonetizationBuy(key)`, so Roblox's purchase dialog is the only confirm. The caption shows the time left on a running boost, or what a cash pack pays right now.
 
 - On touch they make a row under the invite box. A column ran into WASH on a landscape phone.
 - On desktop they make a column that grows up from just above the invite box.
@@ -92,14 +92,9 @@ Shop icons (cards, tabs, prices, rail buttons) come from `src/client/UI/Icons.lu
 
 ## Kiosks
 
-`WorldBuilder.KIOSKS` puts four single-item stands around each plot, each where the item matters. Holding a kiosk's `RobuxKioskPrompt` (0.3 s) sends its `ProductKey` attribute through `MonetizationBuy`, so Roblox's own purchase dialog still asks to confirm.
+`WorldBuilder.KIOSKS` lines four single-item stands up with the ROBUX SHOP booth, two on each side of it, all facing the plaza like one storefront. Each has a blue sign board with the item and its price. Holding a kiosk's `RobuxKioskPrompt` (0.3 s, 6-stud reach) sends its `ProductKey` attribute through `MonetizationBuy`, so Roblox's own purchase dialog still asks to confirm.
 
-| Kiosk | Where |
-| --- | --- |
-| `SpeedBoost` | front edge of the spawn plaza |
-| `AutoCollect2h` | back edge of the plaza, at the walkway to the pens |
-| `CashMedium` | road side of the gear shop |
-| `VIPKeeper` | road side of the showcase podium |
+From the road end of the row: `SpeedBoost`, `CashMedium`, the ROBUX SHOP booth, `AutoCollect2h`, `VIPKeeper`.
 
 Everything else is only in the shop panel.
 
@@ -151,7 +146,7 @@ Everything else is only in the shop panel.
 - [ ] Offers stay silent for the first 90 s of a session. After that:
   - [ ] with Tension merged, low patience pops the Calm Treat offer.
 - [ ] Tap the hose shop's Buy while short of cash many times: the SHOP panel never opens by itself.
-- [ ] Each plot has the four kiosks (Speed, Auto-Collect, Bag of Cash, VIP) clear of the wash, cache, pens and podium; holding one buys that item (simulated in Studio).
+- [ ] Each plot has the four kiosks (Speed, Auto-Collect, Bag of Cash, VIP) in one row with the ROBUX SHOP booth, all facing the plaza; holding one buys that item (simulated in Studio).
 - [ ] In a published test server, wash a Legendary: about 3 s later Roblox asks to favourite the game. It never asks again.
 - [ ] Spamming BUY doesn't double-grant (rate limit). Firing `MonetizationBuy` with a junk key or a non-string from the command bar does nothing.
 - [ ] Phone emulator (landscape and portrait): the SHOP button, panel tabs, BUY and X buttons are easy to tap, and nothing covers SPRAY or the thumbstick.

@@ -7,6 +7,7 @@ local EVENTS = {
 	-- client -> server
 	"CleaningIntent", -- (jobId: string, aimDirection: Vector3)
 	"PurchaseToolUpgrade", -- ()
+	"PurchaseStatUpgrade", -- (kind: "Speed" | "PenCap") next level of a StatUpgrades track
 	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
 	"LetAnimalGo", -- () the owner sends a blocked animal away instead of paying to clean it
 	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide
@@ -22,6 +23,7 @@ local EVENTS = {
 	"ToolTierChanged", -- (tier: number, name: string, level: number) level is the GearLadder sub-tier
 	"WashCompleted", -- (jobId: string, reward: number, coins: number, discoveryBonus: number)
 	"PurchaseResult", -- (success: boolean, message: string)
+	"StatUpgradesChanged", -- (levels: { Speed: number, PenCap: number })
 	"ZooChanged", -- (ZooSummary)
 	"IndexChanged", -- (index: { [string]: boolean }, newKey: string?)
 	"CarryChanged", -- (CarryInfo?) what the player is carrying, nil when nothing

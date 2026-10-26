@@ -40,7 +40,6 @@ local GameConfig = {
 	-- Touch/gamepad aiming (client only; the server still validates every spray)
 	CenterAimHeight = 0.4, -- reticle height as a fraction of the screen, above the character
 	AimAssistRadius = 0.18, -- snap to a dirty patch within this fraction of the screen's short side
-	TouchAimAssistRadius = 0.14, -- while WASH is held on touch: a light nudge when just off the animal
 
 	-- Dirt
 	-- Seconds of continuous on-target spraying a 1.0x animal needs with the tier 1 hose, if
@@ -48,16 +47,22 @@ local GameConfig = {
 	-- pops off almost instantly; walking around the animal is most of the wash.
 	BaseWashSeconds = 2.5,
 	PatchCleanThreshold = 0.05, -- a patch below this fraction snaps to clean
-	HintProgress = 0.85, -- progress at which remaining patches get highlighted
+	-- Progress at which remaining patches glow and show through the body: as soon as any mud
+	-- comes off, so players see the mud left on the far side and walk round to it.
+	HintProgress = 0.001,
+	AlmostCleanProgress = 0.85, -- the HUD switches to "Almost clean!" from here
 
 	-- Lifecycle timings (seconds). Kept short so there's almost always an animal to wash:
 	-- about 6 s between finishing one animal and being able to spray the next.
-	ArriveDuration = 3.5, -- from the road (x -54) to the wash spot
 	DepartDuration = 2,
 	CelebrationDuration = 1.5,
 	StartingCoins = 0, -- a new player's cash; the opening washes pay for the first upgrade
 	NextAnimalDelay = 0.5,
 	StepUpDelay = 0.35, -- after a wash's hop ends, before the line steps forward behind it
+	-- New animals run in from the far end of Main Street to the driveway, and sold or let-go
+	-- animals run off to the other end before they vanish. Speed in studs a second; StreetEnd
+	-- is how far along the road (from its middle) they appear and disappear.
+	StreetRun = { Speed = 50, StreetEnd = 340 },
 
 	-- Persistence. ProfileService owns the live store. The older DataStore names stay so a
 	-- profile's first load can copy a save from before that switch. Studio uses its own
@@ -77,12 +82,13 @@ local GameConfig = {
 	DiscoveryBonusMultiplier = 1, -- first wash of a species+mutation pays this much extra
 	IncomeTickSeconds = 1, -- how often pens accumulate cash
 	-- Most uncollected cash a pen's pad holds, by pen class (bigger pen, bigger pad). A full pad
-	-- stops filling until it is collected.
+	-- stops filling until it is collected. These are base caps: the Pen Storage upgrade
+	-- (Shared.StatUpgrades) multiplies every pen's cap by +0.25x per level.
 	PenCashCap = {
-		Standard = 2500, -- small stall
-		Medium = 25000,
-		Large = 25000, -- same footprint as Medium
-		PastureMedium = 25000,
+		Standard = 2000, -- small stall
+		Medium = 20000,
+		Large = 20000, -- same footprint as Medium
+		PastureMedium = 20000,
 		Giant = 100000,
 		PastureLarge = 100000,
 		Gargantuan = 1000000,
@@ -130,6 +136,10 @@ local GameConfig = {
 		Giant = 1.6,
 		Gargantuan = 2.9, -- a T-Rex then fills most of a 38-by-48 yard
 	},
+	-- Every animal is drawn this much bigger than its BodyScale (or DisplayScale), so the
+	-- mud is a bigger target to swipe. Capped at MaxBodyScale so a T-Rex still fits its yard.
+	AnimalSizeBoost = 1.3,
+	MaxBodyScale = 2.9,
 
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
@@ -139,16 +149,21 @@ local GameConfig = {
 		SlotSpacing = 7,
 	},
 
-	-- A new player's opening washes. The first ones are random commons that auto-sell, with
-	-- the pens hidden. The last one is a keeper, a Showcase-rarity animal with the Showcase
-	-- mutation, and finishing it reveals the pens so it can be carried into one.
-	-- AutoSellCount counts every opening wash, the keeper included (saved as IntroWashesLeft).
+	-- A new player's opening. The whole loop is open from the first second: wash, carry to a
+	-- pen, earn. Openers are the first walk-ins for a player who has never washed, in order
+	-- (no mutation); after them the normal spawn curve takes over.
+	-- AutoSellCount 0 turns off the older scripted opening (auto-sold commons with the pens
+	-- hidden, then a Showcase keeper). Above 0 it brings that back and counts every opening
+	-- wash, the keeper included (saved as IntroWashesLeft).
 	Intro = {
-		AutoSellCount = 3,
+		Openers = { "Pig", "Chicken" },
+		AutoSellCount = 0,
 		WashTimeMultiplier = 1,
 		PayoutIncome = 2, -- what an auto-sold opener pays, whatever common it was
 		ShowcaseRarity = "Rare",
 		ShowcaseMutation = "Diamond",
+		-- On touch, a hand swipes over the mud with SWIPE THE DIRT! until this many lifetime washes.
+		SwipeHintWashes = 3,
 	},
 
 	-- Spawn cutscene, in the real world: you sponge a muddy piglet at your own starter bay, the
@@ -197,6 +212,18 @@ local GameConfig = {
 	CleanGate = {
 		ChancePerWash = 0.001,
 		FlatChance = 0.001,
+	},
+
+	-- The auto-wash pad beside the spawn. While the owner stands on it, the animal on the
+	-- wash spot cleans itself: a Common takes BaseSeconds and each rarity above it doubles
+	-- that (6, 12, 24, ...). Every gear purchase after the sponge takes UpgradeDiscount off,
+	-- compounding. Animals the player's gear cannot wash are let go automatically.
+	AutoClean = {
+		BaseSeconds = 6,
+		RarityFactor = 2,
+		UpgradeDiscount = 0.05,
+		PadSize = 8, -- studs, square
+		TickSeconds = 0.2,
 	},
 
 	-- Developer shortcuts (C / G). Honored in Studio and for the place owner only.

@@ -25,6 +25,7 @@ local PlayerDataService = require(Services.PlayerDataService)
 local EconomyService = require(Services.EconomyService)
 local CleaningService = require(Services.CleaningService)
 local BayService = require(Services.BayService)
+local AutoCleanService = require(Services.AutoCleanService)
 local DevService = require(Services.DevService)
 local ZooService = require(Services.ZooService)
 local Hooks = require(Services.Hooks)
@@ -40,6 +41,7 @@ EconomyService.init()
 CleaningService.init({ getTool = EconomyService.getGear })
 StationProps.init()
 DevService.init()
+AutoCleanService.init()
 
 -- Feature modules (src/server/Features): each is required and its init() called once the
 -- core is up. They plug in through Services.Hooks, so a broken feature can't stop the game.
@@ -72,10 +74,13 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		ToolTier = if tool then tool.Tier else 1,
 		ToolName = if tool then tool.Name else "",
 		ToolUpgrade = if tool then tool.Level else 0,
+		SpeedLevel = if data then data.SpeedLevel else 0,
+		PenCapLevel = if data then data.PenCapLevel else 0,
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		GuideStep = if data then data.GuideStep else "Done",
 		PlayCutscene = if data then not data.CutsceneSeen else false,
 		IntroWashesLeft = if data then data.IntroWashesLeft else 0,
+		AnimalsWashed = if data then data.LifetimeAnimalsWashed else 0,
 		Bay = BayService.getSnapshot(player),
 		Zoo = ZooService.getZooSummary(player),
 		Index = if data then data.Index else nil,
@@ -93,6 +98,7 @@ local function onPlayerAdded(player: Player)
 		if not humanoid or not player.Parent or player.Character ~= character then
 			return
 		end
+		EconomyService.applyWalkSpeed(player)
 		humanoid.Died:Once(function()
 			task.delay(Players.RespawnTime, function()
 				if player.Parent and player.Character == character then

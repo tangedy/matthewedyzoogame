@@ -213,7 +213,8 @@ local function makeCard(parent: Instance): Card
 	board.MaxDistance = 60
 	board.ResetOnSpawn = false
 	board.Active = true
-	board.StudsOffset = Vector3.new(0, 2.5, 0)
+	-- A pen's card sits low by its gate, under the animal's nameplate instead of over the pen.
+	board.StudsOffset = Vector3.new(0, if parent.Name == "GatePost" then 1 else 2.5, 0)
 	board.Adornee = if parent:IsA("Attachment") then nil else parent :: any
 	if parent:IsA("Attachment") then
 		board.Adornee = parent.Parent :: any

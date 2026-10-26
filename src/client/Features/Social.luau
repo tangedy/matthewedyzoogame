@@ -1,6 +1,7 @@
 -- Puts black-stroked rainbow titles in front of chat messages: VIP for anyone the server
--- marked with the Vip attribute, PRO WASHER for the ProWasher attribute (daily check-in).
--- They are not drawn over the avatar.
+-- marked with the Vip attribute, PRO WASHER for the ProWasher attribute (daily check-in),
+-- and the owners' StaffTitle (server/Features/Staff, which also draws theirs over the avatar).
+-- VIP and PRO WASHER are not drawn over the avatar.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,6 +25,10 @@ function Social.init(_initial: any)
 			return nil
 		end
 		local prefix = ""
+		local staffTitle = speaker:GetAttribute("StaffTitle")
+		if typeof(staffTitle) == "string" then
+			prefix ..= `{UIStyle.vipChatTitle(staffTitle)} `
+		end
 		if speaker:GetAttribute("Vip") == true then
 			prefix ..= `{title} `
 		end

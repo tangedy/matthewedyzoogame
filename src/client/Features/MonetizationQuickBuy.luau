@@ -1,9 +1,9 @@
 -- One-tap Robux buys on the right of the screen, like Steal a Brainrot's "x2 Speed"
--- button: a short column (a row under the invite box on touch) of square icon buttons (MonetizationConfig.QuickBuy), each with a
+-- button: a short column down the right side of square icon buttons (MonetizationConfig.QuickBuy), each with a
 -- price chip hanging off its bottom edge. A tap sends the key straight to the server, so
 -- Roblox's own purchase dialog is the only confirm step.
 --
--- Kept out of the way on purpose: three buttons at most, its own ScreenGui under every menu
+-- Kept out of the way on purpose: two buttons (three at most on desktop), its own ScreenGui under every menu
 -- (a menu's dimmer covers it), hidden for the session's first Offers.QuietSeconds and while
 -- a contextual offer is up (that popup sits in the same right-hand spot on desktop).
 -- Pure view, like MonetizationShop: MonetizationController owns the state and the buy call.

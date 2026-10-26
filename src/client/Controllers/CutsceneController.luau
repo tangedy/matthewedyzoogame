@@ -346,7 +346,9 @@ function CutsceneController.init(initial: Types.InitialState)
 		if not humanoid then
 			return
 		end
-		humanoid.WalkSpeed = GameConfig.WalkSpeed
+		-- The server sets BaseWalkSpeed from the Run Speed upgrade (EconomyService.applyWalkSpeed).
+		local speed = player:GetAttribute("BaseWalkSpeed")
+		humanoid.WalkSpeed = if typeof(speed) == "number" and speed > 0 then speed else GameConfig.WalkSpeed
 		humanoid.JumpHeight = 7.2
 		humanoid.AutoRotate = true
 		local root = humanoid.Parent and humanoid.Parent:FindFirstChild("HumanoidRootPart")

@@ -51,10 +51,13 @@ export type InitialState = {
 	ToolTier: number,
 	ToolName: string,
 	ToolUpgrade: number?, -- sub-tier on the current hose (GearLadder), 0 for the hose itself
+	SpeedLevel: number?, -- StatUpgrades levels bought
+	PenCapLevel: number?,
 	TutorialCompleted: boolean,
-	GuideStep: string?, -- Wash while the opening lesson is running, otherwise Done
+	GuideStep: string?, -- Wash (opening washes), Pen (put the first animal in a pen), then Done
 	PlayCutscene: boolean?,
 	IntroWashesLeft: number?,
+	AnimalsWashed: number?, -- lifetime completed washes (the swipe hint shows for the first few)
 	Bay: BaySnapshot?,
 	Zoo: ZooSummary?,
 	Index: { [string]: boolean }?,

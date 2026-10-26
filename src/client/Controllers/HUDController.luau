@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -256,12 +257,12 @@ local function refreshToast()
 	if currentState == "Washing" then
 		if not tutorialCompleted and currentProgress < 0.1 then
 			showToast(
-				if inputMode == "Touch"
-					then "Hold WASH and drag to look around!"
-					else "Hold to spray. Wash off all the mud!"
+				if inputMode == "Touch" then "Swipe the dirt to wash it!" else "Hold to spray. Wash off all the mud!"
 			)
-		elseif hintShowing then
+		elseif hintShowing and currentProgress >= GameConfig.AlmostCleanProgress then
 			showToast("Almost clean! Spray the glowing mud.")
+		elseif hintShowing then
+			showToast("Walk around the animal! Spray all the glowing mud.")
 		else
 			showToast(nil)
 		end

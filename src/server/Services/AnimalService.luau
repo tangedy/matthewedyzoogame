@@ -32,6 +32,7 @@ export type SpawnLook = {
 	Name: string?,
 	Income: number?,
 	Rarity: string?,
+	DeferReveal: boolean?, -- the caller plays revealArrival itself (once it reaches the farm)
 }
 
 local rng = Random.new()
@@ -176,11 +177,13 @@ local function addNameplate(
 	}, maxDistance)
 end
 
--- Display scale for this species at the wash and in a pen (GameConfig.BodyScale).
+-- Display scale for this species at the wash and in a pen (GameConfig.BodyScale), with the
+-- global AnimalSizeBoost on top.
 function AnimalService.bodyScale(animalKey: string): number
 	local def = AnimalConfig.Animals[animalKey]
 	local scale = def and (def.DisplayScale or GameConfig.BodyScale[def.BodyClass])
-	return if typeof(scale) == "number" and scale > 0 then scale else 1
+	local base = if typeof(scale) == "number" and scale > 0 then scale else 1
+	return math.min(base * GameConfig.AnimalSizeBoost, math.max(base, GameConfig.MaxBodyScale))
 end
 
 -- Scales a model to its pen size (penned) or back to its built size, shrinking it further
@@ -208,6 +211,8 @@ function AnimalService.buildZooAnimal(animalKey: string, mutationKey: string): M
 	local def = AnimalConfig.Animals[animalKey]
 	local model = AnimalBuilder.build(def.TemplateName, { Mutation = mutationKey, Rarity = def.Rarity, Clean = true })
 	model:SetAttribute("AnimalKey", animalKey)
+	-- One streaming unit, so a client never gets half an animal that walks off without the rest.
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	DirtRenderer.setGrime(model, 1)
 	addNameplate(model, animalKey, mutationKey, 60)
 	return model
@@ -321,6 +326,9 @@ function AnimalService.spawn(
 	local model, patches = AnimalBuilder.build(def.TemplateName, { Mutation = mutationKey, Rarity = def.Rarity })
 	model:SetAttribute("JobId", jobId)
 	model:SetAttribute("AnimalKey", animalKey)
+	-- Body, mud patches and splats stream in together. Streamed part by part, a client could
+	-- start the walk with some patches missing and leave them standing where it set off.
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	DirtRenderer.setGrime(model, 0) -- arrives filthy
 	local scale = if look and look.Scale and look.Scale > 0 then look.Scale else AnimalService.bodyScale(animalKey)
 	if math.abs(scale - 1) > 1e-3 then
@@ -351,10 +359,19 @@ function AnimalService.spawn(
 
 	model.Parent = parent
 
-	-- Rarer tiers and any mutation get a reveal as they walk in.
+	if not (look and look.DeferReveal) then
+		AnimalService.revealArrival(model, animalKey, mutationKey, parent)
+	end
+	return model, patches
+end
+
+-- Rarer tiers and any mutation get a reveal as they walk in.
+function AnimalService.revealArrival(model: Model, animalKey: string, mutationKey: string, parent: Instance)
+	local def = AnimalConfig.Animals[animalKey]
+	local sparkle = model:FindFirstChild("Sparkle", true)
 	local rarity = RarityConfig.ByKey[def.Rarity]
 	local mutated = mutationKey ~= MutationConfig.Default
-	if rarity.Order > 2 or mutated then
+	if (rarity.Order > 2 or mutated) and sparkle and sparkle:IsA("ParticleEmitter") then
 		sparkle.Color = ColorSequence.new(rarity.Color) -- the completion sparkle keeps this colour too
 		sparkle:Emit(10 * rarity.Order)
 		if RarityFanfare.style(def.Rarity) then
@@ -371,7 +388,6 @@ function AnimalService.spawn(
 			Debris:AddItem(reveal, 3)
 		end
 	end
-	return model, patches
 end
 
 -- Walk cycle (Shared.AnimalGait): each leg swings from the hip while the model moves, and
@@ -391,7 +407,14 @@ local stepBob = AnimalGait.stepBob
 local walking: { [Model]: { Plan: AnimalGait.Plan, Seq: number } } = setmetatable({}, { __mode = "k" }) :: any
 local walkSeq = 0
 
-function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach: number, bobHeight: number?)
+-- `speed` (studs a second) times each leg by its length instead, for runs down the street.
+function AnimalService.walkCorners(
+	model: Model,
+	points: { CFrame },
+	secondsEach: number,
+	bobHeight: number?,
+	speed: number?
+)
 	if not model.Parent then
 		return
 	end
@@ -406,7 +429,7 @@ function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach
 	for _, point in points do
 		table.insert(corners, point.Position)
 	end
-	local plan = AnimalGait.plan(model:GetPivot(), corners, secondsEach, bobHeight or 0.25, now)
+	local plan = AnimalGait.plan(model:GetPivot(), corners, secondsEach, bobHeight or 0.25, now, speed)
 	if plan.Duration <= 0 then
 		return
 	end
@@ -434,6 +457,35 @@ function AnimalService.walkCorners(model: Model, points: { CFrame }, secondsEach
 	end
 	CollectionService:RemoveTag(model, AnimalGait.TAG)
 	model:SetAttribute(AnimalGait.ATTRIBUTE, nil)
+end
+
+-- The corners a walk in progress has not reached yet, in order (empty when standing still).
+function AnimalService.pendingCorners(model: Model): { Vector3 }
+	local current = walking[model]
+	local left: { Vector3 } = {}
+	if not current then
+		return left
+	end
+	local plan = current.Plan
+	local t = Workspace:GetServerTimeNow() - plan.At
+	for _, seg in plan.Segments do
+		if t < seg.Start + AnimalGait.TURN_SECONDS + seg.Seconds then
+			table.insert(left, seg.Goal)
+		end
+	end
+	return left
+end
+
+-- Runs a leaving animal from the driveway mouth down Main Street to the far end (the bay's
+-- StreetEnd), then removes it. Yields until it is gone.
+function AnimalService.runOff(model: Model, bay: Instance)
+	local finish = bay:FindFirstChild("StreetEnd")
+	if finish and finish:IsA("BasePart") and model.Parent then
+		AnimalService.walkCorners(model, { finish.CFrame }, 1, 0.4, GameConfig.StreetRun.Speed)
+	end
+	if model.Parent then
+		model:Destroy()
+	end
 end
 
 -- Two quick hops and a SOLD! sign. Yields until the hop finishes.

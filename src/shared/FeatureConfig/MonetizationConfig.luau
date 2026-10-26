@@ -100,7 +100,7 @@ local products: { Product } = {
 	{
 		Key = "SpeedBoost",
 		Id = 0,
-		Robux = 19,
+		Robux = 16,
 		DisplayName = "2x Speed",
 		Description = "Run 2x faster for 10 min. Stacks.",
 		Tab = "Boosts",
@@ -112,16 +112,16 @@ local products: { Product } = {
 	{
 		Key = "CashSmall",
 		Id = 0,
-		Robux = 25,
+		Robux = 7, -- the cheapest buy in the game; one minute keeps bigger packs the better value
 		DisplayName = "Pile of Cash",
-		Description = "5 min of farm income.",
+		Description = "1 min of farm income.",
 		Tab = "Cash",
 		Order = 1,
 		Kind = "Cash",
 		Color = GREEN,
-		Minutes = 5,
-		Floor = 100,
-		CapFraction = 0.1,
+		Minutes = 1,
+		Floor = 30,
+		CapFraction = 0.03,
 	},
 	{
 		Key = "CashMedium",
@@ -313,8 +313,9 @@ return {
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },
 	ShopColor = PINK,
 	-- One-tap buttons down the right side of the screen (MonetizationQuickBuy), top first.
-	-- Kept to three so a phone screen stays clear; everything else is in the shop.
-	QuickBuy = { "SpeedBoost", "AutoCollect2h", "CashMedium" },
+	-- Only the two cheapest buys (16 and 7), so the column fits above WASH on a phone;
+	-- everything else is in the shop.
+	QuickBuy = { "SpeedBoost", "CashSmall" },
 
 	SuperSoap = {
 		PowerMultiplier = 2, -- applied through Hooks "CleaningPower"

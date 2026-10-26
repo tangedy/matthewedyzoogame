@@ -106,6 +106,12 @@ function GearLadder.get(tier: number, level: number?): Step
 	return levels[wanted]
 end
 
+-- Gear purchases made to reach (tier, level): 0 for the starting sponge.
+function GearLadder.upgradesOwned(tier: number, level: number?): number
+	local current = GearLadder.get(tier, level)
+	return (table.find(steps, current) or 1) - 1
+end
+
 -- Cleaning power (the rarity gate) at (tier, level).
 function GearLadder.power(tier: number, level: number?): number
 	return GearLadder.get(tier, level).CleaningPower
