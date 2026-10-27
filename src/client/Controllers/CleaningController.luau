@@ -389,21 +389,30 @@ end
 local HINT_MUD = Color3.fromRGB(92, 64, 40)
 local HINT_GLOW = Color3.fromRGB(255, 200, 60)
 
--- Remaining mud pulses yellow (local-only change; the server never sets patch color later).
--- The Highlight also shows patches through the body so hidden ones are easy to find.
-local function pulseHint(animal: Model?)
-	local pulse = 0.5 + 0.5 * math.sin(os.clock() * 5)
+local HINT_SPRAYING = 0.3 -- glow strength while the player sprays, so it doesn't drown out the mud
+local hintLevel = 1
+local hintLevelAt = os.clock()
+
+-- Remaining mud pulses a soft yellow (local-only change; the server never sets patch color later).
+-- The Highlight also shows patches through the body so hidden ones are easy to find. Both
+-- ease down while the player is spraying and back up when they let go.
+local function pulseHint(animal: Model?, sprayingNow: boolean)
+	local now = os.clock()
+	local target = if sprayingNow then HINT_SPRAYING else 1
+	hintLevel += (target - hintLevel) * (1 - math.exp(-(now - hintLevelAt) * 6))
+	hintLevelAt = now
+	local pulse = 0.5 + 0.5 * math.sin(now * 3)
 	if hintHighlight then
-		hintHighlight.FillTransparency = 0.3 + 0.35 * pulse
-		hintHighlight.OutlineTransparency = 0.4 * pulse
+		hintHighlight.FillTransparency = 1 - hintLevel * (0.1 + 0.15 * pulse)
+		hintHighlight.OutlineTransparency = 1 - hintLevel * (0.3 + 0.3 * pulse)
 	end
 	local patches = animal and animal:FindFirstChild("DirtPatches")
 	if not patches then
 		return
 	end
+	local color = HINT_MUD:Lerp(HINT_GLOW, hintLevel * (0.2 + 0.25 * pulse))
 	for _, patch in patches:GetChildren() do
 		if patch:IsA("BasePart") then
-			local color = HINT_MUD:Lerp(HINT_GLOW, 0.45 + 0.55 * pulse)
 			patch.Material = Enum.Material.Neon
 			patch.Color = color
 			for _, splat in patch:GetChildren() do
@@ -1032,7 +1041,7 @@ local function onHeartbeat()
 	end
 
 	if hintActive then
-		pulseHint(animal)
+		pulseHint(animal, mouseHeld or padHeld or scrub ~= nil)
 	end
 
 	if not (mouseHeld or padHeld or scrub) then

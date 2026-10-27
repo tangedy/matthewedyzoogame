@@ -29,7 +29,7 @@ export type BuildOptions = {
 	Mutation: string?, -- MutationConfig key; changes colours (Gold, Diamond, Rainbow)
 	Rarity: string?, -- RarityConfig key; Zoo God and Secret animals get an aura
 	Clean: boolean?, -- no dirt patches (pens, cache, carried)
-	Seed: number?,
+	Seed: number?, -- unused since the mud skin has no randomness; kept so callers still type-check
 }
 
 type Spec = {
@@ -56,6 +56,11 @@ type Spec = {
 local MUD_COLOR = Color3.fromRGB(118, 82, 50) -- the Mud material renders darker than its colour
 local DEFAULT_PATCH_CELL = 1.5
 local PATCH_THICKNESS = 0.12
+-- The mud skin: each face is tiled edge to edge, and each tile (one patch) is split into
+-- flakes about this size, which wash off one by one (DirtRenderer).
+local SKIN_LIFT = 0.02 -- skin centre above the surface; its outer face is SKIN_LIFT + PATCH_THICKNESS / 2 out
+local FLAKE_SIZE = 0.3
+local MAX_FLAKES = 6 -- per side of a tile
 -- Top faces higher than this (studs above ground) are skipped: a standing player's nozzle
 -- sits about 4.5 studs up, and a top face can only be hit from above it.
 local MAX_TOP_PATCH_HEIGHT = 4.3
@@ -3837,7 +3842,9 @@ local SPECS: { [string]: Spec } = {
 	},
 }
 
--- Lays a grid of disc patches over one face of a box part.
+-- Covers one face of a box part in a thin skin of mud, tiled edge to edge. Each tile is one
+-- patch; DirtRenderer breaks it into FlakesA x FlakesB flakes once it is sprayed. Tiles on the
+-- face's border reach past it by the skin's thickness, so skins on neighbouring faces close the corner.
 -- `normal`, `axisA`, `axisB` are unit vectors in the part's local space; `lenA`, `lenB` the face size.
 local function addFacePatches(
 	box: BasePart,
@@ -3847,7 +3854,6 @@ local function addFacePatches(
 	axisB: Vector3,
 	lenB: number,
 	cellSize: number,
-	rng: Random,
 	out: { PatchInfo },
 	parent: Instance
 )
@@ -3855,58 +3861,38 @@ local function addFacePatches(
 	local cols = math.max(1, math.floor(lenA / cellSize))
 	local rows = math.max(1, math.floor(lenB / cellSize))
 	local cellA, cellB = lenA / cols, lenB / rows
-	local cell = math.min(cellA, cellB)
+	local edge = SKIN_LIFT + PATCH_THICKNESS / 2
+	local worldNormal = box.CFrame:VectorToWorldSpace(normal)
+	local worldUp = box.CFrame:VectorToWorldSpace(axisA)
 
 	for c = 1, cols do
 		for r = 1, rows do
-			local a = -lenA / 2 + (c - 0.5) * cellA + rng:NextNumber(-0.15, 0.15) * cellA
-			local b = -lenB / 2 + (r - 0.5) * cellB + rng:NextNumber(-0.15, 0.15) * cellB
-			local localPos = normal * (depth + 0.02) + axisA * a + axisB * b
-			local worldPos = box.CFrame:PointToWorldSpace(localPos)
-			local worldNormal = box.CFrame:VectorToWorldSpace(normal)
-			local worldUp = box.CFrame:VectorToWorldSpace(axisA)
-			local diameter = cell * rng:NextNumber(0.8, 1.0)
+			local a0 = -lenA / 2 + (c - 1) * cellA - (if c == 1 then edge else 0)
+			local a1 = -lenA / 2 + c * cellA + (if c == cols then edge else 0)
+			local b0 = -lenB / 2 + (r - 1) * cellB - (if r == 1 then edge else 0)
+			local b1 = -lenB / 2 + r * cellB + (if r == rows then edge else 0)
+			local sizeA, sizeB = a1 - a0, b1 - b0
+			local localPos = normal * (depth + SKIN_LIFT) + axisA * (a0 + a1) / 2 + axisB * (b0 + b1) / 2
+			-- Local X = surface normal, Y = axisA; Z comes out as ±axisB, which a box doesn't mind.
+			local frame = CFrame.fromMatrix(box.CFrame:PointToWorldSpace(localPos), worldNormal, worldUp)
 
 			local id = "P" .. (#out + 1)
 			local patch = Instance.new("Part")
 			patch.Name = "Patch"
-			patch.Shape = Enum.PartType.Cylinder -- cylinder axis is local X, so X = surface normal
 			patch.Anchored = true
 			patch.CanCollide = false
 			patch.CanTouch = false
 			patch.CanQuery = true
-			patch.CastShadow = false -- flat on the body: no visible shadow, dozens per animal
-			patch.Size = Vector3.new(PATCH_THICKNESS, diameter, diameter)
-			patch.CFrame = CFrame.fromMatrix(worldPos, worldNormal, worldUp)
-				* CFrame.Angles(rng:NextNumber(0, math.pi * 2), 0, 0)
-			local shade = rng:NextNumber(-12, 12)
-			patch.Color =
-				Color3.fromRGB(MUD_COLOR.R * 255 + shade, MUD_COLOR.G * 255 + shade, MUD_COLOR.B * 255 + shade)
+			patch.CastShadow = false
+			patch.Size = Vector3.new(PATCH_THICKNESS, sizeA, sizeB)
+			patch.CFrame = frame
+			patch.Color = MUD_COLOR
 			patch.Material = Enum.Material.Mud
 			patch:SetAttribute("PatchId", id)
-			patch:SetAttribute("BaseDiameter", diameter)
+			patch:SetAttribute("Skin", true)
+			patch:SetAttribute("FlakesA", math.clamp(math.round(sizeA / FLAKE_SIZE), 2, MAX_FLAKES))
+			patch:SetAttribute("FlakesB", math.clamp(math.round(sizeB / FLAKE_SIZE), 2, MAX_FLAKES))
 			patch.Parent = parent
-
-			-- Two small splatters around the main blob so mud reads as splashes, not dots.
-			-- Cosmetic only: they can't be hit and fade with their patch.
-			for _ = 1, 2 do
-				local angle = rng:NextNumber(0, math.pi * 2)
-				local reach = diameter * rng:NextNumber(0.45, 0.6)
-				local size = diameter * rng:NextNumber(0.3, 0.45)
-				local splat = Instance.new("Part")
-				splat.Name = "Splat"
-				splat.Shape = Enum.PartType.Cylinder
-				splat.Anchored = true
-				splat.CanCollide = false
-				splat.CanTouch = false
-				splat.CanQuery = false
-				splat.CastShadow = false
-				splat.Size = Vector3.new(PATCH_THICKNESS * 0.8, size, size)
-				splat.CFrame = patch.CFrame * CFrame.new(-0.01, math.cos(angle) * reach, math.sin(angle) * reach)
-				splat.Color = patch.Color
-				splat.Material = Enum.Material.Mud
-				splat.Parent = patch
-			end
 			table.insert(out, { Id = id, Part = patch :: BasePart })
 		end
 	end
@@ -3959,7 +3945,7 @@ end
 
 -- Dirt patches over a placeholder's body, neck sides and head. Runs on a fresh build or on a
 -- clone of a cached clean one: the patches only read the body, neck and head as built.
-local function addPlaceholderPatches(model: Model, spec: Spec, rng: Random, patches: { PatchInfo })
+local function addPlaceholderPatches(model: Model, spec: Spec, patches: { PatchInfo })
 	local body = model:FindFirstChild("Body") :: BasePart
 	local head = model:FindFirstChild("Head") :: BasePart
 	local neck = model:FindFirstChild("Neck") :: BasePart?
@@ -3968,29 +3954,29 @@ local function addPlaceholderPatches(model: Model, spec: Spec, rng: Random, patc
 	local cell = spec.PatchCell or DEFAULT_PATCH_CELL
 	local X, Y, Z = Vector3.xAxis, Vector3.yAxis, Vector3.zAxis
 	-- Body: both sides, top, rump
-	addFacePatches(body, X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
-	addFacePatches(body, -X, Z, b.Z, Y, b.Y, cell, rng, patches, patchFolder)
+	addFacePatches(body, X, Z, b.Z, Y, b.Y, cell, patches, patchFolder)
+	addFacePatches(body, -X, Z, b.Z, Y, b.Y, cell, patches, patchFolder)
 	if leg + b.Y <= MAX_TOP_PATCH_HEIGHT then
-		addFacePatches(body, Y, Z, b.Z, X, b.X, cell, rng, patches, patchFolder)
+		addFacePatches(body, Y, Z, b.Z, X, b.X, cell, patches, patchFolder)
 	end
 	if not spec.SkipRump then
-		addFacePatches(body, Z, Y, b.Y, X, b.X, cell, rng, patches, patchFolder)
+		addFacePatches(body, Z, Y, b.Y, X, b.X, cell, patches, patchFolder)
 	end
 	-- Neck sides (vertical faces are reachable at any height)
 	if neck then
 		local n = neck.Size
-		addFacePatches(neck, X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
-		addFacePatches(neck, -X, Z, n.Z, Y, n.Y, cell, rng, patches, patchFolder)
+		addFacePatches(neck, X, Z, n.Z, Y, n.Y, cell, patches, patchFolder)
+		addFacePatches(neck, -X, Z, n.Z, Y, n.Y, cell, patches, patchFolder)
 	end
 	-- Head: both sides, and the top when it's low enough
-	addFacePatches(head, X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
-	addFacePatches(head, -X, Z, h.Z, Y, h.Y, cell, rng, patches, patchFolder)
+	addFacePatches(head, X, Z, h.Z, Y, h.Y, cell, patches, patchFolder)
+	addFacePatches(head, -X, Z, h.Z, Y, h.Y, cell, patches, patchFolder)
 	if head.Position.Y + h.Y / 2 <= MAX_TOP_PATCH_HEIGHT then
-		addFacePatches(head, Y, Z, h.Z, X, h.X, cell, rng, patches, patchFolder)
+		addFacePatches(head, Y, Z, h.Z, X, h.X, cell, patches, patchFolder)
 	end
 end
 
-local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model, { PatchInfo })
+local function buildPlaceholder(spec: Spec, clean: boolean): (Model, { PatchInfo })
 	local model = Instance.new("Model")
 	model.Name = "Animal"
 
@@ -4054,7 +4040,7 @@ local function buildPlaceholder(spec: Spec, rng: Random, clean: boolean): (Model
 
 	local patches: { PatchInfo } = {}
 	if not clean then
-		addPlaceholderPatches(model, spec, rng, patches)
+		addPlaceholderPatches(model, spec, patches)
 	end
 
 	return model, patches
@@ -4477,7 +4463,7 @@ function AnimalBuilder.audit(): number
 		warn(`[AnimalBuilder.audit] {message}`)
 	end
 	for _, name in names do
-		local model, patches = buildPlaceholder(SPECS[name], Random.new(1), false)
+		local model, patches = buildPlaceholder(SPECS[name], false)
 		local lo, hi = modelBounds(model)
 		local parts = 0
 		for _, part in model:GetChildren() do
@@ -4532,7 +4518,7 @@ local function cleanBuild(templateName: string, mutation: string, rarity: string
 		if not model then
 			local spec = SPECS[templateName]
 			assert(spec, "Unknown animal template: " .. templateName)
-			model = buildPlaceholder(spec, Random.new(), true)
+			model = buildPlaceholder(spec, true)
 		end
 		prototype = model :: Model
 		applyMutation(prototype, mutation)
@@ -4555,17 +4541,16 @@ function AnimalBuilder.build(templateName: string, options: BuildOptions?): (Mod
 	local spec = SPECS[templateName]
 	local templates = ServerStorage:FindFirstChild("AnimalTemplates")
 	if spec and not (templates and templates:FindFirstChild(templateName)) then
-		-- A dirty placeholder is the clean one plus patches; only the patches are random.
+		-- A dirty placeholder is the clean one plus its mud skin.
 		local model = cleanBuild(templateName, mutation, rarity)
 		local patches: { PatchInfo } = {}
-		addPlaceholderPatches(model, spec, if opts.Seed then Random.new(opts.Seed) else Random.new(), patches)
+		addPlaceholderPatches(model, spec, patches)
 		return model, patches
 	end
 	local model, patches = buildFromTemplate(templateName, clean)
 	if not model then
 		assert(spec, "Unknown animal template: " .. templateName)
-		local rng = if opts.Seed then Random.new(opts.Seed) else Random.new()
-		model, patches = buildPlaceholder(spec, rng, clean)
+		model, patches = buildPlaceholder(spec, clean)
 	end
 	local built = model :: Model
 	applyMutation(built, mutation)

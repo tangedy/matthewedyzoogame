@@ -24,8 +24,93 @@ local function fadeSplats(patch: BasePart, transparency: number)
 	end
 end
 
--- fraction: remaining dirt in [0, 1]
-function DirtRenderer.setAmount(patch: BasePart, fraction: number)
+local SKIN_THIN = 0.3 -- flakes still on a nearly clean skin tile are this transparent
+
+-- A skin tile is one solid part until it is sprayed, then breaks into its flakes, so an
+-- animal nobody is washing (or a queued one) costs one part per tile, not dozens.
+local function breakTile(patch: BasePart): { BasePart }
+	local flakes: { BasePart } = {}
+	for _, flake in patch:GetChildren() do
+		if flake:IsA("BasePart") then
+			table.insert(flakes, flake)
+		end
+	end
+	if #flakes > 0 then
+		return flakes
+	end
+	local nA = (patch:GetAttribute("FlakesA") or 2) :: number
+	local nB = (patch:GetAttribute("FlakesB") or 2) :: number
+	local size = patch.Size
+	local flakeA, flakeB = size.Y / nA, size.Z / nB
+	for i = 1, nA do
+		for j = 1, nB do
+			local flake = Instance.new("Part")
+			flake.Name = "Flake"
+			flake.Anchored = true
+			flake.CanCollide = false
+			flake.CanTouch = false
+			flake.CanQuery = false -- cosmetic: the spray hits the tile
+			flake.CastShadow = false
+			flake.Size = Vector3.new(size.X, flakeA + 0.005, flakeB + 0.005) -- a hair of overlap: no seams
+			flake.CFrame = patch.CFrame
+				* CFrame.new(0, -size.Y / 2 + (i - 0.5) * flakeA, -size.Z / 2 + (j - 0.5) * flakeB)
+			flake.Color = patch.Color
+			flake.Material = patch.Material
+			flake:SetAttribute("Order", math.random()) -- wash-off order when there's no spray point
+			flake.Parent = patch
+			table.insert(flakes, flake)
+		end
+	end
+	patch.Transparency = 1
+	return flakes
+end
+
+-- Back to one solid part: a whole tile (restored) or a clean one (hidden).
+local function mendTile(patch: BasePart, transparency: number)
+	for _, flake in patch:GetChildren() do
+		if flake:IsA("BasePart") then
+			flake:Destroy()
+		end
+	end
+	patch.Transparency = transparency
+end
+
+-- Skin tiles (AnimalBuilder) keep one flake per share of their dirt. Flakes go nearest the
+-- spray first, so the mud wipes off where the water lands; without a spray point (auto-wash)
+-- they go in their own random order. The flakes left thin out as the tile washes.
+local function setSkin(patch: BasePart, fraction: number, sprayAt: Vector3?)
+	if fraction >= 1 then
+		mendTile(patch, 0)
+		return
+	end
+	local flakes = breakTile(patch)
+	local rank: { [BasePart]: number } = {}
+	for _, flake in flakes do
+		rank[flake] = if sprayAt
+			then (flake.Position - sprayAt).Magnitude
+			else (flake:GetAttribute("Order") or 0) :: number
+	end
+	table.sort(flakes, function(a, b)
+		local aGone, bGone = a.Transparency >= 1, b.Transparency >= 1
+		if aGone ~= bGone then
+			return aGone -- washed-off flakes stay off, so they count first
+		end
+		return rank[a] < rank[b]
+	end)
+	local gone = #flakes - math.ceil(fraction * #flakes - 1e-6)
+	local thin = (1 - fraction) * SKIN_THIN
+	for i, flake in flakes do
+		flake.Transparency = if i <= gone then 1 else thin
+	end
+end
+
+-- fraction: remaining dirt in [0, 1]. sprayAt: where the water hit, when it was sprayed.
+function DirtRenderer.setAmount(patch: BasePart, fraction: number, sprayAt: Vector3?)
+	if patch:GetAttribute("Skin") then
+		setSkin(patch, fraction, sprayAt)
+		patch:SetAttribute("Dirt", fraction)
+		return
+	end
 	local base = (patch:GetAttribute("BaseDiameter") or patch.Size.Y) :: number
 	local d = base * (MIN_SCALE + (1 - MIN_SCALE) * fraction)
 	patch.Size = Vector3.new(patch.Size.X, d, d)
@@ -86,6 +171,11 @@ function DirtRenderer.clear(patch: BasePart, progress: number?)
 	patch.CanQuery = false
 	if patch.Parent then
 		popBurst(patch.Position, patch.CFrame.RightVector, progress or 0) -- RightVector is the surface normal
+	end
+	if patch:GetAttribute("Skin") then
+		-- The last flakes go with the burst (no tween, so a restore right after can't be undone by one).
+		mendTile(patch, 1)
+		return
 	end
 	fadeSplats(patch, 1)
 	local swell = patch.Size * Vector3.new(1, 1.35, 1.35)

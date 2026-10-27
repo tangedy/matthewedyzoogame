@@ -250,7 +250,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 		if patch.RemainingDirt <= 0 then
 			DirtRenderer.clear(patch.Part, progressOf(job)) -- the pop gets higher-pitched as the wash nears 100%
 		else
-			DirtRenderer.setAmount(patch.Part, fraction)
+			DirtRenderer.setAmount(patch.Part, fraction, result.Position) -- mud comes off where the water lands
 		end
 	end
 
