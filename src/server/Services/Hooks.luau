@@ -10,6 +10,10 @@
 --   "WashCompleted"  (player, info: WashInfo, reward)  paid; info.Model still exists
 --   "WashAbandoned"  (player, info: WashInfo)          the animal wandered off unpaid (Tension)
 --   "AnimalPlaced"   (player, animal: OwnedAnimal)     carried animal put in a pen
+--   "AnimalPickedUp" (player)                          an animal was picked up (from the cache or overflow)
+--   "CashCollected"  (player, amount)                  pen cash collected from a pad
+--   "YardRevealed"   (player)                          the opening washes are done; pens and cache appear
+--   "CutsceneFinished" (player)                        the spawn cutscene ended and was saved as seen
 --   "AnimalSold"     (player, species, mutation, value)
 --   "IncomeTick"     (player, amount)                  cash added to pads this tick
 --   "ToolPurchased"  (player, tier, name)              the next hose was bought (cash or Robux)

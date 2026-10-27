@@ -1028,6 +1028,7 @@ local function collect(player: Player, penIndex: number)
 		return
 	end
 	EconomyService.addCoins(player, amount)
+	Hooks.fire("CashCollected", player, amount)
 	local pen = penOf(zoo, penIndex)
 	local pad = pen and pen:FindFirstChild("CollectPad") :: BasePart?
 	if pad then
@@ -1263,6 +1264,7 @@ function ZooService.noteIntroWash(player: Player)
 		refreshAll(player)
 	end
 	yardRevealed:FireClient(player)
+	Hooks.fire("YardRevealed", player)
 end
 
 -- A route out of the wash spot: along the drive's cross piece to the cache arm first

@@ -1,4 +1,4 @@
--- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
+gkt -- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
 -- Animal, the five-minute rare guarantee, the seven-day check-in, the scheduled Mud Storm,
 -- offline earnings, the zoo star rating, leaderstats and the plaza leaderboard, and the
 -- analytics funnel. All times are UTC so every server agrees.

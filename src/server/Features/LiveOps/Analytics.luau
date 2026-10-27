@@ -16,6 +16,7 @@
 local AnalyticsService = game:GetService("AnalyticsService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
@@ -36,6 +37,53 @@ local STEPS = {
 	"First Hose Upgrade",
 	"First Zoo Expansion",
 }
+-- FirstSession: a finer funnel over the same opening, with steps inside the gaps where the
+-- onboarding funnel loses players (wash -> pen, pen -> first upgrade, upgrade -> first barn).
+-- Its session id is the UserId, so steps reached on a later visit still join the funnel.
+local FIRST_SESSION = "FirstSession"
+local FIRST_STEPS = {
+	"Joined",
+	"Cutscene Finished",
+	"First Wash Started",
+	"First Scrub",
+	"Wash 1 Completed",
+	"Wash 2 Completed",
+	"Keeper Washed (Pens Open)",
+	"First Pickup",
+	"First Animal Penned",
+	"First Pad Collect",
+	"Can Afford Scrub Brush",
+	"Opened Gear Shop",
+	"Bought Scrub Brush",
+	"10 Washes",
+	"3 Animals Penned",
+	"Starting Stalls Full",
+	"25 Washes",
+	"Can Afford First Barn",
+	"Bought First Barn",
+}
+local F = {
+	Joined = 1,
+	Cutscene = 2,
+	WashStarted = 3,
+	Scrub = 4,
+	Wash1 = 5,
+	Wash2 = 6,
+	Keeper = 7,
+	Pickup = 8,
+	Penned = 9,
+	Collect = 10,
+	AffordBrush = 11,
+	OpenedShop = 12,
+	BoughtBrush = 13,
+	Washes10 = 14,
+	Penned3 = 15,
+	StallsFull = 16,
+	Washes25 = 17,
+	AffordBarn = 18,
+	BoughtBarn = 19,
+}
+
 local CURRENCY = "Cash"
 
 local Analytics = {}
@@ -171,6 +219,84 @@ local function logStep(player: Player, step: number)
 	end
 end
 
+-- One FirstSession step, once per player (saved as F<step> in the LiveOps funnel state).
+local function firstStep(player: Player, step: number)
+	if step < 1 or step > #FIRST_STEPS or not player.Parent then
+		return
+	end
+	local key = "F" .. step
+	local mine = claimed[player]
+	if not mine then
+		mine = {}
+		claimed[player] = mine
+	end
+	if mine[key] then
+		return
+	end
+	local state = Common.state(player)
+	if not state or state.Funnel[key] then
+		if state then
+			mine[key] = true
+		end
+		return
+	end
+	mine[key] = true
+	state.Funnel[key] = true
+	PlayerDataService.markDirty(player)
+	local ok, err = pcall(function()
+		AnalyticsService:LogFunnelStepEvent(player, FIRST_SESSION, tostring(player.UserId), step, FIRST_STEPS[step])
+	end)
+	if not ok then
+		warn(`[LiveOps] FirstSession step {step} not logged: {err}`)
+	end
+end
+
+-- FirstSession steps that are counts or balances: checked on events and on the poll.
+local function checkFirstSession(player: Player)
+	local data = PlayerDataService.get(player)
+	if not data then
+		return
+	end
+	local washed = data.LifetimeAnimalsWashed
+	if washed >= 1 then
+		firstStep(player, F.Wash1)
+	end
+	if washed >= 2 then
+		firstStep(player, F.Wash2)
+	end
+	if washed >= 10 then
+		firstStep(player, F.Washes10)
+	end
+	if washed >= 25 then
+		firstStep(player, F.Washes25)
+	end
+	local penned = #data.Animals
+	if penned >= 1 then
+		firstStep(player, F.Penned)
+	end
+	if penned >= 3 then
+		firstStep(player, F.Penned3)
+	end
+	if penned >= GameConfig.Zoo.StartPens then
+		firstStep(player, F.StallsFull)
+	end
+	local brush = ToolConfig[2]
+	if data.ToolTier >= 2 or (brush and data.Coins >= brush.Price) then
+		firstStep(player, F.AffordBrush)
+	end
+	if data.ToolTier >= 2 then
+		firstStep(player, F.BoughtBrush)
+	end
+	local firstBarn = GameConfig.Zoo.Expansions[1]
+	local bought = data.ZooSize > GameConfig.Zoo.StartPens
+	if bought or (firstBarn and data.Coins >= firstBarn.Price) then
+		firstStep(player, F.AffordBarn)
+	end
+	if bought then
+		firstStep(player, F.BoughtBarn)
+	end
+end
+
 local function logSource(
 	player: Player,
 	amount: number,
@@ -229,8 +355,21 @@ function Analytics.init()
 		if not state or not data then
 			return
 		end
-		if next(state.Funnel) == nil and data.LifetimeAnimalsWashed > 0 then
-			local mine = {}
+		-- FirstSession only follows players who start after it shipped: anyone who has already
+		-- washed but never logged its first step is skipped, so they can't enter mid-funnel.
+		local noFunnelYet = next(state.Funnel) == nil
+		local skipFirst = not state.Funnel["F" .. F.Joined] and data.LifetimeAnimalsWashed > 0
+		if skipFirst then
+			local mine = claimed[player] or {}
+			claimed[player] = mine
+			for step in FIRST_STEPS do
+				state.Funnel["F" .. step] = true
+				mine["F" .. step] = true
+			end
+			PlayerDataService.markDirty(player)
+		end
+		if noFunnelYet and data.LifetimeAnimalsWashed > 0 then
+			local mine = claimed[player] or {}
 			claimed[player] = mine
 			for step in STEPS do
 				local key = "S" .. step
@@ -242,21 +381,46 @@ function Analytics.init()
 		end
 		logStep(player, 1)
 		checkProgress(player)
+		firstStep(player, F.Joined)
+		checkFirstSession(player)
+	end)
+	Hooks.on("CutsceneFinished", function(player: Player)
+		firstStep(player, F.Cutscene)
+	end)
+	Hooks.on("YardRevealed", function(player: Player)
+		firstStep(player, F.Keeper)
+	end)
+	Hooks.on("AnimalPickedUp", function(player: Player)
+		firstStep(player, F.Pickup)
+	end)
+	Hooks.on("CashCollected", function(player: Player)
+		firstStep(player, F.Collect)
+		checkFirstSession(player)
+	end)
+	-- The gear shop opens from its prompt, which fires on the server too.
+	ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, player: Player)
+		if prompt.Name == "UpgradePrompt" then
+			firstStep(player, F.OpenedShop)
+		end
 	end)
 	Hooks.on("WashStarted", function(player: Player)
 		logStep(player, 2)
+		firstStep(player, F.WashStarted)
 	end)
 	Hooks.on("WashProgress", function(player: Player)
 		logStep(player, 3)
+		firstStep(player, F.Scrub)
 	end)
 	Hooks.on("WashCompleted", function(player: Player, info: Hooks.WashInfo, reward: number)
 		logStep(player, 4)
+		checkFirstSession(player)
 		if typeof(reward) == "number" then
 			logSource(player, reward, Enum.AnalyticsEconomyTransactionType.Gameplay, "Wash:" .. info.Species)
 		end
 	end)
 	Hooks.on("AnimalPlaced", function(player: Player)
 		logStep(player, 5)
+		checkFirstSession(player)
 	end)
 	Hooks.on("AnimalSold", function(player: Player, species: string, _mutation: string, value: number)
 		if typeof(value) == "number" then
@@ -322,6 +486,7 @@ function Analytics.init()
 			for _, player in Players:GetPlayers() do
 				flushPlay(player)
 				checkProgress(player)
+				checkFirstSession(player)
 			end
 		end
 	end)

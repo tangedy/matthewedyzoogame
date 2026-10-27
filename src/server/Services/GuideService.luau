@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Hooks = require(script.Parent.Hooks)
 local PlayerDataService = require(script.Parent.PlayerDataService)
 
 local GuideService = {}
@@ -32,7 +33,9 @@ function GuideService.onWashCompleted(player: Player)
 	setStep(player, "Done")
 end
 
-function GuideService.onPickedUp(_player: Player) end
+function GuideService.onPickedUp(player: Player)
+	Hooks.fire("AnimalPickedUp", player)
+end
 
 function GuideService.onPlaced(_player: Player) end
 
