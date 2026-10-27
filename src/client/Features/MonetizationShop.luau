@@ -56,8 +56,20 @@ local KIND_ICONS: { [string]: string } = {
 	OfflineDouble = "Cash",
 }
 
--- The icon for a product or pass key (UI/Icons name).
+-- Items with their own picture, over the kind's shared one.
+local KEY_ICONS: { [string]: string } = {
+	DoubleCash = "Cash2x",
+	OfflineDouble = "Cash2x",
+	SpeedBoost = "Shoe",
+	CashMedium = "MoneyBag",
+	CashLarge = "Vault",
+}
+
+-- The icon for a product or pass key (UI/Icons name). Also used on the world kiosks.
 function MonetizationShop.iconFor(key: string): string
+	if KEY_ICONS[key] then
+		return KEY_ICONS[key]
+	end
 	if MonetizationConfig.PassesByKey[key] then
 		return "Crown"
 	end

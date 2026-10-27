@@ -23,6 +23,8 @@ local MonetizationShop = require(script.Parent.MonetizationShop)
 local Modals = require(script.Parent.Parent.UI.Modals)
 local UIPlatform = require(script.Parent.Parent.UI)
 
+local Icons = UIPlatform.Icons
+
 type ShopState = MonetizationConfig.ShopState
 
 local player = Players.LocalPlayer
@@ -275,6 +277,38 @@ end
 
 -- State -------------------------------------------------------------------------------------
 
+-- Kiosk icons: WorldBuilder leaves an empty KioskIcon billboard over each kiosk's sign.
+local kioskIcons: { [BillboardGui]: string } = {}
+
+local function fillKioskIcon(gui: BillboardGui)
+	local key = gui:GetAttribute("ProductKey")
+	if typeof(key) ~= "string" or kioskIcons[gui] then
+		return
+	end
+	kioskIcons[gui] = key
+	Icons.make(MonetizationShop.iconFor(key), gui, { outline = 3 })
+	gui.Enabled = not state.Passes[key]
+	gui.AncestryChanged:Connect(function()
+		if not gui:IsDescendantOf(Workspace) then
+			kioskIcons[gui] = nil
+		end
+	end)
+end
+
+-- An owned pass's kiosks go quiet: no icon, no prompt.
+local function refreshKiosks()
+	for gui, key in kioskIcons do
+		local owned = state.Passes[key] == true
+		gui.Enabled = not owned
+		local station = gui:FindFirstAncestorOfClass("Model")
+		local counter = station and station:FindFirstChild("Counter")
+		local prompt = counter and counter:FindFirstChild("RobuxKioskPrompt")
+		if prompt and prompt:IsA("ProximityPrompt") then
+			prompt.Enabled = not owned
+		end
+	end
+end
+
 local function applyState(value: any)
 	if typeof(value) ~= "table" then
 		return
@@ -283,6 +317,7 @@ local function applyState(value: any)
 	refreshTimers()
 	MonetizationShop.refresh(state)
 	MonetizationQuickBuy.refresh(state)
+	refreshKiosks()
 end
 
 local function requestState()
@@ -456,6 +491,17 @@ function MonetizationController.init(_initial: Types.InitialState)
 	Remotes.event("MonetizationOffer").OnClientEvent:Connect(function(kind: any, key: any)
 		if typeof(kind) == "string" and typeof(key) == "string" then
 			showOffer(kind, key)
+		end
+	end)
+
+	for _, item in Workspace:GetDescendants() do
+		if item:IsA("BillboardGui") and item.Name == "KioskIcon" then
+			fillKioskIcon(item)
+		end
+	end
+	Workspace.DescendantAdded:Connect(function(item)
+		if item:IsA("BillboardGui") and item.Name == "KioskIcon" then
+			fillKioskIcon(item)
 		end
 	end)
 

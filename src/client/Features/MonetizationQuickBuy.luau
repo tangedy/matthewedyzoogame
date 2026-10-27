@@ -6,6 +6,7 @@
 -- Kept out of the way on purpose: two buttons (three at most on desktop), its own ScreenGui under every menu
 -- (a menu's dimmer covers it), hidden for the session's first Offers.QuietSeconds and while
 -- a contextual offer is up (that popup sits in the same right-hand spot on desktop).
+-- A game pass (2x Cash) hides once owned and the first QuickBuyBackup key takes its slot.
 -- Pure view, like MonetizationShop: MonetizationController owns the state and the buy call.
 -- Part of the Monetization feature (no init of its own).
 
@@ -41,6 +42,7 @@ local MonetizationQuickBuy = {}
 local CAPTIONS: { [string]: string } = {
 	SpeedBoost = "2X SPEED",
 	AutoCollect = "AUTO CASH",
+	DoubleCash = "FOREVER",
 }
 local ACTIVE_COLOR = Color3.fromRGB(255, 230, 120)
 local CHIP_HEIGHT = 22
@@ -75,7 +77,8 @@ local function refreshVisible()
 end
 
 local function makeEntry(key: string, order: number): Entry?
-	local product = MonetizationConfig.ProductsByKey[key]
+	local product: { Robux: number, Color: Color3 }? = MonetizationConfig.ProductsByKey[key]
+		or MonetizationConfig.PassesByKey[key]
 	if not product then
 		warn(`[QuickBuy] unknown product {key}`)
 		return nil
@@ -144,9 +147,23 @@ local function makeEntry(key: string, order: number): Entry?
 	return entry
 end
 
+-- Whether this entry could be bought right now (an owned pass or an unsellable item can't).
+local function buyable(key: string, state: ShopState): boolean
+	if MonetizationConfig.PassesByKey[key] then
+		return not state.Passes[key]
+	end
+	return not state.Unavailable[key]
+end
+
 local function refreshEntry(entry: Entry, state: ShopState)
+	local pass = MonetizationConfig.PassesByKey[entry.Key]
+	if pass then
+		entry.Price.Text = tostring(pass.Robux)
+		entry.Caption.Text = CAPTIONS[entry.Key] or string.upper(pass.DisplayName)
+		entry.Caption.TextColor3 = ACTIVE_COLOR
+		return
+	end
 	local product = MonetizationConfig.ProductsByKey[entry.Key]
-	entry.Button.Visible = not state.Unavailable[entry.Key]
 	entry.Price.Text = tostring(product.Robux)
 	local now = Workspace:GetServerTimeNow()
 	local endsAt = if product.Kind == "SpeedBoost"
@@ -190,9 +207,12 @@ function MonetizationQuickBuy.build(handlers: Callbacks)
 	pad.PaddingBottom = UDim.new(0, CHIP_HEIGHT // 2 + 2)
 	pad.Parent = column
 
-	for order, key in MonetizationConfig.QuickBuy do
+	local keys = table.clone(MonetizationConfig.QuickBuy)
+	table.move(MonetizationConfig.QuickBuyBackup, 1, #MonetizationConfig.QuickBuyBackup, #keys + 1, keys)
+	for order, key in keys do
 		local entry = makeEntry(key, order)
 		if entry then
+			entry.Button.Visible = order <= #MonetizationConfig.QuickBuy
 			table.insert(entries, entry)
 		end
 	end
@@ -227,8 +247,15 @@ end
 
 function MonetizationQuickBuy.refresh(state: ShopState)
 	lastState = state
+	-- The first #QuickBuy buyable entries show, in order; backups fill in behind owned passes.
+	local slots = #MonetizationConfig.QuickBuy
 	for _, entry in entries do
-		refreshEntry(entry, state)
+		local show = slots > 0 and buyable(entry.Key, state)
+		entry.Button.Visible = show
+		if show then
+			slots -= 1
+			refreshEntry(entry, state)
+		end
 	end
 end
 

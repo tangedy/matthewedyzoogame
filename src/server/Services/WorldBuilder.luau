@@ -14,7 +14,7 @@
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
 --   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
---   RobuxKiosk{Key}.Counter        single-item Robux stands around the plot (RobuxKioskPrompt)
+--   RobuxKiosk{Key}[Gear].Counter  single-item Robux stands around the plot (RobuxKioskPrompt)
 --   AutoCleanPad.AutoCleanSign.Status  auto-wash pad beside the spawn (AutoCleanService)
 --   Zoo.Pen19 / 23 / 24  the three gargantuan yards across the back
 --   Zoo.Pen25-28   the Robux pastures, right after the starting stalls
@@ -46,7 +46,9 @@ local SIDEWALK_PAVING = Color3.fromRGB(190, 175, 150)
 local ROAD_D = -8
 local DRIVE_ARM = 14
 local YARD_D = 38
-local QUEUE_DEPTH = { YARD_D, 24, 10 } -- 1 is the wash, furthest in; 3 is the back of the queue
+-- 1 is the wash, furthest in; 3 is the back of the queue. The two waiting stand well back so
+-- the one being washed has room all round.
+local QUEUE_DEPTH = { YARD_D, 21, 6 }
 local WASH_LAT = -DRIVE_ARM
 local CACHE_LAT = DRIVE_ARM
 local SOLD_LAT = CACHE_LAT
@@ -1247,20 +1249,39 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 	model.Parent = bay
 end
 
--- Robux kiosks: single-item stands lined up with the ROBUX SHOP booth, two on each side of
--- it, all facing the plaza like one storefront. Everything else stays in the shop panel.
+-- Robux kiosks: single-item stands beside the two plaza booths, all facing the plaza.
+-- The ROBUX SHOP row is on the wash side, so 2x Cash (the 3 Robux impulse buy) stands at its
+-- road end, the kiosk nearest the wash where players spend most of their time. The gear-shop
+-- side gets cash where players come to afford a hose, and 2x Cash again at the walkway end,
+-- seen on every trip to the pens. Everything else stays in the shop panel.
 -- Holding the prompt sends its ProductKey (Monetization client); the server then shows
--- Roblox's own purchase dialog, so a stray tap never spends anything.
-type KioskSpec = { Key: string, Depth: number, Label: string }
-local KIOSK_LAT = ROBUX_BOOTH.Lateral
+-- Roblox's own purchase dialog, so a stray tap never spends anything. Each kiosk's icon
+-- floats over it (KioskIcon, filled in by the client from UI/Icons).
+type KioskSpec = { Key: string, Depth: number, Lateral: number, Label: string, Suffix: string? }
 local KIOSK_NEAR = 8 -- booth centre to the kiosk on either side of it
 local KIOSK_STEP = 6.5 -- kiosk to kiosk
+local ROBUX_LAT = ROBUX_BOOTH.Lateral
+local GEAR_SIDE_LAT = GEAR_BOOTH.Lateral
 local KIOSKS: { KioskSpec } = {
-	-- Road end of the row first.
-	{ Key = "SpeedBoost", Depth = SHOP_DEPTH - KIOSK_NEAR - KIOSK_STEP, Label = "2X SPEED" },
-	{ Key = "CashMedium", Depth = SHOP_DEPTH - KIOSK_NEAR, Label = "BAG OF CASH" },
-	{ Key = "AutoCollect2h", Depth = SHOP_DEPTH + KIOSK_NEAR, Label = "AUTO-COLLECT" },
-	{ Key = "VIPKeeper", Depth = SHOP_DEPTH + KIOSK_NEAR + KIOSK_STEP, Label = "VIP KEEPER" },
+	-- Robux row, road end first.
+	{
+		Key = "DoubleCash",
+		Depth = SHOP_DEPTH - KIOSK_NEAR - KIOSK_STEP,
+		Lateral = ROBUX_LAT,
+		Label = "2X CASH FOREVER",
+	},
+	{ Key = "SpeedBoost", Depth = SHOP_DEPTH - KIOSK_NEAR, Lateral = ROBUX_LAT, Label = "2X SPEED" },
+	{ Key = "AutoCollect2h", Depth = SHOP_DEPTH + KIOSK_NEAR, Lateral = ROBUX_LAT, Label = "AUTO-COLLECT" },
+	{ Key = "VIPKeeper", Depth = SHOP_DEPTH + KIOSK_NEAR + KIOSK_STEP, Lateral = ROBUX_LAT, Label = "VIP KEEPER" },
+	-- Gear-shop side.
+	{ Key = "CashMedium", Depth = SHOP_DEPTH - KIOSK_NEAR, Lateral = GEAR_SIDE_LAT, Label = "BAG OF CASH" },
+	{
+		Key = "DoubleCash",
+		Depth = SHOP_DEPTH + KIOSK_NEAR,
+		Lateral = GEAR_SIDE_LAT,
+		Label = "2X CASH FOREVER",
+		Suffix = "Gear",
+	},
 }
 
 local function buildKiosk(plot: PlotLayout.PlotFrame, parent: Instance, spec: KioskSpec)
@@ -1271,8 +1292,8 @@ local function buildKiosk(plot: PlotLayout.PlotFrame, parent: Instance, spec: Ki
 		return
 	end
 	local station = Instance.new("Model")
-	station.Name = "RobuxKiosk" .. spec.Key
-	local base = PlotLayout.point(plot, spec.Depth, KIOSK_LAT, 0)
+	station.Name = "RobuxKiosk" .. spec.Key .. (spec.Suffix or "")
+	local base = PlotLayout.point(plot, spec.Depth, spec.Lateral, 0)
 	-- Square to the row: every kiosk faces the walkway's line, the same way as the booth.
 	local frame = CFrame.lookAt(base, PlotLayout.point(plot, spec.Depth, 0, 0))
 	makePart({
@@ -1332,18 +1353,15 @@ local function buildKiosk(plot: PlotLayout.PlotFrame, parent: Instance, spec: Ki
 	price.Text = `R$ {item.Robux}`
 	price.Parent = gui
 	UIStyle.text(price, Color3.new(1, 1, 1), Color3.fromRGB(10, 30, 70), 2)
-	-- A glowing token in the item's colour floats over the sign.
-	makePart({
-		Name = "Token",
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.4, 1.8, 1.8),
-		CFrame = frame * CFrame.new(0, 8.8, 0.3) * CFrame.Angles(0, math.rad(90), 0),
-		Color = item.Color,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-		Parent = station,
-	})
+	-- The item's icon floats over the sign, big enough to read from across the plaza. The
+	-- icons are client UI, so the client draws it into this billboard (MonetizationController).
+	local iconGui = Instance.new("BillboardGui")
+	iconGui.Name = "KioskIcon"
+	iconGui.Size = UDim2.fromScale(3.4, 3.4)
+	iconGui.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0)
+	iconGui.MaxDistance = 140
+	iconGui:SetAttribute("ProductKey", spec.Key)
+	iconGui.Parent = board
 	local prompt = makePrompt("RobuxKioskPrompt", `Buy R$ {item.Robux}`, 0.3, counter)
 	prompt.ObjectText = item.DisplayName
 	-- Kiosks stand close together; a short reach keeps the prompt on the one you're facing.

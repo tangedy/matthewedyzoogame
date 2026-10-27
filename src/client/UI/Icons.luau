@@ -43,6 +43,8 @@ local BLUE_DEEP = Color3.fromRGB(40, 130, 230)
 local PINK = Color3.fromRGB(255, 110, 170)
 local GREY = Color3.fromRGB(200, 206, 218)
 local BROWN = Color3.fromRGB(190, 96, 52)
+local TAN = Color3.fromRGB(222, 178, 108)
+local STEEL = Color3.fromRGB(150, 158, 176)
 
 local HEX_R = 0.42 -- Robux hexagon circumradius: three R x R*sqrt(3) bars at 0/60/120 degrees
 
@@ -87,6 +89,47 @@ local SHAPES: { [string]: { Shape } } = {
 		{ x = 0.55, y = 0.58, w = 0.8, h = 0.46, color = GREEN, rot = -4, round = 0.14, z = 2 },
 		{ x = 0.55, y = 0.58, w = 0.28, h = 0.28, color = MINT, round = 0.5, bare = true, z = 3 },
 		{ x = 0.55, y = 0.585, w = 0.26, h = 0.26, color = GREEN_DEEP, text = "$", bare = true, z = 4 },
+	},
+	-- Cash with a red "2X" badge: 2x Cash Forever.
+	Cash2x = {
+		{ x = 0.4, y = 0.38, w = 0.72, h = 0.42, color = GREEN_DEEP, rot = -12, round = 0.14 },
+		{ x = 0.46, y = 0.5, w = 0.72, h = 0.42, color = GREEN, rot = -4, round = 0.14, z = 2 },
+		{ x = 0.46, y = 0.5, w = 0.24, h = 0.24, color = MINT, round = 0.5, bare = true, z = 3 },
+		{ x = 0.46, y = 0.505, w = 0.22, h = 0.22, color = GREEN_DEEP, text = "$", bare = true, z = 4 },
+		{ x = 0.72, y = 0.74, w = 0.5, h = 0.42, color = Color3.new(0, 0, 0), round = 0.5, bare = true, z = 5 },
+		{ x = 0.72, y = 0.74, w = 0.44, h = 0.36, color = RED, round = 0.5, z = 6 },
+		{ x = 0.72, y = 0.745, w = 0.34, h = 0.26, color = WHITE, text = "2X", bare = true, z = 7 },
+	},
+	MoneyBag = {
+		{ x = 0.5, y = 0.64, w = 0.74, h = 0.62, color = TAN, round = 0.5 },
+		{ x = 0.5, y = 0.3, w = 0.3, h = 0.16, color = TAN, round = 0.3 },
+		{ x = 0.37, y = 0.17, w = 0.22, h = 0.16, color = TAN, rot = -30, round = 0.4 },
+		{ x = 0.63, y = 0.17, w = 0.22, h = 0.16, color = TAN, rot = 30, round = 0.4 },
+		{ x = 0.5, y = 0.34, w = 0.38, h = 0.07, color = BROWN, round = 0.5, bare = true, z = 2 },
+		{ x = 0.5, y = 0.66, w = 0.34, h = 0.34, color = GREEN_DEEP, text = "$", bare = true, z = 3 },
+	},
+	Vault = {
+		{ x = 0.5, y = 0.5, w = 0.84, h = 0.78, color = GREY, round = 0.12 },
+		{ x = 0.25, y = 0.92, w = 0.14, h = 0.08, color = DARK },
+		{ x = 0.75, y = 0.92, w = 0.14, h = 0.08, color = DARK },
+		{ x = 0.5, y = 0.5, w = 0.66, h = 0.6, color = STEEL, round = 0.08, bare = true, z = 2 },
+		{ x = 0.5, y = 0.5, w = 0.38, h = 0.38, color = DARK, round = 0.5, bare = true, z = 3 },
+		{ x = 0.5, y = 0.5, w = 0.3, h = 0.3, color = GOLD, round = 0.5, bare = true, z = 4 },
+		{ x = 0.5, y = 0.5, w = 0.06, h = 0.26, color = GOLD_DEEP, rot = 45, bare = true, z = 5 },
+		{ x = 0.5, y = 0.5, w = 0.06, h = 0.26, color = GOLD_DEEP, rot = -45, bare = true, z = 5 },
+		{ x = 0.8, y = 0.5, w = 0.06, h = 0.2, color = DARK, round = 0.5, bare = true, z = 3 },
+	},
+	-- Winged sneaker: 2x Speed.
+	Shoe = {
+		{ x = 0.24, y = 0.4, w = 0.3, h = 0.12, color = WHITE, rot = -22, round = 0.5 },
+		{ x = 0.2, y = 0.52, w = 0.26, h = 0.1, color = WHITE, rot = -8, round = 0.5 },
+		{ x = 0.44, y = 0.5, w = 0.36, h = 0.36, color = RED, round = 0.3 },
+		{ x = 0.58, y = 0.66, w = 0.68, h = 0.26, color = RED, round = 0.45 },
+		{ x = 0.58, y = 0.8, w = 0.72, h = 0.09, color = WHITE, round = 0.5 },
+		{ x = 0.46, y = 0.46, w = 0.16, h = 0.05, color = WHITE, rot = -20, bare = true, z = 2 },
+		{ x = 0.5, y = 0.55, w = 0.16, h = 0.05, color = WHITE, rot = -20, bare = true, z = 2 },
+		{ x = 0.1, y = 0.68, w = 0.14, h = 0.05, color = WHITE, round = 0.5 },
+		{ x = 0.14, y = 0.78, w = 0.1, h = 0.05, color = WHITE, round = 0.5 },
 	},
 	Magnet = {
 		{ x = 0.29, y = 0.46, w = 0.2, h = 0.5, color = RED },

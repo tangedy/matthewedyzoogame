@@ -28,6 +28,7 @@ return {
 		HoseTier5 = 3722053246,
 	},
 	Passes = {
+		DoubleCash = 0,
 		VIPKeeper = 0,
 	},
 }

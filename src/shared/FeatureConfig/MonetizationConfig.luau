@@ -4,6 +4,7 @@
 --
 -- Permanent skips are gone: no Forever auto-collect, no Fire-Hose game pass, no forever
 -- speed. Speed and Incredible Luck are consumables with absolute expiry timestamps.
+-- The one permanent boost is 2x Cash Forever, priced as an impulse buy (3 Robux).
 --
 -- Ids live in MonetizationIds (0 until the product exists). Robux prices here are for display only: Roblox charges whatever
 -- the product is set to on the website, so keep the two in sync when the real ids go in.
@@ -207,16 +208,25 @@ local products: { Product } = {
 	},
 }
 
--- VIP is the only game pass. Forever auto-collect, the Fire-Hose skip, and forever speed
--- were removed so a purchase cannot jump the hose ladder.
+-- Forever auto-collect, the Fire-Hose skip, and forever speed were removed so a purchase
+-- cannot jump the hose ladder. 2x Cash doubles income and wash pay, never clean power.
 local passes: { Pass } = {
+	{
+		Key = "DoubleCash",
+		Id = 0,
+		Robux = 3,
+		DisplayName = "2x Cash Forever",
+		Description = "Double all cash you earn. Forever!",
+		Order = 1,
+		Color = GREEN,
+	},
 	{
 		Key = "VIPKeeper",
 		Id = 0,
 		Robux = 399,
 		DisplayName = "VIP Keeper",
 		Description = "+25% income forever and a VIP title.",
-		Order = 1,
+		Order = 2,
 		Color = GOLD,
 	},
 }
@@ -313,9 +323,10 @@ return {
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },
 	ShopColor = PINK,
 	-- One-tap buttons down the right side of the screen (MonetizationQuickBuy), top first.
-	-- Only the two cheapest buys (16 and 7), so the column fits above WASH on a phone;
-	-- everything else is in the shop.
-	QuickBuy = { "SpeedBoost", "CashSmall" },
+	-- Two at most, so the column fits above WASH on a phone; everything else is in the shop.
+	-- A pass hides once owned and the next key in QuickBuyBackup takes its place.
+	QuickBuy = { "DoubleCash", "SpeedBoost" },
+	QuickBuyBackup = { "CashSmall" },
 
 	SuperSoap = {
 		PowerMultiplier = 2, -- applied through Hooks "CleaningPower"
@@ -323,6 +334,9 @@ return {
 		MaxSeconds = 4 * 3600, -- stacking cap
 	},
 	CalmTreatSeconds = 60, -- sent with Hooks "CalmTreat"; the Tension feature freezes patience
+	DoubleCash = {
+		Multiplier = 2, -- pen income and wash pay, through Hooks "IncomeMultiplier" and "WashReward"
+	},
 	VIP = {
 		IncomeMultiplier = 1.25, -- applied through Hooks "IncomeMultiplier"
 		TagText = "VIP",

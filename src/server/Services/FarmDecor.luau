@@ -31,6 +31,8 @@ FarmDecor.SpinTag = "FarmSpin"
 FarmDecor.BobTag = "FarmBob"
 
 local FOLDER = "FarmDecor"
+local PROP_SCALE = 1.3 -- every building and prop, so they read from the road
+local FLAT = { VeggiePatch = true, WheatField = true, Pond = true, FlowerGarden = true }
 
 local WOOD = Color3.fromRGB(150, 105, 65)
 local DARK_WOOD = Color3.fromRGB(105, 70, 45)
@@ -848,6 +850,13 @@ local function buildLevel(folder: Instance, plot: PlotLayout.PlotFrame, level: n
 	m:SetAttribute("FarmLevel", level)
 	m.WorldPivot = CFrame.new(plot.Anchor)
 	LEVELS[level + 1](m, plot)
+	-- Buildings grow about their own ground pivot; the flat plots stay their size to keep
+	-- clear of the pens.
+	for _, prop in m:GetChildren() do
+		if prop:IsA("Model") and not FLAT[prop.Name] then
+			prop:ScaleTo(PROP_SCALE)
+		end
+	end
 	m.Parent = folder
 	return m
 end

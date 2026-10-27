@@ -1,6 +1,6 @@
 -- Social flex: one washed animal (three, after any Robux spend) follows the avatar,
 -- spenders get the Vip attribute (chat and leaderboards read it), and playtime or
--- washes unlock a trail and a glow on the hose. None of this changes clean power,
+-- washes unlock a trail and sparkles on the hose. None of this changes clean power,
 -- income, or tool tier.
 
 local Players = game:GetService("Players")
@@ -158,10 +158,6 @@ local function clearCosmetic(character: Model)
 	if not hose then
 		return
 	end
-	local glow = hose:FindFirstChild("FlexGlow")
-	if glow then
-		glow:Destroy()
-	end
 	local sparks = hose:FindFirstChild("FlexSparks")
 	if sparks then
 		sparks:Destroy()
@@ -205,12 +201,7 @@ local function applyCosmetic(player: Player)
 	end
 	local hose = WashTool.find(character)
 	if hose then
-		local light = Instance.new("PointLight")
-		light.Name = "FlexGlow"
-		light.Color = tier.Color
-		light.Brightness = tier.Light
-		light.Range = 8 + tier.Light * 3
-		light.Parent = hose
+		-- No PointLight: it lit up every animal the player walked up to.
 		local sparks = Instance.new("ParticleEmitter")
 		sparks.Name = "FlexSparks"
 		sparks.Texture = "rbxasset://textures/particles/sparkles_main.dds"

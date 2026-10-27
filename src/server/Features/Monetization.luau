@@ -8,7 +8,8 @@
 --     returned only after the grant is recorded and a save is queued.
 --   * Game passes: UserOwnsGamePassAsync on join (cached per session) plus
 --     PromptGamePassPurchaseFinished.
---   * Boosts plug into the core through Hooks: VIP (IncomeMultiplier),
+--   * Boosts plug into the core through Hooks: VIP (IncomeMultiplier), 2x Cash
+--     (IncomeMultiplier and WashReward),
 --     Calm Treat (fires "CalmTreat" for the Tension feature). Speed is a timed WalkSpeed buff.
 --   * Contextual offers, never in a session's first 90 seconds: Calm Treat on "PatienceLow".
 --     (Super Soap was removed; its saved seconds still drain but no longer boost anything.)
@@ -304,9 +305,18 @@ end
 local function connectHooks()
 	Hooks.modify("IncomeMultiplier", function(mult: number, player: Player)
 		if MonetizationState.ownsPass(player, "VIPKeeper") then
-			return mult * MonetizationConfig.VIP.IncomeMultiplier
+			mult *= MonetizationConfig.VIP.IncomeMultiplier
+		end
+		if MonetizationState.ownsPass(player, "DoubleCash") then
+			mult *= MonetizationConfig.DoubleCash.Multiplier
 		end
 		return mult
+	end)
+	Hooks.modify("WashReward", function(reward: number, player: Player)
+		if MonetizationState.ownsPass(player, "DoubleCash") then
+			return reward * MonetizationConfig.DoubleCash.Multiplier
+		end
+		return reward
 	end)
 
 	-- From the Tension feature, once per wash when patience drops under 20%.
