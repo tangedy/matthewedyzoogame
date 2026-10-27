@@ -1,7 +1,9 @@
--- Contextual onboarding. The opening lesson is the wash and nothing else: a rainbow
--- trail to the first pig and a "Wash me!" marker. Pens, the cache, and the hose stand
--- stay quiet until those opening washes are done. After that the trail only returns
--- for a parked delivery truck or a hose the player can already afford.
+-- Contextual onboarding. The opening lesson is the wash: a rainbow trail to the first pig
+-- and a "Wash me!" marker. Pens, the cache, and the hose stand stay quiet until those
+-- opening washes are done. Then the pen lesson (GuideStep Pen): the trail leads to the
+-- washed animal waiting in the cache, and once it's in hand, to an empty pen it fits. The
+-- guide ends when it's placed. After that the trail only returns for a parked delivery
+-- truck or a hose the player can already afford.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -59,10 +61,16 @@ local bayName: string? = nil
 local jobId: string? = nil
 local washing = false
 local progress = 0
+local animalName: string? = nil -- the washing animal, for "CLEAN THE CHICKEN"
 local shopVisitedForTier: { [number]: boolean } = {}
+local carrying: string? = nil -- label of the animal in hand
+local lastWashAt = -math.huge
+-- After a wash, the animal takes a few seconds to walk from the wash to the cache.
+local CACHE_WALK_GRACE = 8
 
 local animalMarker: BillboardGui
 local stationMarker: BillboardGui
+local lessonMarker: BillboardGui
 local trail: Folder
 local instruction: TextLabel
 local note: TextLabel
@@ -153,9 +161,73 @@ local function washTarget(bay: Instance): BasePart?
 	return if pad and pad:IsA("BasePart") then pad else nil
 end
 
+-- Where the trail leads when the mud left is on the far side of the animal. Never drawn.
+local mudSpot: Part
+local MUD_STAND_OFF = 5 -- studs out from the patch, inside even the shortest hose's reach
+local MUD_DETOUR = 3 -- studs of clearance when the trail bends round the animal
+
+-- Mud the player cannot spray from where they stand: the server only washes a patch facing
+-- the camera and within the hose's reach. With nothing left in reach, returns a spot beside
+-- the nearest remaining patch for the trail (or a bend round the animal on the way there).
+-- Nil while some mud can still be hit from here.
+local function hiddenMudSpot(bay: Instance): BasePart?
+	local animal = bay:FindFirstChild("Animal")
+	local patches = animal and animal:FindFirstChild("DirtPatches")
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local camera = Workspace.CurrentCamera
+	if not (animal and animal:IsA("Model") and patches and root and camera) then
+		return nil
+	end
+	local reach = GearLadder.get(tier, level).Range
+	local eye = camera.CFrame.Position
+	local center = animal:GetPivot().Position
+	local best: Vector3?, bestDistance = nil, math.huge
+	for _, patch in patches:GetChildren() do
+		if not (patch:IsA("BasePart") and patch.CanQuery) then
+			continue
+		end
+		local normal = patch.CFrame.RightVector -- the surface normal
+		local toEye = eye - patch.Position
+		local facing = toEye.Magnitude > 0.01 and normal:Dot(toEye.Unit) > GameConfig.PatchFacingDot
+		if facing and (patch.Position - root.Position).Magnitude <= reach then
+			return nil
+		end
+		local out = Vector3.new(normal.X, 0, normal.Z)
+		if out.Magnitude < 0.2 then
+			out = Vector3.new(patch.Position.X - center.X, 0, patch.Position.Z - center.Z)
+		end
+		if out.Magnitude < 0.05 then
+			continue
+		end
+		local stand = patch.Position + out.Unit * math.min(MUD_STAND_OFF, reach * 0.7)
+		local distance = (stand - root.Position).Magnitude
+		if distance < bestDistance then
+			best, bestDistance = stand, distance
+		end
+	end
+	if not best then
+		return nil
+	end
+	-- Behind the animal: bend round its side first, so the trail never runs through it.
+	local fromCenter = Vector3.new(root.Position.X - center.X, 0, root.Position.Z - center.Z)
+	local toStand = Vector3.new(best.X - center.X, 0, best.Z - center.Z)
+	if fromCenter.Magnitude > 0.05 and toStand.Magnitude > 0.05 and fromCenter:Dot(toStand) < 0 then
+		local side = Vector3.new(-fromCenter.Z, 0, fromCenter.X)
+		if side:Dot(toStand) < 0 then
+			side = -side
+		end
+		local size = animal:GetExtentsSize()
+		local radius = math.max(size.X, size.Z) * 0.5 + MUD_DETOUR
+		best = center + side.Unit * radius
+	end
+	mudSpot.Position = best :: Vector3
+	return mudSpot
+end
+
 -- Rainbow arrows for the first intro pig, and for the wash step if that lesson is still open.
 local function firstPigLesson(): boolean
-	if introLeft >= GameConfig.Intro.AutoSellCount then
+	if GameConfig.Intro.AutoSellCount > 0 and introLeft >= GameConfig.Intro.AutoSellCount then
 		return true
 	end
 	return guideStep == "Wash" and not tutorialCompleted
@@ -220,6 +292,69 @@ local function cutscenePlaying(): boolean
 	return gui ~= nil and gui:FindFirstChild("SpawnCutscene") ~= nil
 end
 
+local function promptOn(parent: Instance?, name: string): ProximityPrompt?
+	local prompt = parent and parent:FindFirstChild(name)
+	return if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then prompt else nil
+end
+
+-- The cached animal standing on a cache slot, for the marker over its head.
+local function cachedAnimalAt(slot: BasePart): Model?
+	local folder = slot.Parent
+	if not folder then
+		return nil
+	end
+	local best, bestDistance = nil, 4
+	for _, child in folder:GetChildren() do
+		if child:IsA("Model") and child.Name == "CachedAnimal" then
+			local distance = (child:GetPivot().Position - slot.Position).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = child, distance
+			end
+		end
+	end
+	return best
+end
+
+-- The pen lesson's target, its instruction, and what the marker over it says.
+local function penLesson(bay: Instance): (BasePart?, string?, string?)
+	if carrying then
+		-- The nearest unlocked empty pen this animal fits (its prompt says "Place").
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local zoo = bay:FindFirstChild("Zoo")
+		local best: BasePart?, bestDistance = nil, math.huge
+		for _, pen in if zoo then zoo:GetChildren() else {} do
+			local post = pen:FindFirstChild("GatePost")
+			local prompt = promptOn(post, "PenPrompt")
+			if post and post:IsA("BasePart") and prompt and prompt.ActionText == "Place" then
+				local distance = if root then (post.Position - root.Position).Magnitude else 0
+				if distance < bestDistance then
+					best, bestDistance = post, distance
+				end
+			end
+		end
+		return best, `PUT YOUR {string.upper(carrying)} IN A PEN`, "Put it here!"
+	end
+	local cache = bay:FindFirstChild("Cache")
+	for i = 1, GameConfig.Cache.Slots do
+		local slot = partNamed(cache, "Slot" .. i)
+		local pickup = promptOn(slot, "PickupPrompt")
+		if slot and pickup then
+			return slot, `PICK UP YOUR {string.upper(pickup.ObjectText)}`, "Pick me up!"
+		end
+	end
+	-- Just washed: it's still walking over, so wait for it at the cache.
+	local first = partNamed(cache, "Slot1")
+	if first and os.clock() - lastWashAt < CACHE_WALK_GRACE then
+		return first, "PICK UP YOUR NEW ANIMAL", nil
+	end
+	-- Nothing to place (the animal was sold): wash another one.
+	if progress > 0 then
+		return nil, nil, nil
+	end
+	return washTarget(bay), "WASH AN ANIMAL FOR YOUR FARM", nil
+end
+
 -- Where the trail leads right now, and the instruction shown at the top of the screen.
 local function guideTarget(): (BasePart?, string?)
 	if cutscenePlaying() then
@@ -229,12 +364,23 @@ local function guideTarget(): (BasePart?, string?)
 	if not bay then
 		return nil, nil
 	end
+	-- Mid-wash with only far-side mud left: the trail leads round the animal, on every wash.
+	if washing and progress > 0 and progress < 1 then
+		local spot = hiddenMudSpot(bay)
+		if spot then
+			return spot, if firstPigLesson() then "WALK AROUND! CLEAN THE OTHER SIDE" else nil
+		end
+	end
 	if firstPigLesson() then
-		-- Rainbow arrows and the prompt lead to the first pig. Both go away once spraying starts.
-		if progress > 0 then
+		-- Rainbow arrows and the prompt lead to the first pig and stay until it is fully clean.
+		if progress >= 1 then
 			return nil, nil
 		end
-		return washTarget(bay), "CLEAN THE PIG"
+		return washTarget(bay), `CLEAN THE {string.upper(animalName or "animal")}`
+	end
+	if guideStep == "Pen" and introLeft <= 0 then
+		local target, text = penLesson(bay)
+		return target, text
 	end
 	-- The wash lesson is the only guided step. Afterwards, point at a truck or affordable gear.
 	-- The truck gets the trail only: no text over the screen while it drives by.
@@ -345,11 +491,36 @@ local function updateTrail(dt: number)
 end
 
 local function applyGuide(step: string)
-	guideStep = if step == "Wash" then "Wash" else "Done"
+	guideStep = if step == "Wash" or step == "Pen" then step else "Done"
+end
+
+-- "Pick me up!" over the waiting animal, then "Put it here!" over the pen's gate.
+local function refreshLessonMarker()
+	local bay = bayModel()
+	local adornee: BasePart? = nil
+	local text: string? = nil
+	if bay and guideStep == "Pen" and introLeft <= 0 and not cutscenePlaying() then
+		local target, _, label = penLesson(bay)
+		if target and label then
+			text = label
+			adornee = target
+			local animal = if target.Name ~= "GatePost" then cachedAnimalAt(target) else nil
+			local head = animal and animal:FindFirstChild("Head")
+			if head and head:IsA("BasePart") then
+				adornee = head
+			end
+		end
+	end
+	local markerLabel = lessonMarker:FindFirstChildOfClass("TextLabel")
+	if markerLabel and text then
+		markerLabel.Text = text
+	end
+	lessonMarker.Adornee = adornee
+	lessonMarker.Enabled = adornee ~= nil
 end
 
 local function refreshAnimalMarker()
-	local show = firstPigLesson() and progress <= 0 and not cutscenePlaying()
+	local show = firstPigLesson() and progress < 1 and not cutscenePlaying()
 	local head: BasePart? = nil
 	if show then
 		local bay = bayModel()
@@ -383,7 +554,7 @@ local function bobMarker(marker: BillboardGui, offset: Vector3)
 end
 
 local function refreshStationMarker()
-	if guideStep == "Wash" or introLeft > 0 then
+	if guideStep ~= "Done" or introLeft > 0 then
 		stationMarker.Adornee = nil
 		stationMarker.Enabled = false
 		return
@@ -404,6 +575,11 @@ local function applyBay(bay: Types.BaySnapshot?)
 	jobId = bay.JobId
 	washing = bay.State == "Washing"
 	progress = bay.Progress or progress
+	animalName = bay.AnimalName or animalName
+	local markerLabel = animalMarker:FindFirstChildOfClass("TextLabel")
+	if markerLabel then
+		markerLabel.Text = `Clean the {string.lower(animalName or "animal")}!`
+	end
 	refreshAnimalMarker()
 end
 
@@ -444,6 +620,15 @@ local function buildGui()
 	trail = Instance.new("Folder")
 	trail.Name = "GuideTrail"
 	trail.Parent = Workspace
+	mudSpot = Instance.new("Part")
+	mudSpot.Name = "MudSpot"
+	mudSpot.Size = Vector3.new(3, 1, 3) -- the trail stops half this short of it
+	mudSpot.Anchored = true
+	mudSpot.CanCollide = false
+	mudSpot.CanTouch = false
+	mudSpot.CanQuery = false
+	mudSpot.Transparency = 1
+	mudSpot.Parent = trail
 	for _ = 1, SEGMENT_LIMIT do
 		table.insert(segments, {
 			left = trailArm("SegmentLeft"),
@@ -453,6 +638,7 @@ local function buildGui()
 
 	animalMarker = makeMarker("Clean the pig!", Color3.fromRGB(150, 230, 255))
 	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
+	lessonMarker = makeMarker("Pick me up!", Color3.fromRGB(140, 255, 150))
 end
 
 local function showNote(text: string)
@@ -490,7 +676,11 @@ function OnboardingController.init(initial: Types.InitialState)
 	Remotes.event("WashCompleted").OnClientEvent:Connect(function(_id: string, _reward: number, value: number)
 		tutorialCompleted = true
 		coins = value
+		lastWashAt = os.clock()
 		refreshAnimalMarker()
+	end)
+	Remotes.event("CarryChanged").OnClientEvent:Connect(function(info: Types.CarryInfo?)
+		carrying = if info then info.Label else nil
 	end)
 	Remotes.event("CoinsChanged").OnClientEvent:Connect(function(value: number)
 		coins = value
@@ -514,6 +704,8 @@ function OnboardingController.init(initial: Types.InitialState)
 		bobMarker(animalMarker, Vector3.new(0, 4, 0))
 		refreshStationMarker()
 		bobMarker(stationMarker, Vector3.new(0, 6, 0))
+		refreshLessonMarker()
+		bobMarker(lessonMarker, Vector3.new(0, 4, 0))
 		updateTrail(dt)
 	end)
 end

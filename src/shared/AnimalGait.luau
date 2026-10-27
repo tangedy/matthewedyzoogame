@@ -131,12 +131,14 @@ export type Segment = {
 	Dir: Vector3,
 	Span: number,
 	Travel: number, -- distance walked before this leg
+	Seconds: number, -- walking time for this leg, after the turn
 }
 
 export type Plan = {
 	Start: CFrame,
 	Points: { Vector3 },
 	Each: number,
+	Speed: number?, -- studs a second; when set, each leg takes span / Speed instead of Each
 	Bob: number,
 	At: number, -- Workspace:GetServerTimeNow() when the walk began
 	Segments: { Segment },
@@ -144,8 +146,17 @@ export type Plan = {
 }
 
 -- Turn in place toward each corner, then walk straight to it at the starting height.
--- Corners closer than 0.4 studs (flat) are skipped, as before.
-function AnimalGait.plan(start: CFrame, points: { Vector3 }, each: number, bob: number, at: number): Plan
+-- Corners closer than 0.4 studs (flat) are skipped, as before. With `speed`, legs are timed
+-- by length (a run down the street), otherwise every leg takes `each` seconds.
+function AnimalGait.plan(
+	start: CFrame,
+	points: { Vector3 },
+	each: number,
+	bob: number,
+	at: number,
+	speed: number?
+): Plan
+	local pace = if speed and speed > 0 then speed else nil
 	local segments: { Segment } = {}
 	local here = start
 	local clock = 0
@@ -159,6 +170,7 @@ function AnimalGait.plan(start: CFrame, points: { Vector3 }, each: number, bob: 
 		local dir = flat.Unit
 		local goal = Vector3.new(point.X, pos.Y, point.Z)
 		local span = (goal - pos).Magnitude
+		local seconds = if pace then math.max(span / pace, 0.15) else each
 		table.insert(segments, {
 			Start = clock,
 			TurnFrom = here,
@@ -168,8 +180,9 @@ function AnimalGait.plan(start: CFrame, points: { Vector3 }, each: number, bob: 
 			Dir = dir,
 			Span = span,
 			Travel = travel,
+			Seconds = seconds,
 		})
-		clock += AnimalGait.TURN_SECONDS + each
+		clock += AnimalGait.TURN_SECONDS + seconds
 		travel += span
 		here = CFrame.lookAt(goal, goal + dir)
 	end
@@ -177,6 +190,7 @@ function AnimalGait.plan(start: CFrame, points: { Vector3 }, each: number, bob: 
 		Start = start,
 		Points = points,
 		Each = each,
+		Speed = pace,
 		Bob = bob,
 		At = at,
 		Segments = segments,
@@ -198,10 +212,10 @@ function AnimalGait.sample(plan: Plan, t: number, gait: Gait?): (CFrame, number,
 				return seg.TurnFrom:Lerp(seg.TurnTo, localT / AnimalGait.TURN_SECONDS), seg.Travel, false
 			end
 			local elapsed = localT - AnimalGait.TURN_SECONDS
-			if elapsed >= plan.Each then
+			if elapsed >= seg.Seconds then
 				return CFrame.lookAt(seg.Goal, seg.Goal + seg.Dir), seg.Travel + seg.Span, false
 			end
-			local u = math.min(elapsed / plan.Each, 1)
+			local u = math.min(elapsed / seg.Seconds, 1)
 			local travelled = seg.Travel + seg.Span * u
 			local bob = if gait and gait.Heavy
 				then AnimalGait.stepBob(gait, travelled, plan.Bob)
@@ -231,6 +245,7 @@ function AnimalGait.encode(plan: Plan): string
 		s = { plan.Start:GetComponents() },
 		p = points,
 		e = plan.Each,
+		v = plan.Speed,
 		b = plan.Bob,
 		t = plan.At,
 	})
@@ -253,7 +268,8 @@ function AnimalGait.decode(text: any): Plan?
 		points,
 		tonumber(raw.e) or 1,
 		tonumber(raw.b) or 0.25,
-		tonumber(raw.t) or 0
+		tonumber(raw.t) or 0,
+		tonumber(raw.v)
 	)
 end
 

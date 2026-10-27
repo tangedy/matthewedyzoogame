@@ -118,7 +118,7 @@ local function patchesInSpray(job: Job, hit: BasePart, position: Vector3, direct
 		end
 		local isDirect = typeof(direct) == "string" and patch.Id == direct
 		local near = (patch.Part.Position - position).Magnitude <= radius
-		local facing = patch.Part.CFrame.RightVector:Dot(-direction) > 0.15 -- RightVector is the surface normal
+		local facing = patch.Part.CFrame.RightVector:Dot(-direction) > GameConfig.PatchFacingDot -- RightVector is the surface normal
 		if isDirect or (near and facing) then
 			table.insert(found, patch)
 		end
@@ -203,7 +203,7 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 	end
 
 	local power = Hooks.apply("CleaningPower", tool.CleaningPower, player)
-	-- A rarity above this hose (even with Super Soap) doesn't take dirt. Clean Now or a
+	-- A rarity above this hose (at its sub-tier) doesn't take dirt. Clean Now or a
 	-- better hose is the way through; letting it go is handled by BayService.
 	-- The owner's hose is the gate for the whole job: a stronger helper cannot wash an
 	-- animal the owner is not allowed to finish, or the last speck would be stuck.
@@ -433,12 +433,53 @@ function CleaningService.endJob(jobId: string)
 end
 
 -- For features: the owner's active job, if they're washing right now.
-function CleaningService.getActiveJob(player: Player): { Id: string, Model: Model, Progress: number }?
+function CleaningService.getActiveJob(player: Player): { Id: string, Model: Model, Progress: number, Rarity: string }?
 	local job = jobByOwner[player]
 	if not job or not job.Active then
 		return nil
 	end
-	return { Id = job.Id, Model = job.Model, Progress = progressOf(job) }
+	return { Id = job.Id, Model = job.Model, Progress = progressOf(job), Rarity = job.Rarity }
+end
+
+-- The auto-wash pad: takes `fraction` of the job's total starting dirt off the owner's active
+-- job, finishing it like the owner's own spray would. Patches go one after another, so they
+-- pop through the wash instead of all at the end. The caller checks the rarity gate.
+function CleaningService.autoClean(player: Player, fraction: number)
+	local job = jobByOwner[player]
+	if not job or not job.Active or fraction <= 0 then
+		return
+	end
+	local budget = 0
+	for _, patch in job.PatchList do
+		budget += patch.InitialDirt * fraction
+	end
+	for _, patch in job.PatchList do
+		if budget <= 0 then
+			break
+		end
+		if patch.RemainingDirt <= 0 then
+			continue
+		end
+		local take = math.min(patch.RemainingDirt, budget)
+		budget -= take
+		patch.RemainingDirt -= take
+		if patch.RemainingDirt / patch.InitialDirt <= 1e-3 then
+			patch.RemainingDirt = 0
+			DirtRenderer.clear(patch.Part, progressOf(job))
+		else
+			DirtRenderer.setAmount(patch.Part, patch.RemainingDirt / patch.InitialDirt)
+		end
+	end
+	local progress = progressOf(job)
+	DirtRenderer.setGrime(job.Model, progress)
+	if isComplete(job) then
+		job.Active = false -- lock before anything else so no further cleaning is accepted
+		progressChanged:FireClient(player, job.Id, 1, false)
+		task.spawn(job.OnComplete)
+	else
+		progressChanged:FireClient(player, job.Id, progress, progress >= GameConfig.HintProgress)
+		Hooks.fire("WashProgress", player, job.Id, progress)
+	end
 end
 
 -- For features (e.g. an animal shaking mud back on): makes `fraction` of the already-clean

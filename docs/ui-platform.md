@@ -15,7 +15,7 @@ Two signals, read on every change:
 
 `TouchEnabled`, `KeyboardEnabled`, and `GamepadEnabled` are not read. A touchscreen laptop reports all three as true, so they cannot decide layout.
 
-`PreferredInput` and `ViewportSize` are independent. A 900px-wide iPad with a keyboard is a **Tablet** form factor (the UI scales as a tablet) and **KeyboardAndMouse** input (no WASH button). A landscape phone is 700–930px wide but under 500px tall, so with touch input it is **Mobile**, not Tablet. A short desktop window keeps the width rule.
+`PreferredInput` and `ViewportSize` are independent. A 900px-wide iPad with a keyboard is a **Tablet** form factor (the UI scales as a tablet) and **KeyboardAndMouse** input (mouse to spray, no scrubbing). A landscape phone is 700–930px wide but under 500px tall, so with touch input it is **Mobile**, not Tablet. A short desktop window keeps the width rule.
 
 While the game is running, `PlayerGui` shows the current reading as attributes: `UIFormFactor`, `UIInputMode`, `UIScale`.
 
@@ -32,13 +32,12 @@ For every new ScreenGui under `PlayerGui`:
 
 ### Which existing guis are scaled
 
-The scaler does **not** touch every ScreenGui. `PlayerGui` also holds engine and plugin guis (`TouchGui`, `ContextActionGui`, `Freecam`). Scaling those shrinks the thumbstick, the jump button, and the WASH button lined up with it.
+The scaler does **not** touch every ScreenGui. `PlayerGui` also holds engine and plugin guis (`TouchGui`, `ContextActionGui`, `Freecam`). Scaling those shrinks the thumbstick and the jump button.
 
 | ScreenGui | Scaled | Why |
 | --- | --- | --- |
 | HUD, Shop, Index, Zoo, Onboarding, Tension, Monetization, LiveOps, LiveOpsPopups, FriendLuck, CheckIn, GuideInstruction, OverflowPrompt, PaidConfirm | Yes | Named game HUD. Child pop-scales multiply with the screen scale. |
 | SprayControls | No | The reticle position is a viewport pixel. |
-| MobileControls | No | The WASH button is sized and placed from the engine jump button, in physical pixels. |
 | TensionSplat | No | Mud blotches are sized from `ViewportSize`. |
 | LiveOpsTop | No | The storm banner is aligned to the top-bar inset. |
 | TouchGui, ContextActionGui, Freecam, Chat, BubbleChat, Backpack | Never | Engine or Studio UI. `UIPlatformInclude` does not override this. |
@@ -62,7 +61,7 @@ PlayerGui
 
 - Width 360 or below maps to **0.62**. Width 1280 or above maps to **1**. In between, a smoothstep so the ends do not kink.
 - A short window (height under 720) shrinks a little more.
-- The form factor then clamps that number: Mobile 0.55–0.80, Tablet 0.55–0.95, PC 0.55–1.00. A normal window already sits inside the clamp, so dragging across 600 or 1024 does not pop.
+- The form factor then clamps that number: Mobile 0.45–0.80 (a landscape phone lands near 0.5), Tablet 0.55–0.95, PC 0.55–1.00. A normal window already sits inside the clamp, so dragging across 600 or 1024 does not pop.
 - PC never goes above 1. The existing desktop offsets stay the size they were built at.
 - The first value is applied immediately. Later changes ease in over about 180ms on one shared heartbeat, not a tween per gui.
 
@@ -142,7 +141,7 @@ For a button a thumb has to hit (close, buy, index):
 
 `UIPlatform.ActionMap` binds through `ContextActionService`.
 
-- `PreferredInput == Touch`: the engine draws the virtual button for actions with `touch = true`. Spray is the exception: see **The WASH button** below.
+- `PreferredInput == Touch`: the engine draws the virtual button for actions with `touch = true`. Spray is the exception: see **Scrubbing on touch** below.
 - Keyboard, mouse, and gamepad: the same action name is bound to real keys, and `createTouchButton` is false, so no duplicate button is drawn.
 - A touch can also fake a mouse click. In touch mode the mouse button is not bound, so Spray does not fire twice.
 
@@ -150,8 +149,8 @@ The catalog lives in `ActionMap.Templates`:
 
 | Action | Bound now | Keyboard / mouse | Gamepad | Touch button |
 | --- | --- | --- | --- | --- |
-| Spray | Yes. `CleaningController` holds it to wash. | Left mouse | R2 | None. `UI/WashButton` draws WASH instead |
-| Interact | No. Binding it would take **E** and **ButtonX** from ProximityPrompts. | E | ButtonX | Stacked above WASH |
+| Spray | Yes. `CleaningController` holds it to wash. | Left mouse | R2 | None. The player scrubs the mud instead |
+| Interact | No. Binding it would take **E** and **ButtonX** from ProximityPrompts. | E | ButtonX | Stacked above jump |
 | Sprint | No. Binding it would take **LeftShift** and **ButtonL3** from the character controller. | Left Shift | L3 | Above the thumbstick |
 
 To turn Interact or Sprint on from a controller:
@@ -171,29 +170,30 @@ Add a new action by putting a spec next to `Spray` in `ActionMap.Templates` (`na
 
 Clicks that land on an `Active` gui (buttons, text boxes) do not start Spray. That replaces the old `gameProcessed` check on `InputBegan`.
 
-## The WASH button
+## Scrubbing on touch
 
-On touch, Spray is a custom button, not an engine action button. An engine button sinks the touch, so the finger holding it can never turn the camera. `UI/WashButton` fixes that:
+On touch there is no spray button. The player scrubs: a finger that lands on the free screen over an animal being washed is the spray, and the water follows it. `CleaningController` handles it:
 
-- It sits centred over the engine jump button, 12px above it, 1.1× its size (at least 76px). It reads `TouchGui > TouchControlFrame > JumpButton` and follows it when the engine moves or resizes it. Until that exists it uses the engine's own jump layout.
-- Holding it sprays. Dragging the same finger turns the camera: after the camera script runs, `Camera.CFrame` is rotated around `Camera.Focus`. Pitch stops at ±80°, like the default camera. Speed is `LOOK_SPEED` at the top of the file (radians per pixel), slower than the default touch camera so aiming stays fine.
-- Letting go anywhere on screen stops the water. A ring and a knob show while held, so the player sees the finger is steering.
-- It hides during the opening cutscene, and sits under every menu: the menu dimmers block it while a panel is open.
-- While an animal is waiting to be washed it is full size with a breathing ring, and a bouncing **HOLD!** shows until the first press. Otherwise it shrinks to 86% and fades, so it stays out of the way.
-- Holding it locks onto mud from much further out (`GameConfig.TouchAimAssistRadius`, 0.6 of the short side, against 0.18 for a gamepad). Holding WASH near an animal washes it without precise aiming.
+- While that finger is down the camera holds still, so rubbing never turns the view. A drag that starts off the animal (sky, floor) turns the camera as usual, and so does a second finger.
+- A finger that lands on a button, the thumbstick or jump never scrubs.
+- Touch players are put on the **Classic** camera (`Player.DevTouchCameraMode`). The phone default, Follow, swings the camera back toward its last angle every frame, which fought the scrub's camera hold.
+- The reticle only shows under the scrubbing finger.
+- For a new player's first `GameConfig.Intro.SwipeHintWashes` washes, a hand rubs back and forth over a patch of mud with **SWIPE THE DIRT!** under it, until a finger is down.
 
 ## Touch layout
 
-`UIPlatform.Layout` holds the fixed HUD positions for two cases: **Touch** (every phone and tablet, plus any Mobile-width window) and **Desktop** (keyboard or gamepad). A controller calls `Layout.watch(fn)` and places its piece from the spec it gets. The touch layout keeps the thumbs' corners empty: bottom left is the thumbstick, bottom right is jump and WASH.
+`UIPlatform.Layout` holds the fixed HUD positions for two cases: **Touch** (every phone and tablet, plus any Mobile-width window) and **Desktop** (keyboard or gamepad). A controller calls `Layout.watch(fn)` and places its piece from the spec it gets. The touch layout keeps the thumbs' corners empty: bottom left is the thumbstick, bottom right is jump.
 
 | Piece | Desktop | Touch |
 | --- | --- | --- |
 | Cash and income | Bottom left | Top left, under the top bar |
-| INDEX / DAILY / SHOP | Left middle text buttons, 170×42, 48 apart | Narrow column of 90×90 icon buttons (📖 🎁 🛒) under the cash, 100 apart (about 50px drawn) |
+| INDEX / DAILY / SHOP | Left middle text buttons, 170×42, 48 apart | Narrow column of 84×84 icon buttons (📖 🎁 🛒) under the cash, 92 apart (about 42px drawn) |
 | Boost timers | Right of the rail | Right of the icon column |
 | Invite box | Right middle | Top right |
+| Quick-buy (2x Speed, Pile of Cash) | Column above the invite box | Column down the right edge under the invite box, 76×76, clear of jump |
 | Event counter | Free part of the top bar | Same, or just under the bar when Roblox's buttons leave too little room (`GuiService.TopbarInset`) |
-| Toasts, carry PUT DOWN / SELL | 140 / 190 up from the bottom | 28 / 24 up, between the thumbstick and WASH |
+| Toasts, carry PUT DOWN / SELL | 140 / 190 up from the bottom | 28 / 24 up, between the thumbstick and jump |
+| Robux shop, index, daily | Each panel's own size | 96% × 95% of the screen (cap 1120×640); the Robux shop is always two columns |
 | Hotbar (Backpack) | Shown | Hidden: the hose re-equips itself, so the slot only covered the screen |
 
 The left-rail buttons register with `Layout.rail(button, order)`. The rail owns their position and size, and a hidden button (DAILY before it unlocks) gives its slot to the next one.
@@ -205,5 +205,5 @@ Buttons get their feel from `UIPlatform.Feedback.button(button)`: grow to 1.06 o
 1. Play with the device emulator. Changing the emulator width updates `PlayerGui.UIFormFactor` and `UIScale`.
 2. The emulator's mouse still reports `PreferredInput` as `KeyboardAndMouse`, so the Spray touch button stays hidden. Switch the emulator to touch input, or test on a phone, to see the native button.
 3. Drag the Studio window across about 600px and about 1024px wide. The HUD should ease to the new scale and not jump backward.
-4. On desktop, hold left mouse to spray and aim with the cursor. On a gamepad, hold R2 and aim with the center reticle. On touch, hold WASH, then drag the same finger to turn the camera while the water keeps flowing.
+4. On desktop, hold left mouse to spray and aim with the cursor. On a gamepad, hold R2 and aim with the center reticle. On touch, rub the mud on an animal with a finger: the water follows it and the camera holds still.
 5. Click a shop or index button with the mouse. The hose must not start spraying.

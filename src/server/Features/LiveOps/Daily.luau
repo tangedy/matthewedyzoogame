@@ -9,8 +9,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local LiveOpsConfig = require(ReplicatedStorage.Shared.FeatureConfig.LiveOpsConfig)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -35,8 +35,7 @@ local rng = Random.new()
 local function pickSpecies(player: Player): string?
 	local data = PlayerDataService.get(player)
 	local tier = if data then data.ToolTier else 1
-	local tool = ToolConfig[tier]
-	local power = if tool then tool.CleaningPower else 0
+	local power = GearLadder.power(tier, if data then data.ToolUpgrade else 0)
 	local minOrder = (RarityConfig.ByKey[Config.MinRarity] or RarityConfig.ByKey.Rare).Order
 	local keys = {}
 	for key in AnimalConfig.Animals do

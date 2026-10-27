@@ -1,5 +1,6 @@
 -- The Robux shop's UI, Steal a Brainrot style: a big pink SHOP button under INDEX and a
 -- tabbed panel (Boosts / Cash / Passes / Limited) of chunky cards with a bouncy BUY button.
+-- Every card, tab and price carries a custom icon (UI/Icons), never an emoji.
 -- Pure view: MonetizationController owns the state and sends purchases to the server.
 -- Part of the Monetization feature (no init of its own).
 
@@ -13,10 +14,12 @@ local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
 local UIPlatform = require(script.Parent.Parent.UI)
 
+local Icons = UIPlatform.Icons
+
 type ShopState = MonetizationConfig.ShopState
 
 type Card = {
-	Key: string, -- the product or pass this card shows (Super Soap swaps to its intro product)
+	Key: string, -- the product or pass this card shows (swaps to an intro product while one is unused)
 	Tab: string,
 	Order: number,
 	Frame: Frame,
@@ -35,6 +38,32 @@ export type Callbacks = {
 }
 
 local MonetizationShop = {}
+
+local TAB_ICONS: { [string]: string } = {
+	Boosts = "Bolt",
+	Cash = "Cash",
+	Passes = "Crown",
+	Limited = "Sparkle",
+}
+
+local KIND_ICONS: { [string]: string } = {
+	SpeedBoost = "Bolt",
+	AutoCollect = "Magnet",
+	Cash = "Cash",
+	CalmTreat = "Heart",
+	Limited = "Sparkle",
+	CleanNow = "Drop",
+	OfflineDouble = "Cash",
+}
+
+-- The icon for a product or pass key (UI/Icons name).
+function MonetizationShop.iconFor(key: string): string
+	if MonetizationConfig.PassesByKey[key] then
+		return "Crown"
+	end
+	local product = MonetizationConfig.ProductsByKey[key]
+	return product and KIND_ICONS[product.Kind] or "Sparkle"
+end
 
 -- Every card here spends Robux, so BUY is the shared Robux gold (UIStyle.Colors).
 local BUY_COLOR = UIStyle.Colors.Robux
@@ -117,15 +146,31 @@ local function makeCard(key: string, tab: string, order: number, color: Color3):
 	gradient.Color = ColorSequence.new(color, shade(color, 0.45))
 	gradient.Parent = frame
 
-	local name = textLabel(frame, { Position = UDim2.fromOffset(8, 6), Size = UDim2.new(1, -16, 0, 28) }, nil, 3)
+	local badge = Instance.new("Frame")
+	badge.Name = "Badge"
+	badge.Position = UDim2.fromOffset(6, 4)
+	badge.Size = UDim2.fromOffset(42, 42)
+	badge.BackgroundTransparency = 1
+	badge.Parent = frame
+	Icons.make(MonetizationShop.iconFor(key), badge, { outline = 2.5 })
+
+	local name = textLabel(frame, {
+		Position = UDim2.fromOffset(52, 8),
+		Size = UDim2.new(1, -58, 0, 26),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, nil, 3)
 	local rarity: TextLabel? = nil
 	local product = MonetizationConfig.ProductsByKey[key]
 	local species = product and product.Species
 	if species and AnimalConfig.Animals[species] then
-		rarity = textLabel(frame, { Position = UDim2.fromOffset(8, 34), Size = UDim2.new(1, -16, 0, 18) })
+		rarity = textLabel(frame, {
+			Position = UDim2.fromOffset(52, 34),
+			Size = UDim2.new(1, -58, 0, 16),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
 		UIStyle.rarity(rarity :: TextLabel, AnimalConfig.Animals[species].Rarity)
 	end
-	local descTop = if rarity then 54 else 36
+	local descTop = if rarity then 54 else 50
 	local description = textLabel(frame, {
 		Position = UDim2.fromOffset(10, descTop),
 		Size = UDim2.new(1, -20, 0, 92 - descTop),
@@ -135,9 +180,18 @@ local function makeCard(key: string, tab: string, order: number, color: Color3):
 	limit.MaxTextSize = 17
 	limit.Parent = description
 	local status = textLabel(frame, { Position = UDim2.fromOffset(8, 94), Size = UDim2.new(1, -16, 0, 24) })
+	-- Robux icon, then the number, centred together as one price tag.
+	local robux = Instance.new("Frame")
+	robux.AnchorPoint = Vector2.new(1, 0.5)
+	robux.Position = UDim2.new(0.5, -10, 0, 132)
+	robux.Size = UDim2.fromOffset(26, 26)
+	robux.BackgroundTransparency = 1
+	robux.Parent = frame
+	Icons.make("Robux", robux, { outline = 2 })
 	local price = textLabel(frame, {
-		Position = UDim2.fromOffset(8, 120),
-		Size = UDim2.new(1, -16, 0, 24),
+		Position = UDim2.new(0.5, -6, 0, 120),
+		Size = UDim2.new(0.5, -2, 0, 24),
+		TextXAlignment = Enum.TextXAlignment.Left,
 	}, UIStyle.RobuxTextColor)
 	local buy, buyScale = chunkyButton(frame, BUY_COLOR, "BUY")
 	buy.AnchorPoint = Vector2.new(0.5, 1)
@@ -175,7 +229,7 @@ local function refreshCard(card: Card, state: ShopState)
 	local statusColor = Color3.new(1, 1, 1)
 	local pass = MonetizationConfig.PassesByKey[card.Key]
 	local product = MonetizationConfig.ProductsByKey[card.Key]
-	-- Super Soap shows its cheaper intro product until that has been used.
+	-- A product with an intro price shows that cheaper product until it has been used.
 	if product and product.IntroKey and not state.Once[product.IntroKey] then
 		card.Key = product.IntroKey
 		product = MonetizationConfig.ProductsByKey[product.IntroKey]
@@ -194,7 +248,7 @@ local function refreshCard(card: Card, state: ShopState)
 		else pass :: MonetizationConfig.Pass
 	card.Name.Text = info.DisplayName
 	card.Description.Text = info.Description
-	card.Price.Text = `R$ {info.Robux}`
+	card.Price.Text = tostring(info.Robux)
 
 	if pass then
 		if state.Passes[pass.Key] then
@@ -204,10 +258,7 @@ local function refreshCard(card: Card, state: ShopState)
 			statusColor = OWNED_COLOR
 		end
 	elseif product then
-		if product.Kind == "SuperSoap" and state.SoapEndsAt > 0 then
-			statusText = `ACTIVE {clock(state.SoapEndsAt - Workspace:GetServerTimeNow())}`
-			statusColor = Color3.fromRGB(150, 230, 255)
-		elseif product.Kind == "SpeedBoost" and (state.SpeedEndsAt or 0) > Workspace:GetServerTimeNow() then
+		if product.Kind == "SpeedBoost" and (state.SpeedEndsAt or 0) > Workspace:GetServerTimeNow() then
 			statusText = `ACTIVE {clock(state.SpeedEndsAt - Workspace:GetServerTimeNow())}`
 			statusColor = Color3.fromRGB(255, 170, 80)
 		elseif product.Kind == "AutoCollect" and state.AutoCollectEndsAt > Workspace:GetServerTimeNow() then
@@ -249,9 +300,12 @@ local function refreshCard(card: Card, state: ShopState)
 	card.Buy.BackgroundColor3 = if buyable then BUY_COLOR elseif buyText == "OWNED" then OWNED_COLOR else DISABLED_COLOR
 end
 
+-- Columns are worked out in design units (the cell size is one). Touch always gets two
+-- columns that fill the panel; desktop fits as many 200-wide cards as it can, up to three.
 local function relayout()
-	local width = grid.AbsoluteSize.X - 10
-	local columns = math.clamp(math.floor(width / 200), 1, 3)
+	local width = UIPlatform.Layout.designSize(grid).X - 14 -- padding and scroll bar
+	local fixed = UIPlatform.Layout.get().panel.columns
+	local columns = fixed or math.clamp(math.floor(width / 200), 1, 3)
 	local cellWidth = math.floor((width - (columns - 1) * 10) / columns)
 	gridLayout.CellSize = UDim2.fromOffset(math.max(cellWidth, 140), 206)
 end
@@ -277,7 +331,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	shopButton = button
 	shopButton.Name = "ShopButton"
 	shopButton.ZIndex = 10
-	UIPlatform.Layout.rail(shopButton, 3, "🛒")
+	UIPlatform.Layout.rail(shopButton, 3, "Cart")
 	UIPlatform.Feedback.button(shopButton)
 	shopButton.BackgroundColor3 = Color3.new(1, 1, 1)
 	local buttonGradient = Instance.new("UIGradient")
@@ -314,9 +368,7 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	dim = Modals.dim(gui, MonetizationShop.close)
 	Modals.bind("RobuxShop", MonetizationShop.close)
 	UIStyle.border(panel, 4)
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(680, 480)
-	constraint.Parent = panel
+	UIPlatform.Layout.panel(panel)
 	panelScale = Instance.new("UIScale")
 	panelScale.Parent = panel
 
@@ -335,10 +387,12 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -10, 0, 8)
 	close.Size = UDim2.fromOffset(44, 44)
-	close.Activated:Connect(function()
+	local function closeShop()
 		pop(closeScale, 0.8, 0.2)
 		MonetizationShop.close()
-	end)
+	end
+	close.Activated:Connect(closeShop)
+	UIPlatform.Layout.closeTarget(close, closeShop)
 
 	local tabs = Instance.new("Frame")
 	tabs.Position = UDim2.fromOffset(12, 58)
@@ -354,6 +408,17 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 		local tabButton, tabScale = chunkyButton(tabs, TAB_COLOR, string.upper(tab))
 		tabButton.LayoutOrder = i
 		tabButton.Size = UDim2.new(1 / #MonetizationConfig.Tabs, -6, 1, 0)
+		-- Icon on the left. The button's padding also moves children, so the icon's
+		-- offset takes the wider left padding back off.
+		local tabPad = tabButton:FindFirstChildOfClass("UIPadding") :: UIPadding
+		tabPad.PaddingLeft = UDim.new(0, 38)
+		local tabIcon = Instance.new("Frame")
+		tabIcon.AnchorPoint = Vector2.new(0, 0.5)
+		tabIcon.Position = UDim2.new(0, 6 - 38, 0.5, 0)
+		tabIcon.Size = UDim2.fromOffset(30, 30)
+		tabIcon.BackgroundTransparency = 1
+		tabIcon.Parent = tabButton
+		Icons.make(TAB_ICONS[tab] or "Sparkle", tabIcon, { outline = 2 })
 		tabButton.Activated:Connect(function()
 			pop(tabScale, 0.85, 0.25)
 			showTab(tab)
@@ -379,6 +444,11 @@ function MonetizationShop.build(gui: ScreenGui, handlers: Callbacks)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
 	grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	UIPlatform.Layout.watch(function()
+		if gridLayout then
+			relayout()
+		end
+	end)
 
 	testLabel = textLabel(panel, {
 		AnchorPoint = Vector2.new(0.5, 1),

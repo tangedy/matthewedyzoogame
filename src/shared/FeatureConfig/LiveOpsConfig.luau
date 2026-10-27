@@ -1,4 +1,4 @@
-gkt -- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
+-- Tuning for the retention and live-ops systems (src/server/Features/LiveOps): the Daily Dirty
 -- Animal, the five-minute rare guarantee, the seven-day check-in, the scheduled Mud Storm,
 -- offline earnings, the zoo star rating, leaderstats and the plaza leaderboard, and the
 -- analytics funnel. All times are UTC so every server agrees.
@@ -113,7 +113,7 @@ local LiveOpsConfig = {
 	},
 
 	Board = {
-		Position = Vector3.new(0, 0, -350), -- south end of the road, clear of the eight plots
+		Position = Vector3.new(0, 0, 0), -- middle of the world: centre of the road, between the plots
 		Size = Vector3.new(0.6, 9, 13),
 		Height = 3, -- gap under the board
 		Rows = 8,

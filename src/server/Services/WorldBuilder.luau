@@ -5,7 +5,7 @@
 --   -> three gargantuan yards across the back.
 --
 -- Each bay exposes:
---   Approach, TurnIn, WashPosition, Queue2, Queue3, RoadReturn, Exit
+--   Approach, TurnIn, WashPosition, Queue2, Queue3, RoadReturn, Exit, StreetEnd
 --   Spawn                          the owner's SpawnLocation
 --   Showcase.SignPost.Sign.BayLabel   owner name over the podium (Income.IncomeLabel, ShowcaseSlot)
 --   UpgradeStation.Counter         hose shop prompt
@@ -13,7 +13,9 @@
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
---   RobuxShop.Counter              Robux shop prompt (+ auto-collect, Monetization)
+--   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
+--   RobuxKiosk{Key}.Counter        single-item Robux stands around the plot (RobuxKioskPrompt)
+--   AutoCleanPad.AutoCleanSign.Status  auto-wash pad beside the spawn (AutoCleanService)
 --   Zoo.Pen19 / 23 / 24  the three gargantuan yards across the back
 --   Zoo.Pen25-28   the Robux pastures, right after the starting stalls
 
@@ -23,6 +25,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
+local PenTiers = require(ReplicatedStorage.Shared.PenTiers)
 local PlotLayout = require(ReplicatedStorage.Shared.PlotLayout)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
@@ -31,10 +35,10 @@ local WorldBuilder = {}
 local folder: Folder
 
 local FLOOR_Y = 0.5
-local WOOD = Color3.fromRGB(150, 110, 70)
 -- The dirt drive animals walk in on, out to the wash and back past the cache.
 local PATH_DIRT = Color3.fromRGB(176, 132, 86)
 local PATH_EDGE = Color3.fromRGB(140, 102, 66)
+local SIDEWALK_PAVING = Color3.fromRGB(190, 175, 150)
 
 -- Depths measured from the road edge, away from the street.
 -- A U driveway: the left arm is the wash queue, the right arm is the cache, and a
@@ -56,7 +60,10 @@ local PLAZA_DEPTH = 52 -- centre of the hub plaza
 local PLAZA_HALF_DEPTH = 8
 local PLAZA_HALF_LAT = 22
 local WALK_HALF = GameConfig.SidewalkWidth / 2
-local PEN_INNER = WALK_HALF + 1 -- side pens' inner edge, just off the walkway
+-- Side pens' inner edge: a strip of grass between the walkway and the fences, crossed by a
+-- short paved path to each gate.
+local PEN_SETBACK = 4
+local PEN_INNER = WALK_HALF + PEN_SETBACK
 local PEN_GAP = 2 -- between pens on one side
 local GROUP_GAP = 6 -- between unlock groups; the next group's unlock stand stands in it
 local FIRST_PEN = PLAZA_DEPTH + PLAZA_HALF_DEPTH + 2
@@ -303,7 +310,7 @@ end
 -- arm on the road, with the fire truck at TruckSpot beside it; the showcase podium mirrors it.
 local SHOP_DEPTH = PLAZA_DEPTH
 local SHOP_LAT = PLAZA_HALF_LAT + 6
-local GEAR_DEPTH = 30
+local GEAR_DEPTH = 27 -- clear of the Robux kiosk row behind it
 local GEAR_LAT = WASH_LAT - 15
 
 type BoothSpec = {
@@ -318,6 +325,7 @@ type BoothSpec = {
 	PromptName: string,
 	PromptAction: string,
 	PromptObject: string,
+	Hold: number, -- seconds; the Robux booth needs a short hold so walking past never opens it
 	Keeper: string,
 }
 
@@ -333,10 +341,11 @@ local GEAR_BOOTH: BoothSpec = {
 	PromptName = "UpgradePrompt",
 	PromptAction = "Upgrade Gear",
 	PromptObject = "Gear Shop",
+	Hold = 0,
 	Keeper = "Shop",
 }
 
--- Every Robux purchase in the world lives here (Monetization adds the auto-collect prompt).
+-- The full Robux shop panel opens here; a few items also have their own kiosks (KIOSKS).
 local ROBUX_BOOTH: BoothSpec = {
 	Name = "RobuxShop",
 	Lateral = -SHOP_LAT,
@@ -349,6 +358,7 @@ local ROBUX_BOOTH: BoothSpec = {
 	PromptName = "RobuxShopPrompt",
 	PromptAction = "Open Robux Shop",
 	PromptObject = "Robux Shop",
+	Hold = 0.3,
 	Keeper = "Robux Shop",
 }
 
@@ -565,7 +575,7 @@ local function buildBooth(plot: PlotLayout.PlotFrame, parent: Instance, spec: Bo
 	)
 	block("Hook2", Vector3.new(0.3, 2, 0.4), CFrame.new(0, 6, 3.3), Color3.fromRGB(170, 115, 60), { CanQuery = false })
 	block("Hook3", Vector3.new(0.5, 0.5, 1.6), CFrame.new(2.6, 6, 3.1), spec.Stripe, { CanQuery = false })
-	local prompt = makePrompt(spec.PromptName, spec.PromptAction, 0, counter)
+	local prompt = makePrompt(spec.PromptName, spec.PromptAction, spec.Hold, counter)
 	prompt.ObjectText = spec.PromptObject
 	prompt.MaxActivationDistance = 12
 	station.Parent = parent
@@ -643,8 +653,9 @@ local function addPenPrompts(
 	makeMarker("Gate", CFrame.lookAt(gate, gate + look), pen)
 	local post = makePart({
 		Name = "GatePost",
-		Size = Vector3.new(0.6, 3.5, 0.6),
-		Position = gate + Vector3.new(0, 1.75, 0) + plot.Right * 1.6,
+		-- Short, so the action card it carries floats low, near the animals' feet.
+		Size = Vector3.new(0.6, 1, 0.6),
+		Position = gate + Vector3.new(0, 0.5, 0) + plot.Right * 1.6,
 		-- Only carries the prompts; never seen.
 		Transparency = 1,
 		CanCollide = false,
@@ -662,8 +673,12 @@ local function addPenPrompts(
 	pet.Enabled = false
 	-- Collect pad sits on the path in front of the cage, not inside it.
 	local facingRoad = math.abs(look:Dot(plot.Look)) > 0.5
+	local branch = pen:FindFirstChild("GatePath") :: BasePart?
 	local padPos
-	if facingRoad then
+	if branch then
+		-- On the paved branch between the walkway and the gate, right at the pen.
+		padPos = Vector3.new(branch.Position.X, 0.3, branch.Position.Z)
+	elseif facingRoad then
 		padPos = gate + look * 2.2
 	else
 		-- Side pens: on the walkway's edge, level with the pen, so walking it collects.
@@ -713,6 +728,8 @@ local function buildFencedPen(
 	local h = math.clamp(latSize * 0.28, 3.5, 8) * heightScale
 	pen:SetAttribute("FenceHeight", h)
 	local y = h / 2
+	-- Fence wood by how much cash the pen's pad holds: oak, redwood, golden, royal.
+	local wood = PenTiers.forClass(pen:GetAttribute("PenClass") :: string?).Wood
 	local halfD, halfL = depthSize / 2, latSize / 2
 	local gate = if math.min(depthSize, latSize) <= 10 then 3 else 4
 	-- Back and sides are solid. The front, toward `look`, is split around a gate.
@@ -728,7 +745,7 @@ local function buildFencedPen(
 			Name = "Fence",
 			Size = Vector3.new(0.4, h, latSize),
 			Position = PlotLayout.point(plot, backDepth, lateral, y),
-			Color = WOOD,
+			Color = wood,
 			Material = Enum.Material.Wood,
 			CanQuery = false,
 			Parent = pen,
@@ -738,7 +755,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(depthSize, h, 0.4),
 				Position = PlotLayout.point(plot, depth, lateral + edge * halfL, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -750,7 +767,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(0.4, h, sideW),
 				Position = PlotLayout.point(plot, frontDepth, lateral + edge * (gate / 2 + sideW / 2), y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -763,7 +780,7 @@ local function buildFencedPen(
 			Name = "Fence",
 			Size = Vector3.new(depthSize, h, 0.4),
 			Position = PlotLayout.point(plot, depth, lateral + sign * halfL, y),
-			Color = WOOD,
+			Color = wood,
 			Material = Enum.Material.Wood,
 			CanQuery = false,
 			Parent = pen,
@@ -773,7 +790,7 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(0.4, h, latSize),
 				Position = PlotLayout.point(plot, depth + edge * halfD, lateral, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
 				CanQuery = false,
 				Parent = pen,
@@ -785,8 +802,21 @@ local function buildFencedPen(
 				Name = "Fence",
 				Size = Vector3.new(sideW, h, 0.4),
 				Position = PlotLayout.point(plot, depth + edge * (gate / 2 + sideW / 2), frontLat, y),
-				Color = WOOD,
+				Color = wood,
 				Material = Enum.Material.Wood,
+				CanQuery = false,
+				Parent = pen,
+			})
+		end
+		-- Paving from the walkway's edge to the gate, across the setback grass.
+		local gap = math.abs(frontLat) - WALK_HALF
+		if gap > 0.5 then
+			makePart({
+				Name = "GatePath",
+				Size = Vector3.new(gate + 1, 0.35, gap),
+				Position = PlotLayout.point(plot, depth, sign * (WALK_HALF + gap / 2), 0.2),
+				Color = SIDEWALK_PAVING,
+				Material = Enum.Material.Cobblestone,
 				CanQuery = false,
 				Parent = pen,
 			})
@@ -982,8 +1012,17 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 		local pos = PlotLayout.point(plot, depth, lateral, FLOOR_Y)
 		return CFrame.lookAt(pos, pos + plot.Right)
 	end
-	makeMarker("Approach", alongRoad(ROAD_D, WASH_LAT - 22), bay)
-	-- On the street in line with the wash arm, at the same depth as Approach: arrivals walk
+	-- The far end of Main Street on the wash-arm side, in this farm's lane: new animals appear
+	-- here and run the whole street to the driveway. StreetEnd is the other end, where sold and
+	-- let-go animals run off to. GameConfig.StreetRun.StreetEnd is how far along the road.
+	local lane = PlotLayout.point(plot, ROAD_D, 0, FLOOR_Y)
+	local reach = GameConfig.StreetRun.StreetEnd
+	local inZ = if plot.Right.Z < 0 then reach else -reach -- the end behind the wash arm
+	local startPos = Vector3.new(lane.X, FLOOR_Y, inZ)
+	makeMarker("Approach", CFrame.lookAt(startPos, startPos + plot.Right), bay)
+	local endPos = Vector3.new(lane.X, FLOOR_Y, -inZ)
+	makeMarker("StreetEnd", CFrame.lookAt(endPos, endPos + plot.Right), bay)
+	-- On the street in line with the wash arm, in the same lane as Approach: arrivals run
 	-- along the road, turn here, and go straight up the arm instead of cutting the corner.
 	local turn = PlotLayout.point(plot, ROAD_D, WASH_LAT, FLOOR_Y)
 	makeMarker("TurnIn", CFrame.lookAt(turn, turn + plot.Back), bay)
@@ -1003,7 +1042,7 @@ end
 
 -- The hub plaza behind the drive, and the walkway from it to the back row.
 local function buildSidewalk(plot: PlotLayout.PlotFrame, bay: Model)
-	local paving = Color3.fromRGB(190, 175, 150)
+	local paving = SIDEWALK_PAVING
 	makePart({
 		Name = "Plaza",
 		Size = Vector3.new(PLAZA_HALF_DEPTH * 2, 0.35, PLAZA_HALF_LAT * 2),
@@ -1090,6 +1129,181 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 	model.Parent = bay
 end
 
+-- Robux kiosks: single-item stands lined up with the ROBUX SHOP booth, two on each side of
+-- it, all facing the plaza like one storefront. Everything else stays in the shop panel.
+-- Holding the prompt sends its ProductKey (Monetization client); the server then shows
+-- Roblox's own purchase dialog, so a stray tap never spends anything.
+type KioskSpec = { Key: string, Depth: number, Label: string }
+local KIOSK_LAT = ROBUX_BOOTH.Lateral
+local KIOSK_NEAR = 8 -- booth centre to the kiosk on either side of it
+local KIOSK_STEP = 6.5 -- kiosk to kiosk
+local KIOSKS: { KioskSpec } = {
+	-- Road end of the row first.
+	{ Key = "SpeedBoost", Depth = SHOP_DEPTH - KIOSK_NEAR - KIOSK_STEP, Label = "2X SPEED" },
+	{ Key = "CashMedium", Depth = SHOP_DEPTH - KIOSK_NEAR, Label = "BAG OF CASH" },
+	{ Key = "AutoCollect2h", Depth = SHOP_DEPTH + KIOSK_NEAR, Label = "AUTO-COLLECT" },
+	{ Key = "VIPKeeper", Depth = SHOP_DEPTH + KIOSK_NEAR + KIOSK_STEP, Label = "VIP KEEPER" },
+}
+
+local function buildKiosk(plot: PlotLayout.PlotFrame, parent: Instance, spec: KioskSpec)
+	local item: { Robux: number, DisplayName: string, Color: Color3 }? = MonetizationConfig.ProductsByKey[spec.Key]
+		or MonetizationConfig.PassesByKey[spec.Key]
+	if not item then
+		warn(`[WorldBuilder] No Robux item {spec.Key} for a kiosk`)
+		return
+	end
+	local station = Instance.new("Model")
+	station.Name = "RobuxKiosk" .. spec.Key
+	local base = PlotLayout.point(plot, spec.Depth, KIOSK_LAT, 0)
+	-- Square to the row: every kiosk faces the walkway's line, the same way as the booth.
+	local frame = CFrame.lookAt(base, PlotLayout.point(plot, spec.Depth, 0, 0))
+	makePart({
+		Name = "Pedestal",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.6, 5, 5),
+		CFrame = frame * CFrame.new(0, 0.3, 0) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = Color3.fromRGB(245, 245, 240),
+		Parent = station,
+	})
+	local counter = makePart({
+		Name = "Counter",
+		Size = Vector3.new(3.4, 3, 1.6),
+		CFrame = frame * CFrame.new(0, 2.1, 0),
+		Color = UIStyle.Colors.Robux,
+		Parent = station,
+	})
+	-- A sign board on two posts over the counter. World-space text, so neighbouring kiosks'
+	-- names never pile up over each other the way billboards did.
+	for _, side in { -1, 1 } do
+		makePart({
+			Name = "SignPost",
+			Size = Vector3.new(0.25, 2.3, 0.25),
+			-- Behind the board, so no face shares its plane.
+			CFrame = frame * CFrame.new(side * 1.9, 4.75, 0.5),
+			Color = Color3.fromRGB(245, 245, 240),
+			CanQuery = false,
+			Parent = station,
+		})
+	end
+	local board = makePart({
+		Name = "Sign",
+		Size = Vector3.new(4.6, 2.3, 0.3),
+		CFrame = frame * CFrame.new(0, 6.6, 0.3),
+		Color = ROBUX_BOOTH.Sign, -- the booth's sign blue, so the row reads as one storefront
+		CanQuery = false,
+		Parent = station,
+	})
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.Parent = board
+	local name = Instance.new("TextLabel")
+	name.Name = "ItemName"
+	name.Position = UDim2.fromScale(0.04, 0.06)
+	name.Size = UDim2.fromScale(0.92, 0.5)
+	name.BackgroundTransparency = 1
+	name.Text = spec.Label
+	name.Parent = gui
+	UIStyle.text(name, item.Color, Color3.fromRGB(10, 30, 70), 2)
+	local price = Instance.new("TextLabel")
+	price.Name = "Price"
+	price.Position = UDim2.fromScale(0.15, 0.56)
+	price.Size = UDim2.fromScale(0.7, 0.38)
+	price.BackgroundTransparency = 1
+	price.Text = `R$ {item.Robux}`
+	price.Parent = gui
+	UIStyle.text(price, Color3.new(1, 1, 1), Color3.fromRGB(10, 30, 70), 2)
+	-- A glowing token in the item's colour floats over the sign.
+	makePart({
+		Name = "Token",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.4, 1.8, 1.8),
+		CFrame = frame * CFrame.new(0, 8.8, 0.3) * CFrame.Angles(0, math.rad(90), 0),
+		Color = item.Color,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		CanQuery = false,
+		Parent = station,
+	})
+	local prompt = makePrompt("RobuxKioskPrompt", `Buy R$ {item.Robux}`, 0.3, counter)
+	prompt.ObjectText = item.DisplayName
+	-- Kiosks stand close together; a short reach keeps the prompt on the one you're facing.
+	prompt.MaxActivationDistance = 6
+	prompt:SetAttribute("ProductKey", spec.Key)
+	station.Parent = parent
+end
+
+local function buildKiosks(plot: PlotLayout.PlotFrame, bay: Model)
+	for _, spec in KIOSKS do
+		buildKiosk(plot, bay, spec)
+	end
+end
+
+-- The auto-wash pad: on the plaza beside the spawn, on the wash arm's side. AutoCleanService
+-- washes the front animal while the owner stands on it and writes AutoCleanSign.Status.
+local AUTO_PAD_LAT = -12
+local AUTO_PAD_COLOR = Color3.fromRGB(70, 200, 255)
+local function buildAutoCleanPad(plot: PlotLayout.PlotFrame, bay: Model)
+	local size = GameConfig.AutoClean.PadSize
+	local pos = PlotLayout.point(plot, PLAZA_DEPTH, AUTO_PAD_LAT, 0.42)
+	local frame = CFrame.lookAt(pos, PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_LAT, 0.42))
+	makePart({
+		Name = "AutoCleanRim",
+		Size = Vector3.new(size + 1, 0.12, size + 1),
+		CFrame = frame * CFrame.new(0, -0.04, 0),
+		Color = Color3.new(1, 1, 1),
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Parent = bay,
+	})
+	local pad = makePart({
+		Name = "AutoCleanPad",
+		Size = Vector3.new(size, 0.16, size),
+		CFrame = frame,
+		Color = AUTO_PAD_COLOR,
+		Material = Enum.Material.Neon,
+		Transparency = 0.35,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Parent = bay,
+	})
+	local bubbles = Instance.new("ParticleEmitter")
+	bubbles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	bubbles.Color = ColorSequence.new(Color3.fromRGB(200, 240, 255))
+	bubbles.Size = NumberSequence.new(0.5, 0)
+	bubbles.Lifetime = NumberRange.new(1, 1.6)
+	bubbles.Rate = 6
+	bubbles.Speed = NumberRange.new(1.5, 3)
+	bubbles.EmissionDirection = Enum.NormalId.Top
+	bubbles.LightEmission = 0.6
+	bubbles.Parent = pad
+	stampDecor(bubbles, true)
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "AutoCleanSign"
+	gui.Size = UDim2.fromOffset(260, 64)
+	gui.StudsOffset = Vector3.new(0, 6, 0)
+	gui.MaxDistance = 60
+	gui.Parent = pad
+	stampDecor(gui, true)
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.fromScale(1, 0.58)
+	title.Text = "AUTO WASH"
+	title.Parent = gui
+	UIStyle.text(title, AUTO_PAD_COLOR)
+	local status = Instance.new("TextLabel")
+	status.Name = "Status"
+	status.Position = UDim2.fromScale(0, 0.6)
+	status.Size = UDim2.fromScale(1, 0.4)
+	status.Text = "Stand here to wash hands-free"
+	status.Parent = gui
+	UIStyle.text(status)
+end
+
 function WorldBuilder.buildBay(index: number): Model
 	local plot = PlotLayout.frame(index)
 	local bay = Instance.new("Model")
@@ -1101,6 +1315,8 @@ function WorldBuilder.buildBay(index: number): Model
 	buildZoo(plot, bay)
 	buildSidewalk(plot, bay)
 	buildShowcase(plot, bay)
+	buildKiosks(plot, bay)
+	buildAutoCleanPad(plot, bay)
 
 	-- In the middle of the hub plaza, facing the wash.
 	local spawnPos = PlotLayout.point(plot, PLAZA_DEPTH, 0, FLOOR_Y)

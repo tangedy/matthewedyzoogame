@@ -91,8 +91,6 @@ local AnimalConfig = {
 	} :: { [string]: AnimalDefinition },
 }
 AnimalConfig.Animals.TRex.TemplateName = "TRex"
--- A magic fox: no hose alone gets the mud off. It needs the Foam Cannon and Super Soap.
-AnimalConfig.Animals.Kitsune.RequiresSoap = true
 -- Its spread wings are far wider than its body; this keeps them inside a gargantuan yard.
 AnimalConfig.Animals.Dragon.DisplayScale = 2.1
 

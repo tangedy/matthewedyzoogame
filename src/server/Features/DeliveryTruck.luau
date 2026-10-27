@@ -15,8 +15,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
+local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local TruckConfig = require(ReplicatedStorage.Shared.FeatureConfig.TruckConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
@@ -55,11 +55,15 @@ local function toolTier(player: Player): number
 	return if data then data.ToolTier else 1
 end
 
+local function hosePower(player: Player): number
+	local data = PlayerDataService.get(player)
+	return if data then GearLadder.power(data.ToolTier, data.ToolUpgrade) else GearLadder.power(1)
+end
+
 -- The truck's rarity: one above the rarest this hose can wash, or the high-tier roll once
 -- that is Farm God or better.
 local function pickRarity(player: Player): string
-	local tool = ToolConfig[toolTier(player)] or ToolConfig[1]
-	local above = CleanPower.rarityAbove(tool.CleaningPower)
+	local above = CleanPower.rarityAbove(hosePower(player))
 	if RarityConfig.ByKey[above].Order < RarityConfig.ByKey[TruckConfig.HighTierFrom].Order then
 		return above
 	end
@@ -268,7 +272,7 @@ local function buildTruck(): (Model, TruckParts)
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.fromScale(0.94, 0.8)
 		label.Position = UDim2.fromScale(0.03, 0.1)
-		label.Text = "🐾 ANIMAL DELIVERY 🐾"
+		label.Text = "ANIMAL DELIVERY"
 		label.Parent = gui
 		UIStyle.text(label, colors.Cab, stroke, 3)
 		gui.Parent = on

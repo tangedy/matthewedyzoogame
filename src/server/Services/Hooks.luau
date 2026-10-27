@@ -19,6 +19,7 @@
 --   "ToolPurchased"  (player, tier, name)              the next hose was bought (cash or Robux)
 --   "GearUpgraded"   (player, tier, level, label)      a hose sub-tier was bought (GearLadder)
 --   "ZooExpanded"    (player, pens, price, barn)       a barn expansion was bought
+--   "StatUpgraded"   (player, kind, level)             a Speed / PenCap level was bought (StatUpgrades)
 --
 -- Modifiers (Hooks.modify / Hooks.apply): each registered function receives the current value
 -- plus context and returns the new value. Applied in registration order.

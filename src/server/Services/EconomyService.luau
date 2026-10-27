@@ -7,6 +7,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local StatUpgrades = require(ReplicatedStorage.Shared.StatUpgrades)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local CleanGateService = require(script.Parent.CleanGateService)
 local CleaningService = require(script.Parent.CleaningService)
@@ -18,6 +19,7 @@ local EconomyService = {}
 local coinsChanged = Remotes.event("CoinsChanged")
 local toolTierChanged = Remotes.event("ToolTierChanged")
 local purchaseResult = Remotes.event("PurchaseResult")
+local statUpgradesChanged = Remotes.event("StatUpgradesChanged")
 
 function EconomyService.getProfile(player: Player): PlayerDataService.SavedData?
 	return PlayerDataService.get(player)
@@ -141,6 +143,72 @@ local function purchaseToolUpgrade(player: Player)
 	purchaseResult:FireClient(player, true, `Upgraded to {step.Label}!`)
 end
 
+-- Sets the character's walk speed from the player's Speed level. A running Robux speed boost
+-- (MonetizationGrants) keeps its multiplier on top: its saved base moves to the new speed.
+function EconomyService.applyWalkSpeed(player: Player)
+	local data = PlayerDataService.get(player)
+	local speed = StatUpgrades.walkSpeed(if data then data.SpeedLevel else 0)
+	-- The client reads this to restore speed after it freezes the character (cutscene).
+	player:SetAttribute("BaseWalkSpeed", speed)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	local boostBase = humanoid:GetAttribute("SpeedBoostBase")
+	if humanoid:GetAttribute("SpeedBoost") and typeof(boostBase) == "number" and boostBase > 0 then
+		humanoid.WalkSpeed = humanoid.WalkSpeed / boostBase * speed
+		humanoid:SetAttribute("SpeedBoostBase", speed)
+	elseif humanoid.WalkSpeed > 0 then
+		humanoid.WalkSpeed = speed
+	end
+end
+
+function EconomyService.sendStatUpgrades(player: Player)
+	local data = PlayerDataService.get(player)
+	if data then
+		statUpgradesChanged:FireClient(player, { Speed = data.SpeedLevel, PenCap = data.PenCapLevel })
+	end
+end
+
+-- Buys the next level of a repeatable stat upgrade. The client only names the track; the
+-- server picks the level and price. Doesn't yield, so two requests can't both pass the check.
+local function purchaseStatUpgrade(player: Player, kind: any)
+	local data = PlayerDataService.get(player)
+	if not data then
+		purchaseResult:FireClient(player, false, "Still loading. Try again.")
+		return
+	end
+	local track = if typeof(kind) == "string" then StatUpgrades.Tracks[kind :: StatUpgrades.Kind] else nil
+	if not track then
+		purchaseResult:FireClient(player, false, "")
+		return
+	end
+	local levels = data :: any -- SpeedLevel / PenCapLevel, picked by the track
+	local level = levels[track.Field] :: number
+	local price = StatUpgrades.nextPrice(track.Kind, level)
+	if not price then
+		purchaseResult:FireClient(player, false, `{track.Name} is maxed!`)
+		return
+	end
+	if data.Coins < price then
+		purchaseResult:FireClient(player, false, `Need {UIStyle.formatMoney(price - data.Coins)} more.`)
+		return
+	end
+
+	data.Coins -= price
+	level += 1
+	levels[track.Field] = level
+	PlayerDataService.saveNow(player)
+	coinsChanged:FireClient(player, data.Coins)
+	EconomyService.sendStatUpgrades(player)
+	if track.Kind == "Speed" then
+		EconomyService.applyWalkSpeed(player)
+	end
+	Hooks.fire("StatUpgraded", player, track.Kind, level)
+	purchaseResult:FireClient(player, true, `Upgraded to {StatUpgrades.label(track.Kind, level)}!`)
+end
+
 function EconomyService.sendTool(player: Player)
 	local gear = EconomyService.getGear(player)
 	if gear then
@@ -167,6 +235,15 @@ function EconomyService.init()
 		end
 		lastPurchaseAt[player] = now
 		purchaseToolUpgrade(player)
+	end)
+	Remotes.event("PurchaseStatUpgrade").OnServerEvent:Connect(function(player, kind)
+		local now = os.clock()
+		if lastPurchaseAt[player] and now - lastPurchaseAt[player] < 0.5 then
+			purchaseResult:FireClient(player, false, "")
+			return
+		end
+		lastPurchaseAt[player] = now
+		purchaseStatUpgrade(player, kind)
 	end)
 	game:GetService("Players").PlayerRemoving:Connect(function(player)
 		lastPurchaseAt[player] = nil

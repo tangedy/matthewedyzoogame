@@ -31,6 +31,7 @@ type Replay = {
 	Rig: Rig,
 	Done: boolean,
 	Stagger: number,
+	Added: RBXScriptConnection,
 }
 
 local replays: { [Model]: Replay } = {}
@@ -89,17 +90,32 @@ local function start(model: Model)
 	if not rig then
 		return
 	end
-	replays[model] = {
+	local replay: Replay
+	-- A part that turns up mid-walk (late replication, mud put back on) walks with the rest.
+	-- The server holds the model still at the plan's start, so that's what its rest is from.
+	local added = model.DescendantAdded:Connect(function(item)
+		if item:IsA("BasePart") and not table.find(rig.Parts, item) then
+			table.insert(rig.Parts, item)
+			table.insert(rig.Rest, replay.Plan.Start:ToObjectSpace(item.CFrame))
+		end
+	end)
+	replay = {
 		Model = model,
 		Plan = plan,
 		Rig = rig,
 		Done = false,
 		Stagger = math.random(0, FAR_EVERY - 1),
+		Added = added,
 	}
+	replays[model] = replay
 end
 
 local function stop(model: Instance)
-	replays[model :: Model] = nil
+	local replay = replays[model :: Model]
+	if replay then
+		replay.Added:Disconnect()
+		replays[model :: Model] = nil
+	end
 end
 
 local function pose(replay: Replay, now: number)
@@ -156,13 +172,15 @@ function WalkReplay.init(_initial: any)
 		table.clear(frames)
 		for model, replay in replays do
 			if not model.Parent then
-				replays[model] = nil
+				stop(model)
 				continue
 			end
 			if replay.Done then
 				continue
 			end
-			local distance = (replay.Plan.Start.Position - eye).Magnitude
+			-- From where it is now: a run down the street starts a long way off.
+			local here = AnimalGait.sample(replay.Plan, now - replay.Plan.At, nil)
+			local distance = (here.Position - eye).Magnitude
 			if distance > CULL_DISTANCE then
 				continue
 			end

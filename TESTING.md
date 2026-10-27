@@ -68,17 +68,33 @@ Setup: publish the place and turn on **Game Settings → Security → Enable Stu
 - [ ] **Queue:** temporarily set `GameConfig.BayCount = 1` and start 2 players. Player 2 sees "All wash bays are taken". When player 1 leaves, player 2 is moved to the bay and an animal arrives.
 - [ ] With 4 players all washing at once, there's no noticeable lag (Shift+F5 shows the frame rate).
 
+### Pen tiers
+
+- [ ] Stall fences are oak brown, medium pens redwood, giant pens golden, gargantuan pens royal purple.
+- [ ] With an animal in a pen, its cash counter shows "MAX $X" underneath in the fence's colour; the counter turns orange with FULL at the cap.
+- [ ] An empty pen still shows "EMPTY / Max $X" on its floor sign and no MAX line on the pad.
+
 ### Mobile (Studio Device emulator, then a real phone)
 
-- [ ] A large round WASH button sits right above the jump button and doesn't overlap the thumbstick or jump.
-- [ ] Holding WASH sprays. Dragging the same finger turns the camera and the reticle while the water keeps flowing. Letting go anywhere stops it.
+- [ ] There is no WASH button above jump.
+- [ ] For the first 3 washes on a new profile, a hand rubs back and forth over a mud patch with SWIPE THE DIRT! under it. It hides while a finger is scrubbing and stops after the third wash.
+- [ ] **Scrub:** put a finger on the free screen over an animal being washed and rub: the water follows the finger, the reticle sits under it, and the camera does not move. Lifting stops the water.
+- [ ] A drag that starts off the animal (sky, floor) turns the camera as normal. A drag that starts on the thumbstick, jump or a HUD button never scrubs.
 - [ ] Landscape phone: `PlayerGui.UIFormFactor` reads **Mobile**. Cash sits top left with a narrow column of icon buttons (📖 🎁 🛒) under it, all the same size, and nothing overlaps.
 - [ ] The thumbstick starts anywhere in the lower left without hitting a button. No hotbar slot at the bottom.
 - [ ] The event counter never covers the Roblox menu, chat or voice buttons.
-- [ ] WASH is faded and smaller with no animal; full size with a breathing ring and a HOLD! hint when one walks in. Holding it near the animal washes mud without aiming.
-- [ ] Moving with the thumbstick while holding WASH works (two thumbs).
+- [ ] Moving with the thumbstick while scrubbing with the other thumb works.
+- [ ] Sell, Swap and Pick up cards say HOLD and need a 0.75 s hold (the button fills); a quick tap does nothing. Place and Set pet are still a tap.
+- [ ] Prompt cards over animals are smaller than before and don't hide the animal.
+- [ ] After a Sell/Pick up card, Place on a pen is still a TAP (no hold).
+- [ ] The first-wash guide names the real animal ("CLEAN THE DUCK"), not always "pig".
+- [ ] Carrying an animal: PUT DOWN and SELL are thumb-sized (about 40px tall) between the thumbstick and jump.
+- [ ] The Gear shop opens large enough to read on a phone and still fits the screen.
+- [ ] Labels over animals and pens (nameplate, clean meter, pen cash, EMPTY/MAX) are about two-thirds size on a landscape phone, still stacked without overlap, and full size on desktop.
+- [ ] On a phone, a tap a little left of or below a panel's X (Shop, Index, Daily, Gear shop) still closes it; the tabs under it still work.
+- [ ] The Robux shop fills the screen with two columns of cards; INDEX and DAILY panels fill it too. HUD text reads at phone size.
 - [ ] The reticle sits above your character (40% down the screen), not on top of it.
-- [ ] **Aim assist:** with the reticle near the animal (not exactly on a patch), holding WASH snaps the reticle to the nearest reachable mud patch and cleans it.
+- [ ] **Aim assist (gamepad):** with the reticle near the animal (not exactly on a patch), holding R2 snaps the reticle to the nearest reachable mud patch and cleans it.
 - [ ] Aim assist never snaps to a patch hidden behind the body or out of range.
 - [ ] A full wash is comfortable with thumbs only. Opening the shop with the tap prompt works.
 - [ ] The mud fade looks clear at phone size. This is the doc's #1 technical risk, so note how it feels.

@@ -26,6 +26,7 @@ local CleaningService = require(script.Parent.CleaningService)
 local EconomyService = require(script.Parent.EconomyService)
 local GuideService = require(script.Parent.GuideService)
 local Hooks = require(script.Parent.Hooks)
+local PlayerDataService = require(script.Parent.PlayerDataService)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 local ZooService = require(script.Parent.ZooService)
 
@@ -52,6 +53,8 @@ type Arrival = {
 	Token: number,
 	Scripted: boolean,
 	Showcase: boolean, -- the last opening wash: a keeper that reveals the pens when done
+	Target: CFrame?, -- the queue spot it is heading for once it turns in off the street
+	OnStreet: boolean?, -- still running down Main Street toward the driveway
 }
 
 type Bay = {
@@ -74,6 +77,10 @@ type Bay = {
 	Job: Job?,
 	Thread: thread?,
 	FirstAnimalGiven: boolean,
+	-- GameConfig.Intro.Openers: the owner's lifetime washes when this bay was claimed, and
+	-- walk-ins rolled since. Their sum is the next walk-in's place in a new player's opening.
+	OpenerBase: number?,
+	Rolled: number,
 	Primed: boolean, -- the first line of this assignment has been filled
 }
 
@@ -154,6 +161,18 @@ local function lineCap(owner: Player): number
 	return GameConfig.WashQueue
 end
 
+-- A new player's scripted first walk-ins (pig, then chicken), or nil once they're used up.
+local function nextOpener(bay: Bay, owner: Player): string?
+	local data = PlayerDataService.get(owner)
+	if not data then
+		return nil
+	end
+	bay.OpenerBase = bay.OpenerBase or data.LifetimeAnimalsWashed
+	bay.Rolled += 1
+	local key = GameConfig.Intro.Openers[(bay.OpenerBase :: number) + bay.Rolled]
+	return if key and AnimalConfig.Animals[key] then key else nil
+end
+
 local function rollArrival(bay: Bay, owner: Player): Arrival
 	local introLeft = ZooService.introRemaining(owner)
 	-- The opening washes: random commons that auto-sell, then one keeper (GameConfig.Intro).
@@ -168,7 +187,11 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	local animalKey: string
 	local mutationKey: string
 	local look: AnimalService.SpawnLook? = nil
-	if intro then
+	local opener = if intro or showcase then nil else nextOpener(bay, owner)
+	if opener then
+		animalKey = opener
+		mutationKey = MutationConfig.Default
+	elseif intro then
 		animalKey = AnimalService.randomOfRarity("Common")
 		mutationKey = MutationConfig.Default
 		look = {
@@ -193,7 +216,10 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	local id = HttpService:GenerateGUID(false)
 	local slot = #bay.Line + 1
 	local at = bay.Approach.CFrame + bay.Right * (-(slot - 1) * 14)
-	local model, patches = AnimalService.spawn(animalKey, mutationKey, id, at, bay.Model, look)
+	-- It appears at the far end of the street; the rare reveal waits until it reaches the farm.
+	local spawnLook: AnimalService.SpawnLook = look or {}
+	spawnLook.DeferReveal = true
+	local model, patches = AnimalService.spawn(animalKey, mutationKey, id, at, bay.Model, spawnLook)
 	model.Name = "QueuedAnimal"
 	if intro then
 		model:SetAttribute("ScriptedIntro", true)
@@ -210,9 +236,32 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	}
 end
 
--- Fills gaps in the U and waits until everyone is standing. On a fresh join the front animal
--- is already on the wash spot and the rest walk in behind without holding up the first wash,
--- so the hose works the moment the player lands.
+local function reveal(bay: Bay, arrival: Arrival)
+	AnimalService.revealArrival(arrival.Model, arrival.AnimalKey, arrival.Mutation, bay.Model)
+end
+
+-- Runs a new animal down Main Street to the driveway, turns in, and up the wash arm to
+-- arrival.Target. The line can move the target while it is still on the street (stepLine).
+local function runIn(bay: Bay, owner: Player, arrival: Arrival)
+	arrival.Token += 1
+	local token = arrival.Token
+	local model = arrival.Model
+	local speed = GameConfig.StreetRun.Speed
+	arrival.OnStreet = true
+	AnimalService.walkCorners(model, { bay.TurnIn.CFrame }, 1, 0.4, speed)
+	arrival.OnStreet = false
+	if arrival.Token ~= token or bay.Owner ~= owner or not model.Parent then
+		return
+	end
+	reveal(bay, arrival)
+	if arrival.Target then
+		AnimalService.walkCorners(model, { arrival.Target }, 1, 0.4, speed)
+	end
+end
+
+-- Fills gaps in the U. New animals run in from the end of the street without holding up the
+-- wash; runOneJob waits for the front one to stand on the wash spot. On a fresh join the
+-- front animal is already on the wash spot, so the hose works the moment the player lands.
 local function ensureLine(bay: Bay, owner: Player)
 	if #bay.Line >= lineCap(owner) or bay.Owner ~= owner then
 		return
@@ -220,39 +269,24 @@ local function ensureLine(bay: Bay, owner: Player)
 	setState(bay, "Arriving")
 	local fresh = not bay.Primed and #bay.Line == 0
 	bay.Primed = true
-	local moves = {}
 	while #bay.Line < lineCap(owner) and bay.Owner == owner do
 		local arrival = rollArrival(bay, owner)
 		local slot = #bay.Line + 1
 		table.insert(bay.Line, arrival)
 		local target = bay.QueueMarks[slot].CFrame
-		local turn = bay.TurnIn.CFrame
+		arrival.Target = target
 		if fresh and slot == 1 then
+			local turn = bay.TurnIn.CFrame
 			local from = arrival.Model:GetPivot().Position
 			local goal = Vector3.new(target.Position.X, from.Y, target.Position.Z)
 			local flat = Vector3.new(goal.X - turn.Position.X, 0, goal.Z - turn.Position.Z)
 			local dir = if flat.Magnitude > 0.1 then flat.Unit else -bay.Right
 			arrival.Model:PivotTo(CFrame.lookAt(goal, goal + dir))
+			reveal(bay, arrival)
 			continue
 		end
-		local delay = (slot - 1) * 1.1
-		table.insert(moves, function()
-			if delay > 0 then
-				task.wait(delay)
-			end
-			if arrival.Model.Parent and bay.Owner == owner then
-				-- Along the road, one turn, then in to this queue spot.
-				AnimalService.walkCorners(arrival.Model, { turn, target }, GameConfig.ArriveDuration * 0.7)
-			end
-		end)
+		task.spawn(runIn, bay, owner, arrival)
 	end
-	if fresh then
-		for _, fn in moves do
-			task.spawn(fn)
-		end
-		return
-	end
-	waitAll(moves, bay, owner)
 end
 
 -- The front animal has left. Everyone steps up, then a new animal walks in from the road
@@ -265,6 +299,12 @@ local function stepLine(bay: Bay, owner: Player)
 	local moves = {}
 	for index, arrival in bay.Line do
 		local target = bay.QueueMarks[index].CFrame
+		arrival.Target = target
+		-- Still running down the street: it heads for the new spot once it turns in.
+		if arrival.OnStreet then
+			continue
+		end
+		arrival.Token += 1 -- an unfinished run-in up the arm stops; this walk takes over
 		table.insert(moves, function()
 			AnimalService.walkCorners(arrival.Model, { target }, 1.2)
 		end)
@@ -275,12 +315,8 @@ local function stepLine(bay: Bay, owner: Player)
 	end
 	local arrival = rollArrival(bay, owner)
 	table.insert(bay.Line, arrival)
-	local target = bay.QueueMarks[#bay.Line].CFrame
-	task.spawn(function()
-		if arrival.Model.Parent then
-			AnimalService.walkCorners(arrival.Model, { bay.TurnIn.CFrame, target }, GameConfig.ArriveDuration * 0.7)
-		end
-	end)
+	arrival.Target = bay.QueueMarks[#bay.Line].CFrame
+	task.spawn(runIn, bay, owner, arrival)
 end
 
 -- Called by CleaningService exactly when the last patch is cleaned.
@@ -338,9 +374,10 @@ local function runOneJob(bay: Bay, owner: Player)
 	-- A walk-in that is still on its way (a short opening line doesn't wait for it) becomes
 	-- washable only once it stands on the wash spot. Otherwise it could finish mid-walk and
 	-- leave from the middle of the arm while its walk-in keeps pulling at it.
+	-- The run from the far end of the street takes a while on the farthest plots.
 	local spot = bay.WashPosition.Position
 	local waited = 0
-	while waited < 8 and bay.Owner == owner and front.Model.Parent do
+	while waited < 30 and bay.Owner == owner and front.Model.Parent do
 		local here = front.Model:GetPivot().Position
 		if Vector2.new(here.X - spot.X, here.Z - spot.Z).Magnitude < 0.5 then
 			break
@@ -423,6 +460,10 @@ local function runOneJob(bay: Bay, owner: Player)
 		if bay.Line[1] == front then
 			table.remove(bay.Line, 1)
 		end
+		-- Off down the street on its own; the job lets go of the model so it isn't removed here.
+		job.Model = nil
+		model.Name = "DepartingAnimal" -- clients look up the bay's current animal by "Animal"
+		task.spawn(AnimalService.runOff, model, bay.Model)
 		disposeJob(bay)
 		stepLine(bay, owner)
 		task.wait(GameConfig.NextAnimalDelay)
@@ -538,6 +579,8 @@ local function makeBay(index: number): Bay
 		Job = nil,
 		Thread = nil,
 		FirstAnimalGiven = false,
+		OpenerBase = nil,
+		Rolled = 0,
 		Primed = false,
 	}
 end
@@ -692,6 +735,12 @@ function BayService.abandonWash(player: Player): boolean
 	CleaningService.endJob(job.Id)
 	task.spawn(thread)
 	return true
+end
+
+-- The player's farm model, or nil while they have no plot.
+function BayService.getModel(player: Player): Model?
+	local bay = bayByOwner[player]
+	return bay and bay.Model
 end
 
 function BayService.getSnapshot(player: Player): Types.BaySnapshot?

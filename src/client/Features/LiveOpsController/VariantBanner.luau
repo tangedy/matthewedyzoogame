@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
+local UIPlatform = require(script.Parent.Parent.Parent.UI)
 
 local VariantBanner = {}
 
@@ -56,15 +57,17 @@ end
 -- centred, so it never sits on the menu, chat or voice buttons.
 local MIN_INSIDE_WIDTH = 300
 local MARGIN = 8
+local TOUCH_SCALE = 1.1 -- phones read 1.5 as shouting; their screens sit closer
 
 local function place()
 	local camera = Workspace.CurrentCamera
 	local screenWidth = if camera then camera.ViewportSize.X else 800
-	local height = math.round(22 * EVENT_SCALE)
-	local wanted = 440 * EVENT_SCALE
+	local scale = if UIPlatform.get().inputMode == "Touch" then TOUCH_SCALE else EVENT_SCALE
+	local height = math.round(22 * scale)
+	local wanted = 440 * scale
 	local free = GuiService.TopbarInset
 	local freeWidth = free.Max.X - free.Min.X - MARGIN * 2
-	local textSize = math.round(13 * EVENT_SCALE)
+	local textSize = math.round(13 * scale)
 	if free.Height > 0 and freeWidth >= MIN_INSIDE_WIDTH then
 		local width = math.min(wanted, freeWidth)
 		strip.Size = UDim2.fromOffset(width, height)
@@ -75,7 +78,7 @@ local function place()
 		local below = if free.Height > 0 then free.Max.Y else GuiService:GetGuiInset().Y
 		strip.Size = UDim2.fromOffset(width, height)
 		strip.Position = UDim2.fromOffset(screenWidth / 2, below + MARGIN + height / 2)
-		textSize = math.round(12 * EVENT_SCALE)
+		textSize = math.round(12 * scale)
 	end
 	for _, child in strip:GetChildren() do
 		if child:IsA("TextLabel") then
@@ -139,6 +142,7 @@ local function build(gui: ScreenGui)
 
 	place()
 	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
+	UIPlatform.onChanged(place)
 	local camera = Workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(place)

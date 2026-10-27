@@ -57,16 +57,18 @@ Server services:
   - You can sell animals from the cache or from a pen.
   - Penned animals earn cash per second into a collect pad.
   - It also handles zoo expansion and index discoveries.
+- **FarmDecor** adds cosmetic scenery on the plot's sides and back pasture for each farm level (barn tier): a veggie patch and hay at the start, then a barn and coop, windmill and silo, tractor, wheat field and water tower, greenhouse, pond and garden, and finally a golden fountain, hot-air balloon, flags and trophy. New sets rise out of the ground on upgrade. In Studio, keys 1-6 jump your farm to levels 1-6 (DevService) to preview them.
 
 Client controllers:
 
-- **CleaningController** handles input, aiming, the spray beam, splash and sound, the phone WASH button (hold to spray, drag to look around), the reticle and the remaining-dirt highlight.
-- **OnboardingController** shows the first-wash "Wash me!" marker and the "you can afford an upgrade" hint.
+- **CleaningController** handles input, aiming, the spray beam, splash and sound, finger-scrubbing on touch (rub the mud on screen to wash it with the camera held still; a swipe hint shows how for the first few washes), the reticle and the remaining-dirt highlight.
+- **OnboardingController** runs the new-player guide: a rainbow trail and instruction to the first washes, then to the washed animal in the cache ("Pick me up!") and an empty pen ("Put it here!") until the first animal is placed. Afterwards it shows the "you can afford an upgrade" hint.
 - **ShopController** opens the hose shop from the upgrade station's prompt and sends purchase requests.
 - **ZooController** shows what you're carrying and the "cache full" hint, puts other players' prompts out of reach, and animates rainbow labels.
 - **PenCashController** animates the cash counter above each pen pad: it bobs, glows, counts up with a bounce, and pops a floating "+$X" with sparkles.
 - **IndexController** shows the Index button and panel (species × mutation) and new-discovery toasts.
 - **HUDController** shows coins, tool, animal, clean meter and reward, plus the instructions and the payout popup.
+- **AnimalFocus** (Features) only shows an animal's nameplate while it's the one nearest the middle of the screen (plus the one you're washing), so full pens don't stack labels.
 
 ## Feature systems (big-push branch)
 
@@ -109,9 +111,11 @@ Developer keys (Studio and place owner only): **C** cleans the current animal, *
 **Zoo loop (Steal a Brainrot style)**, which replaces roadmap Phases A–B:
 
 - **Bays:** a bay is built only while a player owns it, so there are no empty lanes.
-- **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead.
+- **Cache:** every washed animal walks into the bay's 3-slot cache. Pick one up with E and it rides above your head. Take it to a pen and use the gate prompt: an empty pen gets **Place**, an occupied pen gets **Swap**, which sells the old animal. Hold F at the cache to sell an animal instead. On touch screens, Sell, Swap and Pick up are a 0.75 s hold (the button fills and reads HOLD), so a brushed card never sells by accident.
 - **Full cache:** while the cache is full, no new animal walks in.
 - **Income:** penned animals earn cash per second onto the green pad in front of their pen. Step on the pad to collect it.
+- **Stat upgrades:** the Gear Shop also sells two repeatable cash upgrades (`Shared.StatUpgrades`): Run Speed (+10% walk speed per level, 5 levels, $2.5K to $3M) and Pen Storage (+0.25x every pen's cash cap per level, 6 levels, $5K to $20M). Their prices sit between the hose and barn prices so there is always a mid-sized buy to aim for.
+- **Pen tiers:** each pen's pad holds up to a base cap set by its size ($2K stall, $20K medium, $100K giant, $1M gargantuan), raised by Pen Storage. The fence wood shows the tier (oak, redwood, golden, royal; `Shared.PenTiers`), and while an animal is in, a "MAX $X" line in that colour sits under the pad's cash counter.
 - **Rarity:** each of the 22 species has a fixed tier: Common, Rare, Epic, Legendary, Mythic, Zoo God or Secret. Better hoses (5 tiers) unlock rarer tiers.
 - **Mutations:** every walk-in rolls Normal, Gold (×1.25), Diamond (×1.5) or Rainbow (×10).
 - **Index:** 22 species × 4 mutations = 88 entries.

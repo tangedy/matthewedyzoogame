@@ -1,5 +1,7 @@
--- First-cycle guide: wash, and only wash. Pickup, pens, and the hose stand are not part of
--- the opening lesson. The client draws the arrow; this stores the step so a rejoin resumes it.
+-- New-player guide, saved so a rejoin resumes it. Two lessons:
+--   Wash  the opening washes (the client trails the player to the pig in the bay)
+--   Pen   pick the washed animal up from the cache and put it in a pen
+-- then Done. The client draws the trail and the instruction; this only stores the step.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -30,19 +32,29 @@ function GuideService.onWashCompleted(player: Player)
 	if data.IntroWashesLeft > 0 then
 		return
 	end
-	setStep(player, "Done")
+	setStep(player, if #data.Animals > 0 then "Done" else "Pen")
 end
 
 function GuideService.onPickedUp(player: Player)
 	Hooks.fire("AnimalPickedUp", player)
 end
 
-function GuideService.onPlaced(_player: Player) end
+-- The first animal in a pen ends the guide.
+function GuideService.onPlaced(player: Player)
+	local data = PlayerDataService.get(player)
+	if data and data.GuideStep ~= "Done" then
+		setStep(player, "Done")
+	end
+end
 
 function GuideService.onCarryReturned(_player: Player) end
 
 function GuideService.onReachedUpgrade(player: Player)
-	setStep(player, "Done")
+	local data = PlayerDataService.get(player)
+	-- The hose stand doesn't skip the pen lesson.
+	if data and data.GuideStep == "Wash" and data.IntroWashesLeft <= 0 then
+		setStep(player, if #data.Animals > 0 then "Done" else "Pen")
+	end
 end
 
 return GuideService

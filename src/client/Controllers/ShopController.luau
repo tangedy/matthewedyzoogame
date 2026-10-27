@@ -13,10 +13,11 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
+local StatUpgrades = require(ReplicatedStorage.Shared.StatUpgrades)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
+local Layout = require(script.Parent.Parent.UI.Layout)
 local HoseBuilder = require(ReplicatedStorage.Shared.HoseBuilder)
-local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -34,6 +35,7 @@ local ERROR_COLOR = UIStyle.Colors.ErrorText
 local OK_COLOR = UIStyle.CashColor
 
 local purchaseRemote = Remotes.event("PurchaseToolUpgrade")
+local statPurchaseRemote = Remotes.event("PurchaseStatUpgrade")
 
 local coins = 0
 local tier = 1
@@ -56,6 +58,13 @@ local buyButton: TextButton
 local robuxButton: TextButton
 local messageLabel: TextLabel
 
+-- Repeatable stat upgrades (Shared.StatUpgrades): one row each under the gear buttons.
+local STAT_ROW_HEIGHT = 50
+local STAT_ROWS_HEIGHT = 8 + #StatUpgrades.Order * STAT_ROW_HEIGHT
+local statLevels: { [StatUpgrades.Kind]: number } = { Speed = 0, PenCap = 0 }
+local statFrame: Frame
+local statRows: { [StatUpgrades.Kind]: { Title: TextLabel, Detail: TextLabel, Buy: TextButton } } = {}
+
 local function round(instance: GuiObject, radius: number)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius)
@@ -76,18 +85,13 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- Rarities this gear can wash that the previous one could not.
-local function unlocksText(toolTier: number): string
-	local tool = ToolConfig[toolTier]
-	local prev = ToolConfig[toolTier - 1]
-	if not tool then
-		return ""
-	end
-	local prevPower = if prev then prev.CleaningPower else 0
+-- Rarities the next step can wash that the current one could not.
+local function unlocksText(current: GearLadder.Step, nextStep: GearLadder.Step): string
+	local prevPower = current.CleaningPower
 	local groups = {}
 	for _, rarity in RarityConfig.List do
 		local need = rarity.RequiredCleaningPower
-		if need > prevPower + 1e-4 and CleanPower.canClean(tool.CleaningPower, rarity.Key) then
+		if need > prevPower + 1e-4 and CleanPower.canClean(nextStep.CleaningPower, rarity.Key) then
 			for _, def in AnimalConfig.Animals do
 				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
 					table.insert(groups, rarity.DisplayName)
@@ -99,9 +103,12 @@ local function unlocksText(toolTier: number): string
 	return if #groups > 0 then `\nUnlocks {table.concat(groups, ", ")}` else ""
 end
 
--- The panel ends just under its last button; the Robux button only shows when cash is short.
+-- The panel ends just under its last row; the Robux button only shows when cash is short, and
+-- the stat upgrade rows sit right under whichever button is last.
 local function fitPanel()
-	local bottom = if robuxButton.Visible then 416 else 366
+	local rowsTop = if robuxButton.Visible then 416 else 366
+	statFrame.Position = UDim2.fromOffset(18, rowsTop)
+	local bottom = rowsTop + STAT_ROWS_HEIGHT
 	messageLabel.Position = UDim2.fromOffset(18, bottom)
 	local height = bottom + 48
 	panel.Size = UDim2.new(0.9, 0, 0, height)
@@ -129,10 +136,39 @@ local function showPreview(showTier: number)
 	previewModel = model
 end
 
+local STAT_DETAIL = {
+	Speed = "run speed",
+	PenCap = "pen cash cap",
+}
+
+local function refreshStats()
+	for kind, row in statRows do
+		local level = statLevels[kind] or 0
+		local max = StatUpgrades.maxLevel(kind)
+		local now = StatUpgrades.multiplier(kind, level)
+		local price = StatUpgrades.nextPrice(kind, level)
+		row.Title.Text = `{StatUpgrades.Tracks[kind].Name} · Lv {level}/{max}`
+		if price then
+			local nextMult = StatUpgrades.multiplier(kind, level + 1)
+			row.Detail.Text = `{CleanPower.format(now)}x → {CleanPower.format(nextMult)}x {STAT_DETAIL[kind]}`
+			row.Buy.Text = UIStyle.formatMoney(price)
+			local affordable = coins >= price
+			row.Buy.BackgroundColor3 = if affordable and not awaitingResult then BUY_COLOR else DISABLED_COLOR
+			row.Buy.AutoButtonColor = true
+		else
+			row.Detail.Text = `{CleanPower.format(now)}x {STAT_DETAIL[kind]}`
+			row.Buy.Text = "MAX"
+			row.Buy.BackgroundColor3 = DISABLED_COLOR
+			row.Buy.AutoButtonColor = false
+		end
+	end
+end
+
 local function refresh()
 	if not panel then
 		return
 	end
+	refreshStats()
 	local current = GearLadder.get(tier, level)
 	local nextStep = GearLadder.next(tier, level)
 	showPreview(if nextStep then nextStep.Tier else current.Tier)
@@ -142,8 +178,8 @@ local function refresh()
 		nextLabel.Text = `Next: {nextStep.Label}`
 		local reach = if nextStep.Range > current.Range then ` · Reach {nextStep.Range}` else ""
 		local perk = if nextStep.Perk then `\n{nextStep.Perk}` else ""
-		-- Only a new hose raises clean power, so only a new hose unlocks rarer animals.
-		local unlocks = if nextStep.Level == 0 then unlocksText(nextStep.Tier) else ""
+		-- A new hose (or the Fire Hose's Titan Spec) raises clean power and unlocks rarer animals.
+		local unlocks = unlocksText(current, nextStep)
 		gainLabel.Text = `{CleanPower.format(nextStep.Speed)}x speed (+{gain}%){reach}{perk}{unlocks}`
 		buyButton.Visible = true
 		buyButton.Text = `BUY {UIStyle.formatMoney(nextStep.Price)}`
@@ -172,6 +208,23 @@ local function setMessage(text: string, ok: boolean)
 end
 
 local dim: TextButton
+local panelScale: UIScale
+
+-- The panel is authored at desktop size, so at phone scale its text is a few pixels tall.
+-- On touch it grows to fill most of the screen height (never past 1.45x), measured when
+-- it opens so it matches the HUD's current ResponsiveScale.
+local function scalePanel()
+	if Layout.get().key ~= "Touch" then
+		panelScale.Scale = 1
+		return
+	end
+	local gui = panel:FindFirstAncestorOfClass("ScreenGui")
+	local responsive = gui and gui:FindFirstChild("ResponsiveScale")
+	local factor = if responsive and responsive:IsA("UIScale") and responsive.Scale > 0.05 then responsive.Scale else 1
+	local height = math.max(panel.Size.Y.Offset, 1)
+	local room = if gui then gui.AbsoluteSize.Y / factor * 0.94 else height
+	panelScale.Scale = math.clamp(room / height, 1, 1.45)
+end
 
 local function close()
 	openStation = nil
@@ -189,6 +242,7 @@ local function open(station: BasePart)
 	if dim then
 		dim.Visible = true
 	end
+	scalePanel()
 	panel.Visible = true
 end
 
@@ -217,6 +271,8 @@ local function buildGui()
 	constraint.MaxSize = Vector2.new(360, PANEL_HEIGHT)
 	constraint.Parent = panel
 	panel.Size = UDim2.new(0.9, 0, 0, PANEL_HEIGHT)
+	panelScale = Instance.new("UIScale")
+	panelScale.Parent = panel
 
 	label({
 		Position = UDim2.fromOffset(18, 12),
@@ -237,6 +293,7 @@ local function buildGui()
 	closeButton.Parent = panel
 	round(closeButton, 8)
 	closeButton.Activated:Connect(close)
+	Layout.closeTarget(closeButton, close)
 
 	-- A turning picture of the next gear: the real tool model, built the same way as the one
 	-- that ends up in the player's hand (HoseBuilder).
@@ -301,6 +358,69 @@ local function buildGui()
 	robuxPad.PaddingBottom = UDim.new(0, 6)
 	robuxPad.Parent = robuxButton
 
+	-- Stat upgrade rows: name and level on top, the gain under it, a cash button on the right.
+	-- fitPanel moves the whole block under the last gear button.
+	statFrame = Instance.new("Frame")
+	statFrame.Name = "StatUpgrades"
+	statFrame.BackgroundTransparency = 1
+	statFrame.Size = UDim2.new(1, -36, 0, STAT_ROWS_HEIGHT)
+	statFrame.Parent = panel
+	local divider = Instance.new("Frame")
+	divider.BackgroundColor3 = Color3.fromRGB(90, 98, 130)
+	divider.BorderSizePixel = 0
+	divider.Size = UDim2.new(1, 0, 0, 2)
+	divider.Parent = statFrame
+	for index, kind in StatUpgrades.Order do
+		local top = 8 + (index - 1) * STAT_ROW_HEIGHT
+		local title = label({
+			Position = UDim2.fromOffset(0, top + 2),
+			Size = UDim2.new(1, -118, 0, 22),
+			Parent = statFrame,
+		})
+		local detail = label({
+			Position = UDim2.fromOffset(0, top + 24),
+			Size = UDim2.new(1, -118, 0, 18),
+			TextColor3 = Color3.fromRGB(150, 220, 255),
+			Parent = statFrame,
+		})
+		local buy = Instance.new("TextButton")
+		buy.Name = `Buy{kind}`
+		buy.AnchorPoint = Vector2.new(1, 0)
+		buy.Position = UDim2.new(1, 0, 0, top + 2)
+		buy.Size = UDim2.fromOffset(108, 40)
+		buy.BackgroundColor3 = BUY_COLOR
+		buy.Font = FONT
+		buy.TextScaled = true
+		buy.TextColor3 = Color3.new(1, 1, 1)
+		buy.Parent = statFrame
+		round(buy, 10)
+		local buyPad = Instance.new("UIPadding")
+		buyPad.PaddingTop = UDim.new(0, 8)
+		buyPad.PaddingBottom = UDim.new(0, 8)
+		buyPad.PaddingLeft = UDim.new(0, 6)
+		buyPad.PaddingRight = UDim.new(0, 6)
+		buyPad.Parent = buy
+		statRows[kind] = { Title = title, Detail = detail, Buy = buy }
+
+		buy.Activated:Connect(function()
+			if awaitingResult or not StatUpgrades.nextPrice(kind, statLevels[kind] or 0) then
+				return
+			end
+			-- Same flow as the gear Buy: the server always answers, the timeout covers a lost reply.
+			awaitingResult = true
+			refresh()
+			statPurchaseRemote:FireServer(kind)
+			local sentAt = os.clock()
+			lastSentAt = sentAt
+			task.delay(3, function()
+				if awaitingResult and lastSentAt == sentAt then
+					awaitingResult = false
+					refresh()
+				end
+			end)
+		end)
+	end
+
 	messageLabel = label({
 		Position = UDim2.fromOffset(18, 416),
 		Size = UDim2.new(1, -36, 0, 36),
@@ -343,6 +463,8 @@ function ShopController.init(initial: Types.InitialState)
 	coins = initial.Coins
 	tier = initial.ToolTier
 	level = initial.ToolUpgrade or 0
+	statLevels.Speed = initial.SpeedLevel or 0
+	statLevels.PenCap = initial.PenCapLevel or 0
 	buildGui()
 
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
@@ -363,6 +485,11 @@ function ShopController.init(initial: Types.InitialState)
 	Remotes.event("ToolTierChanged").OnClientEvent:Connect(function(value: number, _name: string, newLevel: number?)
 		tier = value
 		level = newLevel or 0
+		refresh()
+	end)
+	Remotes.event("StatUpgradesChanged").OnClientEvent:Connect(function(levels: { [string]: number })
+		statLevels.Speed = levels.Speed or statLevels.Speed
+		statLevels.PenCap = levels.PenCap or statLevels.PenCap
 		refresh()
 	end)
 	Remotes.event("PurchaseResult").OnClientEvent:Connect(function(success: boolean, message: string)

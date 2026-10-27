@@ -35,6 +35,7 @@ local GAME_GUIS: { [string]: boolean } = {
 	Zoo = true,
 	Index = true,
 	Monetization = true,
+	QuickBuy = true,
 	Tension = true,
 	LiveOps = true,
 	LiveOpsPopups = true,

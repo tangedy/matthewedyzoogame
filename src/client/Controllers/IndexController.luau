@@ -44,7 +44,7 @@ local function count(): number
 end
 
 local function refresh()
-	-- Touch shows the 📖 icon above a short caption.
+	-- Touch shows the book icon above a short caption.
 	local prefix = if UIPlatform.Layout.get().rail.compact then "" else "INDEX "
 	button.Text = `{prefix}{count()}/{total()}`
 	for key, cell in cells do
@@ -80,7 +80,7 @@ local function buildGui()
 	buttonPad.PaddingTop = UDim.new(0, 6)
 	buttonPad.PaddingBottom = UDim.new(0, 6)
 	buttonPad.Parent = button
-	UIPlatform.Layout.rail(button, 1, "📖")
+	UIPlatform.Layout.rail(button, 1, "Book")
 	UIPlatform.Feedback.button(button)
 
 	panel = Instance.new("Frame")
@@ -95,9 +95,7 @@ local function buildGui()
 	UIStyle.border(panel, 4)
 	panelScale = Instance.new("UIScale")
 	panelScale.Parent = panel
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MaxSize = Vector2.new(600, 560)
-	constraint.Parent = panel
+	UIPlatform.Layout.panel(panel, { scale = Vector2.new(0.92, 0.82), maxSize = Vector2.new(600, 560) })
 
 	local title = Instance.new("TextLabel")
 	title.Position = UDim2.fromOffset(16, 10)
@@ -188,6 +186,7 @@ local function buildGui()
 	dim = Modals.dim(gui, closePanel)
 	Modals.bind("Index", closePanel)
 	close.Activated:Connect(closePanel)
+	UIPlatform.Layout.closeTarget(close, closePanel)
 	button.Activated:Connect(function()
 		if panel.Visible then
 			closePanel()

@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -92,8 +93,10 @@ local function buildGui()
 	progressRoot = Instance.new("Frame")
 	progressRoot.Name = "CleanProgress"
 	progressRoot.BackgroundTransparency = 1
-	progressRoot.Size = UDim2.fromScale(1, 1)
+	progressRoot.Size = progressBoard.Size
 	progressRoot.Parent = progressBoard
+	-- Its rows are pixel-sized, so WorldLabels scales this root along with the board.
+	progressBoard:SetAttribute(UIPlatform.WorldLabels.ROOT_ATTRIBUTE, progressRoot.Name)
 	local bar = Instance.new("Frame")
 	bar.Position = UDim2.fromOffset(6, 0)
 	bar.Size = UDim2.new(1, -12, 0, 26)
@@ -254,12 +257,12 @@ local function refreshToast()
 	if currentState == "Washing" then
 		if not tutorialCompleted and currentProgress < 0.1 then
 			showToast(
-				if inputMode == "Touch"
-					then "Hold WASH and drag to look around!"
-					else "Hold to spray. Wash off all the mud!"
+				if inputMode == "Touch" then "Swipe the dirt to wash it!" else "Hold to spray. Wash off all the mud!"
 			)
-		elseif hintShowing then
+		elseif hintShowing and currentProgress >= GameConfig.AlmostCleanProgress then
 			showToast("Almost clean! Spray the glowing mud.")
+		elseif hintShowing then
+			showToast("Walk around the animal! Spray all the glowing mud.")
 		else
 			showToast(nil)
 		end

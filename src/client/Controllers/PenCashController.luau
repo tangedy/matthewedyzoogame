@@ -1,6 +1,8 @@
 -- Makes the cash counter above each pen's collect pad feel rewarding: it hovers and bobs,
 -- glows, counts up smoothly with a bounce every time it rises, and pops a floating "+$X"
 -- with a sparkle burst. Collecting gives a bigger burst and a "COLLECTED!" pop.
+-- Under the cash, while an animal is in the pen, a "MAX $1K" line says how much the pad
+-- can hold, in the colour of the pen's wood tier (Shared.PenTiers).
 --
 -- The server only publishes numbers (pad attributes "Cash" and "Rate"); all of the counter's
 -- text and animation lives here, on the client.
@@ -11,6 +13,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local PenTiers = require(ReplicatedStorage.Shared.PenTiers)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 
 local PenCashController = {}
@@ -24,6 +27,7 @@ type Counter = {
 	Billboard: BillboardGui,
 	Label: TextLabel,
 	Glow: TextLabel,
+	Max: TextLabel,
 	Scale: UIScale,
 	Burst: ParticleEmitter,
 	Shown: number,
@@ -35,6 +39,9 @@ type Counter = {
 local counters: { [BasePart]: Counter } = {}
 
 local FULL_COLOR = Color3.fromRGB(255, 170, 40)
+-- The server's counter billboard is CASH_HEIGHT tall; it grows by MAX_HEIGHT for the MAX line.
+local CASH_HEIGHT = 44
+local MAX_HEIGHT = 22
 
 -- "$950", or "$1K FULL" in orange once the pad reaches its pen's cap (pad attribute "Cap").
 local function setText(counter: Counter, value: number)
@@ -47,6 +54,13 @@ local function setText(counter: Counter, value: number)
 	counter.Label.Text = text
 	counter.Glow.Text = text
 	counter.Label.TextColor3 = if full then FULL_COLOR else UIStyle.CashColor
+	-- Only while an animal is in: an empty pen already says its max on the floor sign.
+	local occupied = counter.Pad:GetAttribute("Cash") ~= nil and typeof(cap) == "number"
+	counter.Max.Visible = occupied
+	if occupied then
+		counter.Max.Text = `MAX {UIStyle.formatMoney(cap :: number)}`
+		counter.Max.TextColor3 = PenTiers.forCap(cap :: number).Text
+	end
 end
 
 -- "+$12" rising and fading above the counter.
@@ -141,6 +155,12 @@ local function setup(pad: Instance)
 		return
 	end
 	billboard.LightInfluence = 0
+	-- Room for the MAX line under the cash.
+	local width = billboard.Size.X.Offset
+	billboard.Size = UDim2.fromOffset(width, CASH_HEIGHT + MAX_HEIGHT)
+	local share = CASH_HEIGHT / (CASH_HEIGHT + MAX_HEIGHT)
+	label.Position = UDim2.fromScale(0, 0)
+	label.Size = UDim2.fromScale(1, share)
 
 	-- Glow: a softer, fatter copy of the text behind the real one.
 	local glow = label:Clone()
@@ -156,6 +176,15 @@ local function setup(pad: Instance)
 	end
 	glow.Parent = billboard
 	label.ZIndex = 1
+
+	local max = Instance.new("TextLabel")
+	max.Name = "Max"
+	max.Position = UDim2.fromScale(0, share)
+	max.Size = UDim2.fromScale(1, 1 - share)
+	max.ZIndex = 1
+	max.Visible = false
+	max.Parent = billboard
+	UIStyle.text(max, nil, nil, 2)
 
 	local scale = Instance.new("UIScale")
 	scale.Parent = billboard
@@ -180,6 +209,7 @@ local function setup(pad: Instance)
 		Billboard = billboard,
 		Label = label,
 		Glow = glow,
+		Max = max,
 		Scale = scale,
 		Burst = burst,
 		Shown = 0,
@@ -193,6 +223,12 @@ local function setup(pad: Instance)
 		end),
 	}
 	counters[pad] = counter
+	pad:GetAttributeChangedSignal("Cap"):Connect(function()
+		local c = counters[pad]
+		if c then
+			setText(c, c.Shown)
+		end
+	end)
 	local value = pad:GetAttribute("Cash")
 	counter.Shown = if typeof(value) == "number" then value else 0
 	counter.Target = counter.Shown

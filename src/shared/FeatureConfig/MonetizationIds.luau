@@ -8,9 +8,6 @@
 
 return {
 	Products = {
-		SuperSoapStarter = 3722053138,
-		SuperSoap = 3722053141,
-		SuperSoapLarge = 3722053147,
 		CalmTreat = 3722053150,
 		AutoCollect2h = 3722053159,
 		SpeedBoost = 3722053168,

@@ -126,7 +126,7 @@ function UIStyle.vipChatTitle(text: string): string
 	return `<stroke color="#000000" thickness="2" joins="round">{table.concat(parts)}</stroke>`
 end
 
--- Colours a label for a rarity tier: tier colour, Zoo God rainbow, Secret black/white.
+-- Colours a label for a rarity tier: tier colour, Zoo God rainbow, Secret white/black.
 function UIStyle.rarity(label: TextLabel, rarityKey: string)
 	local rarity = RarityConfig.ByKey[rarityKey] or RarityConfig.ByKey.Common
 	UIStyle.text(label, if rarity.Rainbow then Color3.new(1, 1, 1) else rarity.Color, rarity.StrokeColor)
@@ -215,21 +215,32 @@ local function slotBottom(head: BasePart, slot: string): number
 	return METER_ROOM + h + GAP + TAG_ROOM -- Callout
 end
 
+-- The client shrinks world labels on small screens (UI/WorldLabels) and keeps the authored
+-- height here. Every row shrinks by the same factor, so placing from the authored height
+-- gives the same SizeOffset fraction and the stack stays lined up at any size.
+UIStyle.OverheadBaseHeight = "OverheadBaseHeight"
+
 -- Places a pixel-sized billboard so its bottom edge sits in `slot` (UIStyle.Overhead) of the
 -- stack above this head. `bob` nudges it up and down in pixels.
 function UIStyle.overhead(billboard: BillboardGui, head: BasePart, slot: string, bob: number?)
-	local height = math.max(1, billboard.Size.Y.Offset)
+	local base = billboard:GetAttribute(UIStyle.OverheadBaseHeight)
+	local height = math.max(1, if typeof(base) == "number" then base else billboard.Size.Y.Offset)
 	local bottom = slotBottom(head, slot)
 	billboard.StudsOffset = Vector3.new(0, overheadLift(head), 0)
 	billboard.SizeOffset = Vector2.new(0, (bottom + (bob or 0) + height / 2) / height)
 end
 
 -- Lifts the animal's nameplate above the clean meter, or drops it back to rest.
+-- A lifted plate is Pinned: the client's AnimalFocus keeps it showing while you wash,
+-- wherever the camera points.
+UIStyle.PinnedAttribute = "Pinned"
+
 function UIStyle.liftNameplate(head: BasePart, lifted: boolean)
 	local plate = head:FindFirstChild("Nameplate")
 	if not plate or not plate:IsA("BillboardGui") then
 		return
 	end
+	plate:SetAttribute(UIStyle.PinnedAttribute, if lifted then true else nil)
 	if lifted then
 		UIStyle.overhead(plate, head, UIStyle.Overhead.Name)
 	else
@@ -258,8 +269,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 	label.Name = "Label"
 	label.Size = UDim2.fromScale(1, 1)
 	label.Parent = billboard
-	local textColor = if rarity.Key == "Secret" then rarity.Color else Color3.new(1, 1, 1)
-	UIStyle.text(label, textColor, if rainbowLabel then Color3.new(0, 0, 0) else rarity.StrokeColor, 3.5)
+	UIStyle.text(label, Color3.new(1, 1, 1), if rainbowLabel then Color3.new(0, 0, 0) else rarity.StrokeColor, 3.5)
 	label.RichText = true
 
 	local function span(color: Color3, text: string): string
@@ -281,7 +291,7 @@ function UIStyle.nameplate(adornee: BasePart, info: NameplateInfo, maxDistance: 
 		label:SetAttribute("OpenText", table.concat(rows, "\n"))
 		label:SetAttribute("OpenLines", #rows)
 		label:SetAttribute("Lines", lines)
-		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `🔒 {info.Needs}`))
+		table.insert(rows, span(Color3.fromRGB(255, 140, 90), `Needs {info.Needs}`))
 		label:SetAttribute("LockText", table.concat(rows, "\n"))
 	end
 	label.Text = table.concat(rows, "\n")

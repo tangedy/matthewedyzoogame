@@ -17,6 +17,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local Janitor = require(ReplicatedStorage.Shared.Janitor)
 local MutationConfig = require(ReplicatedStorage.Shared.MutationConfig)
+local StatUpgrades = require(ReplicatedStorage.Shared.StatUpgrades)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Hooks = require(script.Parent.Hooks)
@@ -37,7 +38,9 @@ local ProfileService = require(script.Parent.Parent.Libs.ProfileService)
 --     A v8 save that had any of them open by Robux, the Axolotl or cash gets all four.
 -- v10: the barn tier bought (BarnTier) is saved instead of trusting ZooSize. Pen numbers are
 --     positions only; older saves map their ZooSize onto the barn they paid for.
-local SCHEMA_VERSION = 10
+-- v11: the guide runs until the first animal is in a pen (GuideStep Pen). A v10 save with an
+--     empty farm gets that step; its Done is not trusted.
+local SCHEMA_VERSION = 11
 local MAX_OVERFLOW = 8
 
 export type CachedAnimal = {
@@ -61,6 +64,9 @@ export type SavedData = {
 	Coins: number,
 	ToolTier: number,
 	ToolUpgrade: number, -- sub-tier bought on the current hose (GearLadder); 0 is the hose itself
+	-- Repeatable cash upgrades (Shared.StatUpgrades); 0 is none bought.
+	SpeedLevel: number,
+	PenCapLevel: number,
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
 	-- First lesson is the wash. "Done" once the intro auto-sells are finished.
@@ -117,6 +123,8 @@ local function defaults(): SavedData
 		Coins = GameConfig.StartingCoins,
 		ToolTier = 1,
 		ToolUpgrade = 0,
+		SpeedLevel = 0,
+		PenCapLevel = 0,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
 		GuideStep = "Wash",
@@ -316,6 +324,8 @@ local function sanitize(raw: any): SavedData
 	end
 	data.ToolTier = if ToolConfig[tier] then tier else 1
 	data.ToolUpgrade = math.min(cleanCount(raw.ToolUpgrade), GearLadder.upgradeCount(data.ToolTier))
+	data.SpeedLevel = StatUpgrades.clamp("Speed", raw.SpeedLevel)
+	data.PenCapLevel = StatUpgrades.clamp("PenCap", raw.PenCapLevel)
 
 	local version = cleanCount(raw.SchemaVersion)
 	-- The barn bought is what's saved; the pens it opens come from the current layout.
@@ -615,11 +625,19 @@ local function sanitize(raw: any): SavedData
 		index -= 1
 	end
 
-	-- The opening lesson is the wash only. Pickup, place, and the hose stand are no longer
-	-- taught, so an old save sitting on those steps is finished. A zoo that's already
-	-- underway does not replay the baby-elephant intro.
+	-- The guide is the opening washes (Wash), then carrying an animal into a pen (Pen). An
+	-- animal in a pen means it's done. Before v11 the guide stopped after the wash, so an older
+	-- save with an empty farm still gets the pen lesson; from v11 a saved Done is kept (the
+	-- player placed one and later sold it). A zoo that's already underway does not replay
+	-- the baby-elephant intro.
 	local played = data.LifetimeAnimalsWashed > 0 or #data.Animals > 0 or #data.Cache > 0 or #data.Overflow > 0
-	data.GuideStep = if played then "Done" else "Wash"
+	if not played then
+		data.GuideStep = "Wash"
+	elseif #data.Animals > 0 or (version >= 11 and raw.GuideStep == "Done") then
+		data.GuideStep = "Done"
+	else
+		data.GuideStep = "Pen"
+	end
 	if raw.IntroWashesLeft == nil then
 		data.IntroWashesLeft = if played then 0 else GameConfig.Intro.AutoSellCount
 	else
