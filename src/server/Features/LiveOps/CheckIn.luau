@@ -2,11 +2,12 @@
 -- earnings buff and day 6's PRO WASHER chat title are permanent flags in data.Extra.LiveOps;
 -- animals go straight into the player's hands, or queue for the cache like a bought animal.
 -- Remotes:
---   "CheckInState" (server -> client) ({ Count, CanClaim, NextDay, NextClaimIn, Claimed? })
+--   "CheckInState" (server -> client) ({ Count, CanClaim, NextDay, NextClaimIn, Claimed?, Open? })
 --   "CheckInClaim" (client -> server) () claims today's reward; the server picks which one
 -- The client asks once with "CheckInSync" in case it missed the first push.
--- The chart stays hidden until the player has upgraded their gear once and placed an animal
--- (Unlocked); after that it stays available for good.
+-- The chart stays hidden until the player has placed an animal in a pen (Unlocked); after that
+-- it stays available for good. The first animal ever penned opens the chart by itself
+-- (Open), IntroDelay seconds after it goes in.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,6 +33,8 @@ local CheckIn = {}
 local stateEvent: RemoteEvent
 local claiming: { [Player]: boolean } = {}
 
+local INTRO_DELAY = 2 -- seconds after the first animal is penned before the chart opens
+
 local function buffMultiplier(): number
 	for _, reward in Rewards do
 		if reward.Kind == "EarningsBuff" and reward.Multiplier then
@@ -41,8 +44,8 @@ local function buffMultiplier(): number
 	return 1
 end
 
--- Upgraded gear at least once and has an animal in a pen. Remembered once true, so selling
--- every animal later never hides the chart again.
+-- Has an animal in a pen. Remembered once true, so selling every animal later never hides
+-- the chart again.
 local function unlocked(player: Player, state: Common.State): boolean
 	if state.CheckInUnlocked then
 		return true
@@ -51,8 +54,7 @@ local function unlocked(player: Player, state: Common.State): boolean
 	if not data then
 		return false
 	end
-	local upgraded = data.ToolTier > 1 or data.ToolUpgrade > 0
-	if upgraded and #data.Animals > 0 then
+	if #data.Animals > 0 then
 		state.CheckInUnlocked = true
 		PlayerDataService.markDirty(player)
 		return true
@@ -72,7 +74,7 @@ local function nextClaimAt(state: Common.State): number
 	return 0
 end
 
-local function payload(player: Player, claimed: string?): { [string]: any }?
+local function payload(player: Player, claimed: string?, open: boolean?): { [string]: any }?
 	local state = Common.state(player)
 	if not state then
 		return nil
@@ -86,11 +88,12 @@ local function payload(player: Player, claimed: string?): { [string]: any }?
 		NextClaimIn = math.max(0, nextClaimAt(state) - Common.now()),
 		Claimed = claimed,
 		Unlocked = unlocked(player, state),
+		Open = if open then true else nil,
 	}
 end
 
-local function push(player: Player, claimed: string?)
-	local data = payload(player, claimed)
+local function push(player: Player, claimed: string?, open: boolean?)
+	local data = payload(player, claimed, open)
 	if data then
 		stateEvent:FireClient(player, data)
 	end
@@ -186,12 +189,33 @@ function CheckIn.init()
 		applyFlags(player)
 		push(player)
 	end)
-	-- The two steps that unlock the chart. Once it is unlocked these pushes are harmless.
-	for _, name in { "GearUpgraded", "ToolPurchased", "AnimalPlaced" } do
+	-- The step that unlocks the chart. Once it is unlocked these pushes are harmless.
+	for _, name in { "GearUpgraded", "ToolPurchased" } do
 		Hooks.on(name, function(player: Player)
 			push(player)
 		end)
 	end
+	-- The first animal ever penned brings the chart up on its own, once per profile. A profile
+	-- that already had animals in pens when this shipped is marked without opening it.
+	Hooks.on("AnimalPlaced", function(player: Player)
+		local state = Common.state(player)
+		local data = PlayerDataService.get(player)
+		if not state or not data or state.CheckInIntroShown then
+			push(player)
+			return
+		end
+		state.CheckInIntroShown = true
+		PlayerDataService.markDirty(player)
+		local first = #data.Animals == 1
+		push(player)
+		if first then
+			task.delay(INTRO_DELAY, function()
+				if player.Parent == Players then
+					push(player, nil, true)
+				end
+			end)
+		end
+	end)
 	Players.PlayerRemoving:Connect(function(player)
 		claiming[player] = nil
 	end)

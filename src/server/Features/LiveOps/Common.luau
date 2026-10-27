@@ -30,7 +30,8 @@ export type State = {
 	CheckInCount: number, -- days claimed in the current seven-day chart (0..7)
 	EarningsBuff: boolean, -- check-in day 4: permanent income multiplier
 	ProWasher: boolean, -- check-in day 6: PRO WASHER chat title
-	CheckInUnlocked: boolean, -- has upgraded gear once and placed an animal; the chart shows from then on
+	CheckInUnlocked: boolean, -- has placed an animal in a pen; the chart shows from then on
+	CheckInIntroShown: boolean, -- the chart opened by itself after the first animal was penned
 }
 
 local Common = {}
@@ -103,6 +104,7 @@ function Common.state(player: Player): State?
 	raw.EarningsBuff = raw.EarningsBuff == true
 	raw.ProWasher = raw.ProWasher == true
 	raw.CheckInUnlocked = raw.CheckInUnlocked == true
+	raw.CheckInIntroShown = raw.CheckInIntroShown == true
 	-- Seed from washes already finished so a zoo in progress still hits the next pity mark.
 	-- Counted when an animal walks in. Not replicated.
 	local rolled = finite(raw.WashesRolled)

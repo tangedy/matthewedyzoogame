@@ -640,9 +640,21 @@ local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	local spacing = GameConfig.Cache.SlotSpacing
 	-- Slot 1 is closer to the road. A sale walks that animal out, then the one behind steps up.
 	local depths = { YARD_D - spacing, YARD_D }
-	-- No platform: washed animals wait right on the drive.
 	for index, depth in depths do
 		local pos = PlotLayout.point(plot, depth, CACHE_LAT, FLOOR_Y)
+		-- Each waiting animal stands on a round pad like the wash spot's (buildWash), a little
+		-- narrower so the two slots' pads don't overlap.
+		makePart({
+			Name = "CachePad" .. index,
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.15, math.min(8, spacing - 0.5), math.min(8, spacing - 0.5)),
+			CFrame = CFrame.new(PlotLayout.point(plot, depth, CACHE_LAT, FLOOR_Y + 0.05))
+				* CFrame.Angles(0, 0, math.rad(90)),
+			Color = Color3.fromRGB(90, 140, 190),
+			CanCollide = false,
+			CanQuery = false,
+			Parent = cache,
+		})
 		local slot = makeMarker("Slot" .. index, CFrame.lookAt(pos, pos + plot.Look), cache)
 		slot:SetAttribute("SlotIndex", index)
 		makePrompt("PickupPrompt", "Pick up", 0, slot).Enabled = false

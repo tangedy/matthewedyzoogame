@@ -459,6 +459,16 @@ function AnimalService.walkCorners(
 	model:SetAttribute(AnimalGait.ATTRIBUTE, nil)
 end
 
+-- Where the model is right now as clients see it: the server leaves its parts at the walk's
+-- start until the walk ends, so mid-walk this samples the published plan instead.
+function AnimalService.currentPivot(model: Model): CFrame
+	local current = walking[model]
+	if not current then
+		return model:GetPivot()
+	end
+	return AnimalGait.sample(current.Plan, Workspace:GetServerTimeNow() - current.Plan.At, nil)
+end
+
 -- The corners a walk in progress has not reached yet, in order (empty when standing still).
 function AnimalService.pendingCorners(model: Model): { Vector3 }
 	local current = walking[model]

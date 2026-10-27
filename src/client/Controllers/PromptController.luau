@@ -89,6 +89,7 @@ local TOUCH_HOLD_ACTIONS = { "Sell", "Swap", "Pick up" }
 -- Picking up from the cache only moves a washed animal into your hands, so it stays a tap.
 local TOUCH_TAP_PROMPTS: { [string]: boolean } = {
 	PickupPrompt = true,
+	WalkPickupPrompt = true, -- the same pick up, on an animal still walking to the cache
 }
 -- Setting a pet swaps the one following you, so it holds on touch whatever its label says.
 local TOUCH_HOLD_PROMPTS: { [string]: boolean } = {

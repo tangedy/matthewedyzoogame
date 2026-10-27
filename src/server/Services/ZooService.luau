@@ -3,7 +3,8 @@
 --   * A full cache does not delete that animal when the next wash finishes. The new one
 --     waits as an overflow until the owner keeps it (carries it to a pen) or auto-sells it.
 --   * The owner picks one up (it rides above their head) and carries it to a pen: an empty
---     pen takes it, an occupied pen swaps (the old animal is sold for cash).
+--     pen takes it, an occupied pen swaps (the old animal comes out into their hands).
+--     A washed animal can be grabbed while it is still walking to the cache.
 --   * The first three washes of a new profile auto-sell, and the pens stay hidden until then.
 --   * Animals in pens earn cash every second into the pen's collect pad; stepping on the
 --     pad collects it. Animals can also be sold from the cache or a pen.
@@ -408,8 +409,7 @@ local function refreshPens(player: Player)
 				prompt.ActionText = "Place"
 				prompt.HoldDuration = 0
 			else
-				local value = UIStyle.formatMoney(ZooService.sellValue(animal.Species, animal.Mutation))
-				prompt.ActionText = `Swap (+{value})`
+				prompt.ActionText = "Swap"
 				prompt.HoldDuration = 0.5
 			end
 		elseif animal then
@@ -652,12 +652,27 @@ local function dropCarry(player: Player)
 	zoo.CarriedId = nil
 end
 
+-- A washed animal walking to its slot carries its record id here, and the owner's client puts
+-- a Pick up card on it (ZooController). The grab comes back as the WalkPickup remote, since
+-- the server's copy of a walking model stays at the start of its walk (AnimalService).
+local WALK_PICKUP = "WalkPickupId"
+local WALK_REACH = 16 -- studs from where the animal is now, as clients see it
+
+local function markArriving(zoo: Zoo, record: CachedAnimal, model: Model)
+	zoo.Arriving[record.Id] = model
+	model:SetAttribute("WalkPickupLabel", ZooService.label(record.Species, record.Mutation))
+	model:SetAttribute(WALK_PICKUP, record.Id)
+end
+
 -- Takes a waiting record's model out of the zoo's books: the one standing in its slot, or the
 -- washed one still walking there (that walk then stops at once, see receiveWashed).
 local function takeCacheModel(zoo: Zoo, id: string): Model?
 	local model = zoo.CacheModels[id] or zoo.Arriving[id]
 	zoo.CacheModels[id] = nil
 	zoo.Arriving[id] = nil
+	if model then
+		model:SetAttribute(WALK_PICKUP, nil)
+	end
 	return model
 end
 
@@ -777,17 +792,14 @@ local function returnCarryToCache(player: Player)
 	GuideService.onCarryReturned(player)
 end
 
-local function pickUp(player: Player, slotIndex: number)
+-- Lifts a waiting record into the player's hands: from its slot, or grabbed while it was
+-- still walking there.
+local function pickUpRecord(player: Player, record: CachedAnimal)
 	local zoo = zoos[player]
-	local data = PlayerDataService.get(player)
 	local character = player.Character
 	local hand = character
 		and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")) :: BasePart?
-	if not zoo or not data or zoo.CarriedId or not hand then
-		return
-	end
-	local record = waitingRecords(zoo, data)[slotIndex]
-	if not record then
+	if not zoo or zoo.CarriedId or not hand then
 		return
 	end
 	-- Picked up from its slot, or grabbed while it was still walking there.
@@ -800,6 +812,35 @@ local function pickUp(player: Player, slotIndex: number)
 	refreshAll(player)
 	GuideService.onPickedUp(player)
 	promoteOverflow(player)
+end
+
+local function pickUp(player: Player, slotIndex: number)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local record = zoo and data and waitingRecords(zoo, data)[slotIndex]
+	if record then
+		pickUpRecord(player, record)
+	end
+end
+
+-- The owner grabbed a washed animal on its way to the cache. It must still be walking there,
+-- and the player must be standing near where it is now.
+local function pickUpWalking(player: Player, id: string)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local model = zoo and zoo.Arriving[id]
+	local record = data and (findCached(data, id))
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not zoo or not model or not model.Parent or not record or not root or zoo.CarriedId then
+		return
+	end
+	local at = AnimalService.currentPivot(model).Position
+	local offset = at - root.Position
+	if Vector2.new(offset.X, offset.Z).Magnitude > WALK_REACH then
+		return
+	end
+	pickUpRecord(player, record)
 end
 
 -- Lifts a penned animal into the player's hands so it can go in another pen. Cash still on
@@ -839,9 +880,9 @@ local function pickUpFromPen(player: Player, penIndex: number, which: number?)
 	refreshAll(player)
 end
 
--- Put the carried animal into a pen. An occupied pen sells its animal first (plus any cash
--- still on its pad), which is the swap.
-local function placeCarried(player: Player, penIndex: number, confirmed: boolean?)
+-- Put the carried animal into a pen. An occupied pen swaps: its animal comes out into the
+-- player's hands (cash still on its pad is paid out), and the carried one takes its place.
+local function placeCarried(player: Player, penIndex: number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
 	local record = carriedRecord(player)
@@ -863,26 +904,20 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 		purchaseResult:FireClient(player, false, `{AnimalConfig.placementHint(bodyClass, penClass)}.`)
 		return
 	end
+	local character = player.Character
+	local hand = character
+		and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")) :: BasePart?
 	local old, oldIndex = animalInPen(data, penIndex)
-	if old and old.Paid and not confirmed then
-		local label = ZooService.label(old.Species, old.Mutation)
-		askPaid(player, `Swapping sells the {label}. Sell it?`, function()
-			local now = PlayerDataService.get(player)
-			local held = carriedRecord(player)
-			if now and held and held.Id == record.Id and animalInPen(now, penIndex) == old then
-				placeCarried(player, penIndex, true)
-			end
-		end)
-		return
+	if old and not hand then
+		return -- nothing to hold the swapped-out animal with
 	end
 	if old and oldIndex then
 		table.remove(data.Animals, oldIndex)
-		EconomyService.addCoins(player, ZooService.sellValue(old.Species, old.Mutation) + math.floor(old.Pending))
-		Hooks.fire("AnimalSold", player, old.Species, old.Mutation, ZooService.sellValue(old.Species, old.Mutation))
+		EconomyService.addCoins(player, math.floor(old.Pending))
 		local oldModel = zoo.PenModels[old.Id]
 		if oldModel then
 			zoo.PenModels[old.Id] = nil
-			AnimalService.poof(oldModel)
+			oldModel:Destroy()
 		end
 	end
 	local _, cacheIndex = findCached(data, record.Id)
@@ -900,6 +935,18 @@ local function placeCarried(player: Player, penIndex: number, confirmed: boolean
 	table.insert(data.Animals, animal)
 	dropCarry(player)
 	placeInPen(zoo, animal, AnimalService.buildZooAnimal(animal.Species, animal.Mutation), data)
+	if old and hand then
+		-- The one that was in the pen is in hand now: a cache record like any other carry.
+		local swapped: CachedAnimal = {
+			Id = old.Id,
+			Species = old.Species,
+			Mutation = old.Mutation,
+			Paid = old.Paid,
+		}
+		table.insert(data.Cache, swapped)
+		zoo.CarriedId = swapped.Id
+		zoo.CarryModel = AnimalService.buildCarryModel(swapped.Species, swapped.Mutation, hand)
+	end
 	PlayerDataService.saveNow(player)
 	refreshAll(player)
 	Hooks.fire("AnimalPlaced", player, animal)
@@ -934,7 +981,7 @@ local function sellCarried(player: Player, confirmed: boolean?)
 end
 
 -- The open, empty pen nearest the player that this animal fits, and how far it is. Pens
--- with an animal are skipped: putting down never swaps (that sells).
+-- with an animal are skipped: putting down never swaps.
 local function nearestFreePen(player: Player, record: CachedAnimal, from: Vector3): (number?, number)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -1216,13 +1263,14 @@ function promoteOverflow(player: Player)
 		zoo.OverflowModels[record.Id] = nil
 		local slot = cacheSlot(zoo, #waitingRecords(zoo, data))
 		if model and slot then
-			zoo.Arriving[record.Id] = model -- sellable on the way, like a fresh wash (receiveWashed)
+			markArriving(zoo, record, model) -- sellable and grabbable on the way, like a fresh wash
 			task.spawn(function()
 				AnimalService.walkCorners(model, { slot.CFrame }, GameConfig.DepartDuration)
 				if zoo.Arriving[record.Id] ~= model then
 					return
 				end
 				zoo.Arriving[record.Id] = nil
+				model:SetAttribute(WALK_PICKUP, nil)
 				if model.Parent and zoos[player] == zoo then
 					ZooService.adoptIntoCache(player, record, model)
 				elseif model.Parent then
@@ -1417,12 +1465,13 @@ function ZooService.receiveWashed(player: Player, model: Model, species: string,
 	if record and slot then
 		-- Its record is already waiting, so it can be sold or picked up on the way. Whoever
 		-- takes it clears Arriving and owns the model from then on (sendSoldHome or pickUp).
-		zoo.Arriving[record.Id] = model
+		markArriving(zoo, record, model)
 		AnimalService.walkCorners(model, ZooService.fromWash(zoo.Bay, { slot }), GameConfig.DepartDuration)
 		if zoo.Arriving[record.Id] ~= model then
 			return
 		end
 		zoo.Arriving[record.Id] = nil
+		model:SetAttribute(WALK_PICKUP, nil)
 		if zoos[player] == zoo and model.Parent then
 			ZooService.adoptIntoCache(player, record, model)
 			return
@@ -1589,6 +1638,7 @@ function ZooService.adoptIntoCache(player: Player, record: CachedAnimal, model: 
 	model.Name = "CachedAnimal"
 	model:SetAttribute("AnimalId", record.Id)
 	model:SetAttribute("JobId", nil)
+	model:SetAttribute(WALK_PICKUP, nil)
 	AnimalService.resize(model, AnimalService.bodyScale(record.Species))
 	model.Parent = zoo.Bay:FindFirstChild("Cache") or zoo.Bay
 	zoo.CacheModels[record.Id] = model
@@ -1862,6 +1912,14 @@ function ZooService.init()
 		else
 			sellOverflow(player)
 		end
+	end))
+	choiceJanitor:Add(Remotes.event("WalkPickup").OnServerEvent:Connect(function(player: Player, id: any)
+		local now = os.clock()
+		if (lastAction[player] or 0) > now or typeof(id) ~= "string" then
+			return
+		end
+		lastAction[player] = now + 0.4
+		pickUpWalking(player, id)
 	end))
 	choiceJanitor:Add(paidConfirm.OnServerEvent:Connect(function(player: Player, token: any, accepted: any)
 		local pending = pendingConfirm[player]

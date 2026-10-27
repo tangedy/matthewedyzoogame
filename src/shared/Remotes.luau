@@ -14,6 +14,7 @@ local EVENTS = {
 	"CutsceneReady", -- () client has its bay and is ready for the set; the server starts the shot's clock
 	"CutsceneFinished", -- (watched: boolean) false aborts (unlock, not saved); true is ignored before SkipAfter
 	"OverflowChoice", -- ("keep" | "sell")
+	"WalkPickup", -- (animalId: string) grab a washed animal still walking to its cache slot
 	-- both ways: server asks (token: number, text: string), client answers (token: number, accepted: boolean)
 	"PaidSellConfirm",
 	-- server -> client

@@ -2,7 +2,8 @@
 -- right above SHOP, opens a panel with all seven rewards: claimed days are ticked, today's
 -- glows, and CLAIM sends the request (the server picks the reward). After a claim the button
 -- stays, counting down to the next reward (LiveOpsConfig.CheckIn.CooldownHours). It only shows
--- once the player has upgraded their gear and placed an animal (the server's Unlocked). The panel never opens by itself. Rewards and their
+-- once the player has placed an animal (the server's Unlocked). The panel opens by itself only
+-- once, when the server says Open (just after the first animal is penned). Rewards and their
 -- labels come from LiveOpsConfig.CheckIn, so the chart always shows exactly what each day gives.
 
 local Players = game:GetService("Players")
@@ -23,6 +24,7 @@ type State = {
 	NextClaimIn: number,
 	Claimed: string?,
 	Unlocked: boolean?,
+	Open: boolean?,
 }
 type Card = { Frame: Frame, Stroke: UIStroke, Status: TextLabel }
 
@@ -310,6 +312,9 @@ local function apply(value: any)
 		pop(panelScale, 0.92, 0.3)
 	end
 	render()
+	if value.Open == true and value.Unlocked == true then
+		open()
+	end
 end
 
 function CheckIn.init(_initial: any)

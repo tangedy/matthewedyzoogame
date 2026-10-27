@@ -1,6 +1,7 @@
 -- Zoo client side:
 --   * keeps other players' pen/cache/expand prompts out of reach (only your bay's work),
 --   * shows what you're carrying, with Put Down / Sell buttons (Q / X on keyboard),
+--   * puts a Pick up card on your washed animals while they walk to the cache,
 --     (PromptController draws the cache, pen and shop prompts on every platform),
 --   * animates every rainbow label (Zoo God tier, Rainbow mutation).
 
@@ -39,7 +40,14 @@ local carryBanner: Frame
 local cacheHint: TextLabel
 local carrySellButton: TextButton
 local carryAction = Remotes.event("CarryAction")
+local walkPickup = Remotes.event("WalkPickup")
 local carrying = false
+
+-- Washed animals on their way to the cache carry WalkPickupId (ZooService). The card lives
+-- only on this client: the server's copy of a walking model stays where the walk started,
+-- so the grab goes up as a remote and the server checks the distance itself.
+local WALK_PICKUP = "WalkPickupId"
+local walkPrompts: { [Model]: ProximityPrompt } = {}
 
 -- An animal's Pick up / Sell / Set pet card only comes up while you look at that animal,
 -- like its nameplate (AnimalFocus): in a pen, or waiting in a cache slot. Carrying one,
@@ -107,6 +115,84 @@ local function applyAllPrompts()
 				applyPromptReach(prompt)
 			end
 		end
+	end
+end
+
+local function dropWalkPrompt(model: Model)
+	local prompt = walkPrompts[model]
+	walkPrompts[model] = nil
+	if prompt then
+		prompt:Destroy()
+	end
+end
+
+local watchedWalkers: { [Model]: boolean } = {}
+local updateWalker: { [Model]: () -> () } = {}
+
+-- Washed animals stand straight under their bay model, so only those are watched.
+local function watchWalker(model: Instance)
+	local bay = model.Parent
+	if
+		not model:IsA("Model")
+		or watchedWalkers[model]
+		or not bay
+		or bay.Parent ~= Workspace:FindFirstChild("WashBays")
+	then
+		return
+	end
+	watchedWalkers[model] = true
+	local function update()
+		local id = model:GetAttribute(WALK_PICKUP)
+		local bays = Workspace:FindFirstChild("WashBays")
+		local mine = bays and myBay and bays:FindFirstChild(myBay)
+		local head = model:FindFirstChild("Head")
+		if
+			typeof(id) ~= "string"
+			or not mine
+			or not model:IsDescendantOf(mine)
+			or not head
+			or not head:IsA("BasePart")
+		then
+			dropWalkPrompt(model)
+			return
+		end
+		local prompt = walkPrompts[model]
+		if not prompt then
+			prompt = Instance.new("ProximityPrompt")
+			prompt.Name = "WalkPickupPrompt"
+			prompt.Style = Enum.ProximityPromptStyle.Custom -- PromptController draws the card
+			prompt.ActionText = "Pick up"
+			prompt.HoldDuration = 0
+			prompt.RequiresLineOfSight = false
+			prompt.MaxActivationDistance = 10
+			prompt.Triggered:Connect(function()
+				local current = model:GetAttribute(WALK_PICKUP)
+				if typeof(current) == "string" then
+					walkPickup:FireServer(current)
+				end
+			end)
+			prompt.Parent = head
+			walkPrompts[model] = prompt
+		end
+		local label = model:GetAttribute("WalkPickupLabel")
+		prompt.ObjectText = if typeof(label) == "string" then label else ""
+		prompt.Enabled = not carrying
+	end
+	updateWalker[model] = update
+	model:GetAttributeChangedSignal(WALK_PICKUP):Connect(update)
+	model.AncestryChanged:Connect(function()
+		if not model.Parent then
+			dropWalkPrompt(model)
+			watchedWalkers[model] = nil
+			updateWalker[model] = nil
+		end
+	end)
+	update()
+end
+
+local function refreshWalkPrompts()
+	for _, prompt in walkPrompts do
+		prompt.Enabled = not carrying
 	end
 end
 
@@ -184,6 +270,7 @@ end
 local function onCarry(info: Types.CarryInfo?)
 	carrying = info ~= nil
 	applyPenPrompts()
+	refreshWalkPrompts()
 	if info then
 		carrySellButton.Text = "SELL " .. UIStyle.formatMoney(info.SellValue or 0)
 		carryBanner.Visible = true
@@ -201,6 +288,9 @@ local function onBay(bay: Types.BaySnapshot?)
 	if bay.BayName ~= myBay then
 		myBay = bay.BayName
 		applyAllPrompts()
+		for _, update in updateWalker do
+			update()
+		end
 	end
 	cacheHint.Visible = false
 end
@@ -214,8 +304,15 @@ function ZooController.init(initial: Types.InitialState)
 	bays.DescendantAdded:Connect(function(descendant)
 		if descendant:IsA("ProximityPrompt") then
 			applyPromptReach(descendant)
+		elseif descendant:IsA("Model") then
+			watchWalker(descendant)
 		end
 	end)
+	for _, descendant in bays:GetDescendants() do
+		if descendant:IsA("Model") then
+			watchWalker(descendant)
+		end
+	end
 	UIPlatform.onChanged(function()
 		onBay(latestBay)
 	end)
