@@ -84,6 +84,12 @@ local F = {
 	BoughtBarn = 19,
 }
 
+-- TooDirty: a player's first three encounters with an animal their gear can't wash (the "too
+-- dirty" prompt). Saved as TD1-TD3. Only players who load with no washes yet get TDTrack, so
+-- anyone already washing before this shipped is never counted mid-way.
+local TOO_DIRTY = "TooDirty"
+local TOO_DIRTY_STEPS = { "1st Too Dirty Encounter", "2nd Too Dirty Encounter", "3rd Too Dirty Encounter" }
+
 local CURRENCY = "Cash"
 
 local Analytics = {}
@@ -297,6 +303,28 @@ local function checkFirstSession(player: Player)
 	end
 end
 
+-- The next TooDirty step for this player, if they are tracked and have steps left.
+local function tooDirtyStep(player: Player)
+	local state = Common.state(player)
+	if not state or state.Funnel.TDTrack ~= true or not player.Parent then
+		return
+	end
+	for step, name in TOO_DIRTY_STEPS do
+		local key = "TD" .. step
+		if not state.Funnel[key] then
+			state.Funnel[key] = true
+			PlayerDataService.markDirty(player)
+			local ok, err = pcall(function()
+				AnalyticsService:LogFunnelStepEvent(player, TOO_DIRTY, tostring(player.UserId), step, name)
+			end)
+			if not ok then
+				warn(`[LiveOps] TooDirty step {step} not logged: {err}`)
+			end
+			return
+		end
+	end
+end
+
 local function logSource(
 	player: Player,
 	amount: number,
@@ -358,6 +386,10 @@ function Analytics.init()
 		-- FirstSession only follows players who start after it shipped: anyone who has already
 		-- washed but never logged its first step is skipped, so they can't enter mid-funnel.
 		local noFunnelYet = next(state.Funnel) == nil
+		if not state.Funnel.TDTrack and data.LifetimeAnimalsWashed == 0 then
+			state.Funnel.TDTrack = true
+			PlayerDataService.markDirty(player)
+		end
 		local skipFirst = not state.Funnel["F" .. F.Joined] and data.LifetimeAnimalsWashed > 0
 		if skipFirst then
 			local mine = claimed[player] or {}
@@ -392,6 +424,9 @@ function Analytics.init()
 	end)
 	Hooks.on("AnimalPickedUp", function(player: Player)
 		firstStep(player, F.Pickup)
+	end)
+	Hooks.on("TooDirtyEncounter", function(player: Player)
+		tooDirtyStep(player)
 	end)
 	Hooks.on("CashCollected", function(player: Player)
 		firstStep(player, F.Collect)

@@ -440,6 +440,11 @@ local function runOneJob(bay: Bay, owner: Player)
 	local info: Hooks.WashInfo =
 		{ JobId = front.Id, Species = animalKey, Mutation = mutationKey, Model = model, Bay = bay.Model }
 	Hooks.fire("WashStarted", owner, info)
+	-- An animal this hose can't wash (or a soap-only one without Super Soap): the "too dirty"
+	-- prompt is up. Analytics counts a player's first encounters.
+	if not front.Scripted and (needsPurchase or CleaningService.isBlocked(owner)) then
+		Hooks.fire("TooDirtyEncounter", owner, animalKey)
+	end
 	-- Clean Now bought ahead of this animal: it's already paid for, so skip the wait.
 	-- The bay thread hasn't yielded, so the finish must not try to resume it.
 	if CleaningService.pullQueuedClean(owner) then
