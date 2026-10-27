@@ -1236,7 +1236,15 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 		end
 	end
 	local top = frame * CFrame.new(0, 2.1, 0)
-	makeMarker("ShowcaseSlot", top, model)
+	local slot = makeMarker("ShowcaseSlot", top, model)
+	-- Shown while the farm has no animals; ZooService hides it once one stands on the podium.
+	local empty =
+		billboardLabel(slot, "Your top animals will be displayed here!", Vector3.new(0, 3, 0), Vector2.new(280, 70))
+	empty.Name = "EmptyLabel"
+	empty.TextWrapped = true
+	local emptyGui = empty.Parent :: BillboardGui
+	emptyGui.Name = "Empty"
+	emptyGui.MaxDistance = 80
 	-- BayService writes the farm name into SignPost.Sign.BayLabel.
 	local post = makeMarker("SignPost", frame * CFrame.new(0, 2.1, 6.5), model)
 	local sign = billboardLabel(post, "", Vector3.new(0, 0, 0), Vector2.new(300, 52))

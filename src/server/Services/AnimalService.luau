@@ -178,12 +178,18 @@ local function addNameplate(
 end
 
 -- Display scale for this species at the wash and in a pen (GameConfig.BodyScale), with the
--- global AnimalSizeBoost on top.
+-- global AnimalSizeBoost on top. Rarities below Legendary come out a bit smaller.
 function AnimalService.bodyScale(animalKey: string): number
 	local def = AnimalConfig.Animals[animalKey]
 	local scale = def and (def.DisplayScale or GameConfig.BodyScale[def.BodyClass])
 	local base = if typeof(scale) == "number" and scale > 0 then scale else 1
-	return math.min(base * GameConfig.AnimalSizeBoost, math.max(base, GameConfig.MaxBodyScale))
+	local boosted = math.min(base * GameConfig.AnimalSizeBoost, math.max(base, GameConfig.MaxBodyScale))
+	local rarity = def and RarityConfig.ByKey[def.Rarity]
+	local legendary = RarityConfig.ByKey.Legendary
+	if rarity and legendary and rarity.Order < legendary.Order then
+		boosted *= GameConfig.BelowLegendaryScale
+	end
+	return boosted
 end
 
 -- Scales a model to its pen size (penned) or back to its built size, shrinking it further

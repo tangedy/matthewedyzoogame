@@ -534,6 +534,45 @@ end
 -- farm's income under the farm name, so passers-by see what this player has. It is a copy:
 -- the animal still lives and earns in its pen.
 local SHOWCASE_MAX = 11 -- studs: a giant on the podium shrinks to fit it
+local PODIUM_EMPTY = 16 -- plinth width with nobody on it (WorldBuilder.buildShowcase)
+local PODIUM_RIM = 3 -- plinth past the cloth top
+local PODIUM_MIN_TOP = 4
+
+-- Fits the plinth, cloth top and corner posts to `top` studs of standing room, about the
+-- plinth's own centre, so the podium is as big as the animal on it.
+local function sizePodium(showcase: Instance, top: number)
+	local plinth = showcase:FindFirstChild("Plinth") :: BasePart?
+	local cloth = showcase:FindFirstChild("Top") :: BasePart?
+	if not plinth then
+		return
+	end
+	local width = top + PODIUM_RIM
+	plinth.Size = Vector3.new(width, plinth.Size.Y, width)
+	if cloth then
+		cloth.Size = Vector3.new(top, cloth.Size.Y, top)
+	end
+	local corners = {}
+	for _, child in showcase:GetChildren() do
+		if child.Name == "Corner" and child:IsA("BasePart") then
+			table.insert(corners, child)
+		end
+	end
+	local inset = width / 2 - 0.7
+	for i, corner in corners do
+		local x = if i <= 2 then -1 else 1
+		local z = if i % 2 == 1 then -1 else 1
+		corner.CFrame = plinth.CFrame * CFrame.new(x * inset, 0.4, z * inset)
+	end
+end
+
+local function setShowcaseEmpty(showcase: Instance, empty: boolean)
+	local gui = showcase:FindFirstChild("Empty", true) :: BillboardGui?
+	if gui then
+		gui:SetAttribute("RestEnabled", empty)
+		gui.Enabled = empty
+	end
+end
+
 local function refreshShowcase(player: Player)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
@@ -559,6 +598,7 @@ local function refreshShowcase(player: Player)
 		end
 	end
 	local id = best and best.Id
+	setShowcaseEmpty(showcase, #data.Animals == 0)
 	if id == zoo.ShowcaseId and (zoo.ShowcaseModel == nil) == (best == nil) then
 		return
 	end
@@ -568,6 +608,7 @@ local function refreshShowcase(player: Player)
 	end
 	zoo.ShowcaseId = id
 	if not best then
+		sizePodium(showcase, PODIUM_EMPTY - PODIUM_RIM)
 		return
 	end
 	local model = AnimalService.buildZooAnimal(best.Species, best.Mutation)
@@ -576,6 +617,17 @@ local function refreshShowcase(player: Player)
 	model:PivotTo(slot.CFrame)
 	model.Parent = showcase
 	zoo.ShowcaseModel = model
+	-- The rarity aura's ground ring would make the footprint read wider than the animal.
+	local footprint = 0
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "AuraRing" and part.Name ~= "AuraBase" then
+			local size = part.Size
+			local offset = slot.CFrame:PointToObjectSpace(part.Position)
+			local reach = math.max(math.abs(offset.X), math.abs(offset.Z)) + math.max(size.X, size.Z) / 2
+			footprint = math.max(footprint, reach * 2)
+		end
+	end
+	sizePodium(showcase, math.max(PODIUM_MIN_TOP, footprint + 0.5))
 end
 
 local function refreshAll(player: Player)

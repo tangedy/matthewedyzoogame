@@ -6,7 +6,8 @@
 --
 -- Any player with a hose can spray an active job. Extra sprayers raise the clean rate,
 -- more so on large bodies. Only the owner's spray can take the last dirt and finish the
--- job, so a helper cannot push the owner's cached animal out.
+-- job, so a helper cannot push the owner's cached animal out. The owner's spray finishes
+-- at GameConfig.WashedProgress; the auto-wash pad has to take every speck.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -265,8 +266,16 @@ local function onCleaningIntent(player: Player, jobId: any, aimDirection: any, a
 			)
 		end
 	end
-	if ownerSpray and isComplete(job) then
+	-- The owner's spray counts the animal washed at WashedProgress: the last specks pop off.
+	if ownerSpray and (isComplete(job) or progress >= GameConfig.WashedProgress) then
 		job.Active = false -- lock before anything else so no further cleaning is accepted
+		for _, patch in job.PatchList do
+			if patch.RemainingDirt > 0 then
+				patch.RemainingDirt = 0
+				DirtRenderer.clear(patch.Part, 1)
+			end
+		end
+		DirtRenderer.setGrime(job.Model, 1)
 		tell(job.Owner, true)
 		task.spawn(job.OnComplete)
 	else

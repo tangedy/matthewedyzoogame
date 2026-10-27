@@ -31,7 +31,7 @@ FarmDecor.SpinTag = "FarmSpin"
 FarmDecor.BobTag = "FarmBob"
 
 local FOLDER = "FarmDecor"
-local PROP_SCALE = 1.3 -- every building and prop, so they read from the road
+local PROP_SCALE = 1.95 -- every building and prop, so they read from the road
 local FLAT = { VeggiePatch = true, WheatField = true, Pond = true, FlowerGarden = true }
 
 local WOOD = Color3.fromRGB(150, 105, 65)

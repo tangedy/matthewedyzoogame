@@ -51,6 +51,9 @@ local GameConfig = {
 	-- comes off, so players see the mud left on the far side and walk round to it.
 	HintProgress = 0.001,
 	AlmostCleanProgress = 0.85, -- the HUD switches to "Almost clean!" from here
+	-- The owner's own spray finishes the wash once this much mud is off (the auto-wash pad
+	-- still has to take all of it).
+	WashedProgress = 0.85,
 
 	-- Lifecycle timings (seconds). Kept short so there's almost always an animal to wash:
 	-- about 6 s between finishing one animal and being able to spray the next.
@@ -141,6 +144,8 @@ local GameConfig = {
 	-- mud is a bigger target to swipe. Capped at MaxBodyScale so a T-Rex still fits its yard.
 	AnimalSizeBoost = 1.3,
 	MaxBodyScale = 2.9,
+	-- Animals below Legendary are drawn this much smaller, so the rare ones stand out.
+	BelowLegendaryScale = 0.85,
 
 	-- Cache: a washed animal waits here until the owner picks it up and carries it to a pen.
 	-- A later wash does not remove it. The new animal is an overflow the owner keeps
