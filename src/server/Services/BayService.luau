@@ -1,7 +1,8 @@
 -- Bay assignment, ownership, and the per-bay animal lifecycle:
 --   Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
 -- Bays are built when a player is given a random free plot and destroyed when they leave.
--- Three animals stand on the U. Only the front one is washed. When its wash finishes it
+-- Three animals stand on the U: two wait up the wash arm and the front one walks round the
+-- corner (WashCorner) to the wash spot in the middle of the drive. Only that one is washed. When its wash finishes it
 -- celebrates and walks into the cache on its own while the line steps forward, and a new
 -- animal joins at the back.
 --
@@ -70,6 +71,7 @@ type Bay = {
 	QueueMarks: { BasePart },
 	Approach: BasePart,
 	TurnIn: BasePart,
+	WashCorner: BasePart?,
 	RoadReturn: BasePart,
 	Line: { Arrival },
 	Owner: Player?,
@@ -236,6 +238,15 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	}
 end
 
+-- The walk to line spot `index`: the wash spot is round the corner from the arm, so the
+-- front animal goes by WashCorner instead of across the grass.
+local function routeTo(bay: Bay, index: number, target: CFrame): { CFrame }
+	if index == 1 and bay.WashCorner then
+		return { bay.WashCorner.CFrame, target }
+	end
+	return { target }
+end
+
 local function reveal(bay: Bay, arrival: Arrival)
 	AnimalService.revealArrival(arrival.Model, arrival.AnimalKey, arrival.Mutation, bay.Model)
 end
@@ -255,7 +266,8 @@ local function runIn(bay: Bay, owner: Player, arrival: Arrival)
 	end
 	reveal(bay, arrival)
 	if arrival.Target then
-		AnimalService.walkCorners(model, { arrival.Target }, 1, 0.4, speed)
+		local index = table.find(bay.Line, arrival) or 0
+		AnimalService.walkCorners(model, routeTo(bay, index, arrival.Target), 1, 0.4, speed)
 	end
 end
 
@@ -276,7 +288,7 @@ local function ensureLine(bay: Bay, owner: Player)
 		local target = bay.QueueMarks[slot].CFrame
 		arrival.Target = target
 		if fresh and slot == 1 then
-			local turn = bay.TurnIn.CFrame
+			local turn = (bay.WashCorner or bay.TurnIn).CFrame
 			local from = arrival.Model:GetPivot().Position
 			local goal = Vector3.new(target.Position.X, from.Y, target.Position.Z)
 			local flat = Vector3.new(goal.X - turn.Position.X, 0, goal.Z - turn.Position.Z)
@@ -306,7 +318,7 @@ local function stepLine(bay: Bay, owner: Player)
 		end
 		arrival.Token += 1 -- an unfinished run-in up the arm stops; this walk takes over
 		table.insert(moves, function()
-			AnimalService.walkCorners(arrival.Model, { target }, 1.2)
+			AnimalService.walkCorners(arrival.Model, routeTo(bay, index, target), 1.2)
 		end)
 	end
 	waitAll(moves, bay, owner)
@@ -577,6 +589,7 @@ local function makeBay(index: number): Bay
 		QueueMarks = { wash, queue2, queue3 },
 		Approach = model:FindFirstChild("Approach") :: BasePart,
 		TurnIn = model:FindFirstChild("TurnIn") :: BasePart,
+		WashCorner = model:FindFirstChild("WashCorner") :: BasePart?,
 		RoadReturn = model:FindFirstChild("RoadReturn") :: BasePart,
 		Line = {},
 		Owner = nil,

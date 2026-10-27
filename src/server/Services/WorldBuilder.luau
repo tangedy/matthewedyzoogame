@@ -5,7 +5,7 @@
 --   -> three gargantuan yards across the back.
 --
 -- Each bay exposes:
---   Approach, TurnIn, WashPosition, Queue2, Queue3, RoadReturn, Exit, StreetEnd
+--   Approach, TurnIn, WashCorner, WashPosition, Queue2, Queue3, RoadReturn, Exit, StreetEnd
 --   Spawn                          the owner's SpawnLocation
 --   Showcase.SignPost.Sign.BayLabel   owner name over the podium (Income.IncomeLabel, ShowcaseSlot)
 --   UpgradeStation.Counter         hose shop prompt
@@ -15,7 +15,7 @@
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
 --   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
 --   RobuxKiosk{Key}[Gear].Counter  single-item Robux stands around the plot (RobuxKioskPrompt)
---   AutoCleanPad.AutoCleanSign.Status  auto-wash pad beside the spawn (AutoCleanService)
+--   AutoCleanPad.AutoCleanSign.Status  auto-wash pad across the wash from the walkway (AutoCleanService)
 --   Zoo.Pen19 / 23 / 24  the three gargantuan yards across the back
 --   Zoo.Pen25-28   the Robux pastures, right after the starting stalls
 
@@ -46,12 +46,17 @@ local SIDEWALK_PAVING = Color3.fromRGB(190, 175, 150)
 local ROAD_D = -8
 local DRIVE_ARM = 14
 local YARD_D = 38
--- 1 is the wash, furthest in; 3 is the back of the queue. The two waiting stand well back so
--- the one being washed has room all round.
-local QUEUE_DEPTH = { YARD_D, 21, 6 }
-local WASH_LAT = -DRIVE_ARM
+-- The wash spot is dead centre on the cross piece, in line with the walkway, the spawn and
+-- the auto-wash pad. The line waits up the wash arm and only the front animal walks round
+-- the corner (WashCorner) onto it. 2 and 3 are the queue's depths on the arm.
+local QUEUE_DEPTH = { YARD_D, 24, 8 }
+local WASH_LAT = -DRIVE_ARM -- the wash arm, where the line waits
+local WASH_SPOT_LAT = 0
 local CACHE_LAT = DRIVE_ARM
 local SOLD_LAT = CACHE_LAT
+-- The cache stands this far down its arm toward the road, clear of the cross piece, so a
+-- washed animal walks along the drive and round the corner into it.
+local CACHE_FORWARD = 6
 -- Main Street. The drive's cross piece ends at depth 44; the hub plaza sits right behind it
 -- (spawn, gear shop, Robux shop), and one walkway runs from the plaza to the back of
 -- the plot. Every pen opens onto it, in the order they unlock, so one walk up and back passes
@@ -641,7 +646,7 @@ local function buildCache(plot: PlotLayout.PlotFrame, bay: Model)
 	cache.Name = "Cache"
 	local spacing = GameConfig.Cache.SlotSpacing
 	-- Slot 1 is closer to the road. A sale walks that animal out, then the one behind steps up.
-	local depths = { YARD_D - spacing, YARD_D }
+	local depths = { YARD_D - CACHE_FORWARD - spacing, YARD_D - CACHE_FORWARD }
 	for index, depth in depths do
 		local pos = PlotLayout.point(plot, depth, CACHE_LAT, FLOOR_Y)
 		-- Each waiting animal stands on a round pad like the wash spot's (buildWash), a little
@@ -1121,7 +1126,7 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 	makePart({
 		Shape = Enum.PartType.Cylinder,
 		Size = Vector3.new(0.15, 8, 8),
-		CFrame = CFrame.new(PlotLayout.point(plot, YARD_D, WASH_LAT, FLOOR_Y + 0.05))
+		CFrame = CFrame.new(PlotLayout.point(plot, YARD_D, WASH_SPOT_LAT, FLOOR_Y + 0.05))
 			* CFrame.Angles(0, 0, math.rad(90)),
 		Color = Color3.fromRGB(90, 140, 190),
 		CanCollide = false,
@@ -1146,14 +1151,16 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 	-- along the road, turn here, and go straight up the arm instead of cutting the corner.
 	local turn = PlotLayout.point(plot, ROAD_D, WASH_LAT, FLOOR_Y)
 	makeMarker("TurnIn", CFrame.lookAt(turn, turn + plot.Back), bay)
-	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], WASH_LAT, FLOOR_Y), bay)
+	local corner = PlotLayout.point(plot, YARD_D, WASH_LAT, FLOOR_Y)
+	makeMarker("WashCorner", CFrame.lookAt(corner, corner - plot.Right * WASH_LAT), bay)
+	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], WASH_SPOT_LAT, FLOOR_Y), bay)
 	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], WASH_LAT, FLOOR_Y), bay)
 	makeMarker("Queue3", PlotLayout.inbound(plot, QUEUE_DEPTH[3], WASH_LAT, FLOOR_Y), bay)
 	makeMarker("Entrance", alongRoad(ROAD_D, 0), bay)
 	-- Where the cross piece meets the cache arm. Animals leaving the wash turn here.
 	local cacheTurn = PlotLayout.point(plot, YARD_D, CACHE_LAT, FLOOR_Y)
 	makeMarker("CacheTurn", CFrame.lookAt(cacheTurn, cacheTurn + plot.Look), bay)
-	local soldPos = PlotLayout.point(plot, YARD_D - GameConfig.Cache.SlotSpacing - 8, SOLD_LAT, FLOOR_Y)
+	local soldPos = PlotLayout.point(plot, YARD_D - CACHE_FORWARD - GameConfig.Cache.SlotSpacing - 8, SOLD_LAT, FLOOR_Y)
 	makeMarker("SoldSpot", CFrame.lookAt(soldPos, soldPos + plot.Look), bay)
 	local back = PlotLayout.point(plot, ROAD_D, SOLD_LAT, FLOOR_Y)
 	makeMarker("RoadReturn", CFrame.lookAt(back, back + plot.Look), bay)
@@ -1378,12 +1385,14 @@ end
 
 -- The auto-wash pad: on the plaza beside the spawn, on the wash arm's side. AutoCleanService
 -- washes the front animal while the owner stands on it and writes AutoCleanSign.Status.
-local AUTO_PAD_LAT = -12
+-- Inside the U, straight across the wash spot from the walkway: the animal being washed
+-- stands dead centre between the auto-wash pad and the path to the pens.
+local AUTO_PAD_DEPTH = YARD_D - 12
 local AUTO_PAD_COLOR = Color3.fromRGB(70, 200, 255)
 local function buildAutoCleanPad(plot: PlotLayout.PlotFrame, bay: Model)
 	local size = GameConfig.AutoClean.PadSize
-	local pos = PlotLayout.point(plot, PLAZA_DEPTH, AUTO_PAD_LAT, 0.42)
-	local frame = CFrame.lookAt(pos, PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_LAT, 0.42))
+	local pos = PlotLayout.point(plot, AUTO_PAD_DEPTH, WASH_SPOT_LAT, 0.42)
+	local frame = CFrame.lookAt(pos, PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_SPOT_LAT, 0.42))
 	makePart({
 		Name = "AutoCleanRim",
 		Size = Vector3.new(size + 1, 0.12, size + 1),
@@ -1456,7 +1465,7 @@ function WorldBuilder.buildBay(index: number): Model
 
 	-- In the middle of the hub plaza, facing the wash.
 	local spawnPos = PlotLayout.point(plot, PLAZA_DEPTH, 0, FLOOR_Y)
-	local washPos = PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_LAT, FLOOR_Y)
+	local washPos = PlotLayout.point(plot, QUEUE_DEPTH[1], WASH_SPOT_LAT, FLOOR_Y)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "Spawn"
 	spawn.Anchored = true

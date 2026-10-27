@@ -1,4 +1,4 @@
--- The auto-wash pad beside each farm's spawn (WorldBuilder's AutoCleanPad). While the owner
+-- The auto-wash pad across the wash spot from the walkway (WorldBuilder's AutoCleanPad). While the owner
 -- stands on it, the animal on the wash spot cleans itself over AutoClean.seconds (rarity and
 -- the Auto-Wash Speed upgrade), and one their gear cannot wash is let go so the line keeps
 -- moving. Off during the opening washes, which teach the hose. While on the pad the player
