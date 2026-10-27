@@ -6,7 +6,9 @@
 -- Kept out of the way on purpose: two buttons (three at most on desktop), its own ScreenGui under every menu
 -- (a menu's dimmer covers it), hidden for the session's first Offers.QuietSeconds and while
 -- a contextual offer is up (that popup sits in the same right-hand spot on desktop).
--- A game pass (2x Cash) hides once owned and the first QuickBuyBackup key takes its slot.
+-- A game pass hides once owned and the first QuickBuyBackup key takes its slot.
+-- 2x Cash Forever (QuickBuyWide) is its own wide button, the invite box's size, straight
+-- above it; it hides once owned and with the column.
 -- Pure view, like MonetizationShop: MonetizationController owns the state and the buy call.
 -- Part of the Monetization feature (no init of its own).
 
@@ -48,6 +50,8 @@ local ACTIVE_COLOR = Color3.fromRGB(255, 230, 120)
 local CHIP_HEIGHT = 22
 
 local column: Frame
+local wide: TextButton? = nil
+local wideOwned = false
 local entries: { Entry } = {}
 local blocked: { [string]: boolean } = {}
 local lastState: ShopState? = nil
@@ -74,6 +78,72 @@ end
 
 local function refreshVisible()
 	column.Visible = next(blocked) == nil
+	if wide then
+		wide.Visible = column.Visible and not wideOwned
+	end
+end
+
+-- Same size and look as the invite box (FriendLuck): icon on the left, name over the price.
+local function makeWide(gui: ScreenGui, key: string): TextButton?
+	local pass = MonetizationConfig.PassesByKey[key]
+	if not pass then
+		warn(`[QuickBuy] unknown pass {key}`)
+		return nil
+	end
+	local button = Instance.new("TextButton")
+	button.Name = key
+	button.Text = ""
+	button.AutoButtonColor = true
+	button.BackgroundColor3 = Color3.new(1, 1, 1)
+	button.Size = UDim2.fromOffset(200, 62)
+	button.Parent = gui
+	UIStyle.border(button, 3)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = button
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(pass.Color, shade(pass.Color, 0.5))
+	gradient.Parent = button
+	local scale = Instance.new("UIScale")
+	scale.Parent = button
+	UIPlatform.Feedback.button(button)
+
+	local iconHolder = Instance.new("Frame")
+	iconHolder.AnchorPoint = Vector2.new(0, 0.5)
+	iconHolder.Position = UDim2.new(0, 6, 0.5, 0)
+	iconHolder.Size = UDim2.fromOffset(50, 50)
+	iconHolder.BackgroundTransparency = 1
+	iconHolder.Parent = button
+	Icons.make(MonetizationShop.iconFor(key), iconHolder, { outline = 2.5 })
+
+	local title = Instance.new("TextLabel")
+	title.Position = UDim2.fromOffset(60, 5)
+	title.Size = UDim2.new(1, -66, 0, 30)
+	title.TextWrapped = true
+	title.Text = string.upper(pass.DisplayName)
+	title.Parent = button
+	UIStyle.text(title, ACTIVE_COLOR, nil, 2.5)
+
+	local robux = Instance.new("Frame")
+	robux.Position = UDim2.new(0, 60, 1, -24)
+	robux.Size = UDim2.fromOffset(18, 18)
+	robux.BackgroundTransparency = 1
+	robux.Parent = button
+	Icons.make("Robux", robux, { outline = 1.5 })
+	local price = Instance.new("TextLabel")
+	price.Position = UDim2.new(0, 82, 1, -24)
+	price.Size = UDim2.new(1, -88, 0, 18)
+	price.TextXAlignment = Enum.TextXAlignment.Left
+	price.Text = tostring(pass.Robux)
+	price.Parent = button
+	UIStyle.text(price, nil, nil, 1.5)
+
+	button.Activated:Connect(function()
+		pop(scale, 0.9, 0.25)
+		callbacks.onBuy(key)
+	end)
+	return button
 end
 
 local function makeEntry(key: string, order: number): Entry?
@@ -217,7 +287,13 @@ function MonetizationQuickBuy.build(handlers: Callbacks)
 		end
 	end
 
+	wide = makeWide(gui, MonetizationConfig.QuickBuyWide)
+
 	UIPlatform.Layout.watch(function(spec)
+		if wide then
+			wide.AnchorPoint = spec.cashForever.anchor
+			wide.Position = spec.cashForever.position
+		end
 		local slot = spec.quickBuy
 		column.AnchorPoint = slot.anchor
 		column.Position = slot.position
@@ -241,12 +317,20 @@ function MonetizationQuickBuy.setBlocked(reason: string, isBlocked: boolean)
 			for _, entry in entries do
 				pop(entry.Scale, 0.5, 0.4)
 			end
+			local wideScale = wide and wide:FindFirstChildOfClass("UIScale")
+			if wideScale then
+				pop(wideScale, 0.5, 0.4)
+			end
 		end
 	end
 end
 
 function MonetizationQuickBuy.refresh(state: ShopState)
 	lastState = state
+	wideOwned = state.Passes[MonetizationConfig.QuickBuyWide] == true
+	if column then
+		refreshVisible()
+	end
 	-- The first #QuickBuy buyable entries show, in order; backups fill in behind owned passes.
 	local slots = #MonetizationConfig.QuickBuy
 	for _, entry in entries do

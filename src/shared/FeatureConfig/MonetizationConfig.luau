@@ -323,9 +323,11 @@ return {
 	Tabs = { "Boosts", "Cash", "Passes", "Limited" },
 	ShopColor = PINK,
 	-- One-tap buttons down the right side of the screen (MonetizationQuickBuy), top first.
-	-- Two at most, so the column fits above WASH on a phone; everything else is in the shop.
+	-- One only, so the column fits above WASH on a phone under the wide 2x Cash Forever
+	-- button (QuickBuyWide); everything else is in the shop.
 	-- A pass hides once owned and the next key in QuickBuyBackup takes its place.
-	QuickBuy = { "DoubleCash", "SpeedBoost" },
+	QuickBuy = { "SpeedBoost" },
+	QuickBuyWide = "DoubleCash", -- its own wide button above the invite box; hides once owned
 	QuickBuyBackup = { "CashSmall" },
 
 	SuperSoap = {

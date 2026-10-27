@@ -82,7 +82,7 @@ None of these show in a session's first `Offers.QuietSeconds` (90). The server a
 
 ## Quick buy
 
-Two square icon buttons in a column down the right side (above the invite box on desktop, under it on touch) (`MonetizationConfig.QuickBuy`: 2x Speed for 16, Pile of Cash for 7, the two cheapest buys), each with a Robux price chip under it. One tap sends `MonetizationBuy(key)`, so Roblox's purchase dialog is the only confirm. The caption shows the time left on a running boost, or what a cash pack pays right now.
+2x Cash Forever (`MonetizationConfig.QuickBuyWide`) is a wide button the invite box's size, straight above it, and hides once owned. Under it, a square icon button column down the right side (above the 2x Cash button on desktop, under the invite box on touch) (`MonetizationConfig.QuickBuy`: 2x Speed for 16), each with a Robux price chip under it. One tap sends `MonetizationBuy(key)`, so Roblox's purchase dialog is the only confirm. The caption shows the time left on a running boost, or what a cash pack pays right now.
 
 - On touch they make a row under the invite box. A column ran into WASH on a landscape phone.
 - On desktop they make a column that grows up from just above the invite box.

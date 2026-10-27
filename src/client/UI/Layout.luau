@@ -5,7 +5,7 @@
 --
 --   top left      cash and income, then a narrow column of square icon buttons
 --                 (INDEX, DAILY, SHOP). Narrow, so the thumbstick area stays clear.
---   right side    the invite box, then the quick-buy column under it (MonetizationQuickBuy)
+--   right side    2x Cash Forever, the invite box, then the quick-buy column (MonetizationQuickBuy)
 --   bottom left   nothing: the thumbstick
 --   bottom right  jump
 --   bottom centre one hint line, and the carry PUT DOWN / SELL row
@@ -31,6 +31,8 @@ export type Spec = {
 	-- One-tap Robux buys on the right. size is each square button; gap leaves room for the
 	-- price chip that hangs off its bottom edge (a column) or between buttons (a row).
 	quickBuy: { anchor: Vector2, position: UDim2, size: number, gap: number, row: boolean },
+	-- The wide 2x Cash Forever button, straight above the invite box and the same size.
+	cashForever: { anchor: Vector2, position: UDim2 },
 	invite: { anchor: Vector2, position: UDim2 },
 	dataWarning: UDim2,
 	-- Full-screen menus (Robux shop, index, daily). columns: shop grid columns, nil = by width.
@@ -57,8 +59,10 @@ local DESKTOP: Spec = {
 		compact = false,
 	},
 	boostTimers = { anchor = Vector2.new(0, 0.5), position = UDim2.new(0, 196, 0.5, 14) },
-	-- Grows up from just above the invite box, under the player list.
-	quickBuy = { anchor = Vector2.new(1, 1), position = UDim2.new(1, -16, 0.5, 24), size = 72, gap = 20, row = false },
+	-- Bottom up: the invite box, 2x Cash Forever right on top of it, then the quick-buy
+	-- column grows up from above that, under the player list.
+	quickBuy = { anchor = Vector2.new(1, 1), position = UDim2.new(1, -16, 0.5, -46), size = 72, gap = 20, row = false },
+	cashForever = { anchor = Vector2.new(1, 1), position = UDim2.new(1, -16, 0.5, 31) },
 	invite = { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -16, 0.5, 70) },
 	dataWarning = UDim2.new(0, 16, 0.5, 140),
 	panel = { scale = Vector2.new(0.94, 0.86), maxSize = Vector2.new(680, 480), columns = nil },
@@ -88,11 +92,13 @@ local TOUCH: Spec = {
 		compact = true,
 	},
 	boostTimers = { anchor = Vector2.new(0, 0), position = UDim2.fromOffset(112, 90) },
-	-- A column down the right edge under the invite box. On a 380px-tall landscape phone,
-	-- WASH (on top of jump) starts about 288 units (144px) down; two 76 buttons with their
-	-- price chips end near 263, so the column stays clear of it. Keep QuickBuy at two.
-	quickBuy = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 80), size = 76, gap = 18, row = false },
-	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
+	-- Top down the right edge: 2x Cash Forever, the invite box, then the quick-buy column.
+	-- On a 380px-tall landscape phone, WASH (on top of jump) starts about 288 units (144px)
+	-- down; one 76 button with its price chip ends near 237, so the column stays clear of
+	-- it. Keep QuickBuy at one.
+	quickBuy = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 150), size = 76, gap = 18, row = false },
+	cashForever = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 8) },
+	invite = { anchor = Vector2.new(1, 0), position = UDim2.new(1, -16, 0, 78) },
 	dataWarning = UDim2.fromOffset(270, 10),
 	panel = { scale = Vector2.new(0.96, 0.95), maxSize = Vector2.new(1120, 640), columns = 2 },
 	toastLift = 28,
