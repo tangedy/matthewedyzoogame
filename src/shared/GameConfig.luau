@@ -103,11 +103,12 @@ local GameConfig = {
 		-- In order along the walkway, one pen per side per step so both sides stay even. Each
 		-- step's index is its UnlockSpot in WorldBuilder.
 		Expansions = {
-			{ Pens = 8, Price = 25000, Barn = "Small" }, -- 2 medium pens, one each side
-			{ Pens = 12, Price = 100000, Barn = "Medium" }, -- 4 medium pens, two each side
-			{ Pens = 18, Price = 500000, Barn = "Grand" }, -- 6 medium pens, three each side
-			{ Pens = 20, Price = 2500000, Barn = "Large" }, -- a giant pen each side
-			{ Pens = 22, Price = 10000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
+			-- The first barn is part of the first loop: right after the starter gear and stats.
+			{ Pens = 8, Price = 3000, Barn = "Small" }, -- 2 medium pens, one each side
+			{ Pens = 12, Price = 25000, Barn = "Medium" }, -- 4 medium pens, two each side
+			{ Pens = 18, Price = 150000, Barn = "Grand" }, -- 6 medium pens, three each side
+			{ Pens = 20, Price = 1000000, Barn = "Large" }, -- a giant pen each side
+			{ Pens = 22, Price = 5000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
 		} :: { { Pens: number?, RoadCages: boolean?, Price: number, Barn: string } },
 	},
 
@@ -216,12 +217,12 @@ local GameConfig = {
 
 	-- The auto-wash pad beside the spawn. While the owner stands on it, the animal on the
 	-- wash spot cleans itself: a Common takes BaseSeconds and each rarity above it doubles
-	-- that (6, 12, 24, ...). Every gear purchase after the sponge takes UpgradeDiscount off,
-	-- compounding. Animals the player's gear cannot wash are let go automatically.
+	-- that (3, 6, 12, ...). The Auto-Wash Speed upgrade (StatUpgrades) divides it. Animals the
+	-- player's gear cannot wash are let go automatically, and mud shakes don't knock the
+	-- player off the pad (Tension skips anyone with the AutoWashing attribute).
 	AutoClean = {
-		BaseSeconds = 6,
+		BaseSeconds = 3,
 		RarityFactor = 2,
-		UpgradeDiscount = 0.05,
 		PadSize = 8, -- studs, square
 		TickSeconds = 0.2,
 	},

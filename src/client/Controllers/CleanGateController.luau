@@ -17,13 +17,13 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local ToolConfig = require(ReplicatedStorage.Shared.ToolConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
-local Modals = require(script.Parent.Parent.UI.Modals)
 
 local player = Players.LocalPlayer
 
 local CleanGateController = {}
 
 local NEAR_DISTANCE = 14 -- studs; the offer shows within this or the hose's range, whichever is more
+local EYE_HEIGHT = 4.5 -- studs above the animal's feet: a regular character's eye level
 -- The same muted palette as the world prompt cards (PromptController).
 local PANEL_COLOR = UIStyle.Colors.Panel
 local LEAVE_COLOR = UIStyle.Colors.Muted
@@ -124,13 +124,21 @@ local function follow()
 	local tool = ToolConfig[tier] or ToolConfig[1]
 	local reach = math.max(NEAR_DISTANCE, tool.Range + 4)
 	local near = (root.Position - head.Position).Magnitude <= reach
-	local screen, onScreen = camera:WorldToViewportPoint(head.Position + Vector3.new(0, head.Size.Y, 0))
+	-- Low, at a regular character's eye level, on the animal's side facing the player, so it
+	-- sits where you're already looking instead of above a tall animal's head.
+	local box, size = animal:GetBoundingBox()
+	local feet = box.Position.Y - size.Y / 2
+	local toward = (root.Position - box.Position) * Vector3.new(1, 0, 1)
+	local side = if toward.Magnitude > 0.1 then toward.Unit else Vector3.zero
+	local edge = math.min(size.X, size.Z) / 2
+	local anchor = Vector3.new(box.Position.X, feet + EYE_HEIGHT, box.Position.Z) + side * edge
+	local screen, onScreen = camera:WorldToViewportPoint(anchor)
 	local show = near and onScreen
 	if show then
 		local viewport = camera.ViewportSize
 		local half = panel.AbsoluteSize / 2
 		local x = math.clamp(screen.X, half.X + 8, viewport.X - half.X - 8)
-		local y = math.clamp(screen.Y, panel.AbsoluteSize.Y + 8, viewport.Y - 8)
+		local y = math.clamp(screen.Y + half.Y, panel.AbsoluteSize.Y + 8, viewport.Y - 8)
 		panel.Position = UDim2.fromOffset(x, y)
 	end
 	panel.Visible = show
@@ -166,7 +174,7 @@ local function build()
 	panel.BackgroundTransparency = 0.15
 	panel.Visible = false
 	panel.Parent = gui
-	Modals.holdCursor(panel)
+	-- Not a menu: no Modals.holdCursor, so the camera keeps turning while it's up.
 	UIStyle.border(panel, 1.5)
 
 	title = Instance.new("TextLabel")

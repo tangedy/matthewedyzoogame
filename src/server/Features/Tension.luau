@@ -214,6 +214,10 @@ local function fling(
 	ragdoll: number,
 	splat: boolean
 )
+	-- Hands-free washing on the auto-wash pad is never knocked off it.
+	if player:GetAttribute("AutoWashing") == true then
+		return
+	end
 	local offset = (root.Position - from) * Vector3.new(1, 0, 1)
 	local direction = if offset.Magnitude > 0.05
 		then offset.Unit

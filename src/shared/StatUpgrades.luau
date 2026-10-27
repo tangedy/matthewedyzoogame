@@ -1,19 +1,20 @@
--- Repeatable cash upgrades bought in the Gear Shop beside the hose ladder: walk speed and pen
--- pad capacity. A player's place on each is a saved level (0 = none bought). Shared so the
+-- Repeatable cash upgrades bought in the Gear Shop beside the hose ladder: walk speed, pen
+-- pad capacity, and auto-wash speed. A player's place on each is a saved level (0 = none bought). Shared so the
 -- server (which charges and applies them) and the shop agree.
 --
 -- Prices sit between the hose (ToolConfig) and barn (GameConfig.Zoo.Expansions) prices, so a
 -- player always has something affordable to aim for between the big buys:
---   Hose 500 · Hose 1K · Speed I 2.5K · Pens I 5K · Hose 10K · Speed II 14K · Hose 18K ·
---   Barn 25K · Pens II 40K · Hose 60K · Speed III 80K · Barn 100K · Hose 140K · Pens III 200K ·
---   Hose 280K · Speed IV 400K · Barn 500K · Hose 750K · Pens IV 1.2M · Hose 1.8M · Barn 2.5M ·
---   Speed V 3M · Hose 3.5M · Pens V 6M · Barn 10M · Pens VI 20M
+--   Hose 500 · Hose 1K · Speed I 2.5K · Barn 3K · Pens I 5K · Hose 10K · Speed II 14K · Hose 18K ·
+--   Barn 25K · Pens II 40K · Hose 60K · Speed III 80K · Hose 140K · Barn 150K · Pens III 200K ·
+--   Hose 280K · Speed IV 400K · Hose 750K · Barn 1M · Pens IV 1.2M · Hose 1.8M ·
+--   Speed V 3M · Hose 3.5M · Barn 5M · Pens V 6M · Pens VI 20M
+-- Auto-Wash Speed sits in the same gaps: 3K · 20K · 120K · 700K · 4M.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 
-export type Kind = "Speed" | "PenCap"
+export type Kind = "Speed" | "PenCap" | "AutoWash"
 
 export type Track = {
 	Kind: Kind,
@@ -42,9 +43,16 @@ StatUpgrades.Tracks = {
 		PerLevel = 0.25, -- +0.25x every pen's cash cap per level, 2.5x at max
 		Prices = { 5000, 40000, 200000, 1200000, 6000000, 20000000 },
 	},
+	AutoWash = {
+		Kind = "AutoWash",
+		Name = "Auto-Wash Speed",
+		Field = "AutoWashLevel",
+		PerLevel = 0.25, -- the auto-wash pad finishes 25% faster per level, 2.25x at max
+		Prices = { 3000, 20000, 120000, 700000, 4000000 },
+	},
 } :: { [Kind]: Track }
 
-StatUpgrades.Order = { "Speed", "PenCap" } :: { Kind }
+StatUpgrades.Order = { "Speed", "PenCap", "AutoWash" } :: { Kind }
 
 function StatUpgrades.maxLevel(kind: Kind): number
 	return #StatUpgrades.Tracks[kind].Prices

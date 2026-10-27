@@ -61,7 +61,7 @@ local messageLabel: TextLabel
 -- Repeatable stat upgrades (Shared.StatUpgrades): one row each under the gear buttons.
 local STAT_ROW_HEIGHT = 50
 local STAT_ROWS_HEIGHT = 8 + #StatUpgrades.Order * STAT_ROW_HEIGHT
-local statLevels: { [StatUpgrades.Kind]: number } = { Speed = 0, PenCap = 0 }
+local statLevels: { [StatUpgrades.Kind]: number } = { Speed = 0, PenCap = 0, AutoWash = 0 }
 local statFrame: Frame
 local statRows: { [StatUpgrades.Kind]: { Title: TextLabel, Detail: TextLabel, Buy: TextButton } } = {}
 
@@ -139,6 +139,7 @@ end
 local STAT_DETAIL = {
 	Speed = "run speed",
 	PenCap = "pen cash cap",
+	AutoWash = "auto-wash speed",
 }
 
 local function refreshStats()
@@ -465,6 +466,7 @@ function ShopController.init(initial: Types.InitialState)
 	level = initial.ToolUpgrade or 0
 	statLevels.Speed = initial.SpeedLevel or 0
 	statLevels.PenCap = initial.PenCapLevel or 0
+	statLevels.AutoWash = initial.AutoWashLevel or 0
 	buildGui()
 
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
@@ -490,6 +492,7 @@ function ShopController.init(initial: Types.InitialState)
 	Remotes.event("StatUpgradesChanged").OnClientEvent:Connect(function(levels: { [string]: number })
 		statLevels.Speed = levels.Speed or statLevels.Speed
 		statLevels.PenCap = levels.PenCap or statLevels.PenCap
+		statLevels.AutoWash = levels.AutoWash or statLevels.AutoWash
 		refresh()
 	end)
 	Remotes.event("PurchaseResult").OnClientEvent:Connect(function(success: boolean, message: string)

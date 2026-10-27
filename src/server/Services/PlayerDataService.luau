@@ -67,6 +67,7 @@ export type SavedData = {
 	-- Repeatable cash upgrades (Shared.StatUpgrades); 0 is none bought.
 	SpeedLevel: number,
 	PenCapLevel: number,
+	AutoWashLevel: number, -- StatUpgrades "AutoWash"
 	LifetimeAnimalsWashed: number,
 	TutorialCompleted: boolean,
 	-- First lesson is the wash. "Done" once the intro auto-sells are finished.
@@ -125,6 +126,7 @@ local function defaults(): SavedData
 		ToolUpgrade = 0,
 		SpeedLevel = 0,
 		PenCapLevel = 0,
+		AutoWashLevel = 0,
 		LifetimeAnimalsWashed = 0,
 		TutorialCompleted = false,
 		GuideStep = "Wash",
@@ -326,6 +328,7 @@ local function sanitize(raw: any): SavedData
 	data.ToolUpgrade = math.min(cleanCount(raw.ToolUpgrade), GearLadder.upgradeCount(data.ToolTier))
 	data.SpeedLevel = StatUpgrades.clamp("Speed", raw.SpeedLevel)
 	data.PenCapLevel = StatUpgrades.clamp("PenCap", raw.PenCapLevel)
+	data.AutoWashLevel = StatUpgrades.clamp("AutoWash", raw.AutoWashLevel)
 
 	local version = cleanCount(raw.SchemaVersion)
 	-- The barn bought is what's saved; the pens it opens come from the current layout.

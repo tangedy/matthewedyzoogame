@@ -473,9 +473,13 @@ local function refreshPens(player: Player)
 				stand:PivotTo(spot.CFrame)
 			end
 		end
-		local label = counter and counter:FindFirstChild("NextLabel", true) :: TextLabel?
-		if label and step then
-			label.Text = `FARM UPGRADE\n{UIStyle.formatMoney(step.Price)}`
+		-- The hanging sign and the counter's label both show the next upgrade's price.
+		if step then
+			for _, label in stand:GetDescendants() do
+				if label:IsA("TextLabel") and label.Name == "NextLabel" then
+					label.Text = `FARM UPGRADE\n{UIStyle.formatMoney(step.Price)}`
+				end
+			end
 		end
 	end
 	if expandPrompt then

@@ -167,7 +167,10 @@ end
 function EconomyService.sendStatUpgrades(player: Player)
 	local data = PlayerDataService.get(player)
 	if data then
-		statUpgradesChanged:FireClient(player, { Speed = data.SpeedLevel, PenCap = data.PenCapLevel })
+		statUpgradesChanged:FireClient(
+			player,
+			{ Speed = data.SpeedLevel, PenCap = data.PenCapLevel, AutoWash = data.AutoWashLevel }
+		)
 	end
 end
 
@@ -184,7 +187,7 @@ local function purchaseStatUpgrade(player: Player, kind: any)
 		purchaseResult:FireClient(player, false, "")
 		return
 	end
-	local levels = data :: any -- SpeedLevel / PenCapLevel, picked by the track
+	local levels = data :: any -- SpeedLevel / PenCapLevel / AutoWashLevel, picked by the track
 	local level = levels[track.Field] :: number
 	local price = StatUpgrades.nextPrice(track.Kind, level)
 	if not price then

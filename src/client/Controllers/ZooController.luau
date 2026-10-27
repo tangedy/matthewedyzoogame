@@ -41,15 +41,28 @@ local carrySellButton: TextButton
 local carryAction = Remotes.event("CarryAction")
 local carrying = false
 
--- A pen's Pick up / Sell / Set pet card only comes up while you look at that pen's animal,
--- like its nameplate (AnimalFocus). Carrying one, every pen's Place / Swap stays in reach.
+-- An animal's Pick up / Sell / Set pet card only comes up while you look at that animal,
+-- like its nameplate (AnimalFocus): in a pen, or waiting in a cache slot. Carrying one,
+-- every pen's Place / Swap stays in reach.
 local function penCardAllowed(prompt: ProximityPrompt): boolean
-	local post = prompt.Parent
-	if not post or post.Name ~= "GatePost" or carrying then
+	local holder = prompt.Parent
+	if not holder or carrying then
 		return true
 	end
 	local head = AnimalFocus.focusedHead()
-	return head ~= nil and post.Parent ~= nil and head:IsDescendantOf(post.Parent)
+	if holder.Name == "GatePost" then
+		return head ~= nil and holder.Parent ~= nil and head:IsDescendantOf(holder.Parent)
+	end
+	local cache = holder.Parent
+	if cache and cache.Name == "Cache" and holder:IsA("BasePart") and string.match(holder.Name, "^Slot%d+$") then
+		local model = head and head.Parent
+		if not model or not model:IsA("Model") or not model:IsDescendantOf(cache) then
+			return false
+		end
+		local offset = model:GetPivot().Position - holder.Position
+		return Vector2.new(offset.X, offset.Z).Magnitude < 3
+	end
+	return true
 end
 
 -- The server never changes MaxActivationDistance, so this local override sticks even as it
@@ -69,6 +82,14 @@ local function applyPenPrompts()
 	local bays = Workspace:FindFirstChild("WashBays")
 	local mine = bays and myBay and bays:FindFirstChild(myBay)
 	local zoo = mine and mine:FindFirstChild("Zoo")
+	local cache = mine and mine:FindFirstChild("Cache")
+	if cache then
+		for _, prompt in cache:GetDescendants() do
+			if prompt:IsA("ProximityPrompt") then
+				applyPromptReach(prompt)
+			end
+		end
+	end
 	if zoo then
 		for _, prompt in zoo:GetDescendants() do
 			if prompt:IsA("ProximityPrompt") then

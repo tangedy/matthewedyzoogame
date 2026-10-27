@@ -1,7 +1,8 @@
 -- The auto-wash pad beside each farm's spawn (WorldBuilder's AutoCleanPad). While the owner
 -- stands on it, the animal on the wash spot cleans itself over AutoClean.seconds (rarity and
--- gear), and one their gear cannot wash is let go so the line keeps moving. Off during the
--- opening washes, which teach the hose.
+-- the Auto-Wash Speed upgrade), and one their gear cannot wash is let go so the line keeps
+-- moving. Off during the opening washes, which teach the hose. While on the pad the player
+-- carries the AutoWashing attribute, which mud shakes and lunges respect (no knockout).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,10 +48,14 @@ end
 
 local function step(player: Player, dt: number)
 	local pad = padOf(player)
+	local onPad = pad ~= nil and standingOn(player, pad)
+	if player:GetAttribute("AutoWashing") ~= onPad then
+		player:SetAttribute("AutoWashing", onPad)
+	end
 	if not pad then
 		return
 	end
-	if not standingOn(player, pad) then
+	if not onPad then
 		setStatus(pad, IDLE_TEXT)
 		return
 	end
@@ -73,7 +78,7 @@ local function step(player: Player, dt: number)
 		return
 	end
 	local data = PlayerDataService.get(player)
-	local seconds = AutoClean.seconds(job.Rarity, if data then data.ToolTier else 1, data and data.ToolUpgrade)
+	local seconds = AutoClean.seconds(job.Rarity, if data then data.AutoWashLevel else 0)
 	local rarity = RarityConfig.ByKey[job.Rarity]
 	local name = if rarity then rarity.DisplayName else job.Rarity
 	local left = math.max(0, math.ceil(seconds * (1 - job.Progress)))

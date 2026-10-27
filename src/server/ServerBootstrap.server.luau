@@ -76,6 +76,7 @@ Remotes.func("RequestInitialState").OnServerInvoke = function(player: Player)
 		ToolUpgrade = if tool then tool.Level else 0,
 		SpeedLevel = if data then data.SpeedLevel else 0,
 		PenCapLevel = if data then data.PenCapLevel else 0,
+		AutoWashLevel = if data then data.AutoWashLevel else 0,
 		TutorialCompleted = if data then data.TutorialCompleted else false,
 		GuideStep = if data then data.GuideStep else "Done",
 		PlayCutscene = if data then not data.CutsceneSeen else false,

@@ -7,7 +7,7 @@ local EVENTS = {
 	-- client -> server
 	"CleaningIntent", -- (jobId: string, aimDirection: Vector3)
 	"PurchaseToolUpgrade", -- ()
-	"PurchaseStatUpgrade", -- (kind: "Speed" | "PenCap") next level of a StatUpgrades track
+	"PurchaseStatUpgrade", -- (kind: "Speed" | "PenCap" | "AutoWash") next level of a StatUpgrades track
 	"DevCommand", -- ("clean" | "grant"); server ignores this outside Studio and for non-owners
 	"LetAnimalGo", -- () the owner sends a blocked animal away instead of paying to clean it
 	"GuideAdvance", -- () owner reached the hose stand during the first-cycle guide

@@ -136,6 +136,21 @@ local function makePart(props: { [string]: any }): Part
 	return part
 end
 
+-- A wedge (full faces on its bottom and back, sloping down to the front), as decor.
+local function wedgeBlock(parent: Instance, name: string, size: Vector3, cframe: CFrame, color: Color3): Part
+	local part = makePart({
+		Name = name,
+		Size = size,
+		CFrame = cframe,
+		Color = color,
+		Material = Enum.Material.WoodPlanks,
+		CanQuery = false,
+		Parent = parent,
+	})
+	part.Shape = Enum.PartType.Wedge
+	return part
+end
+
 local function makeMarker(name: string, cframe: CFrame, parent: Instance): Part
 	return makePart({
 		Name = name,
@@ -841,33 +856,124 @@ end
 local function buildExpandStand(zoo: Folder, at: CFrame)
 	local stand = Instance.new("Model")
 	stand.Name = "ExpandStand"
-	local counter = makePart({
-		Name = "ExpandCounter",
-		Size = Vector3.new(2, 3, 6),
-		CFrame = at * CFrame.new(0, 1.5, 0),
-		Color = Color3.fromRGB(120, 170, 80),
-		Parent = stand,
-	})
-	for _, side in { -1, 1 } do
-		makePart({
-			Name = "Post",
-			Size = Vector3.new(0.5, 6, 0.5),
-			CFrame = at * CFrame.new(side * 3.2, 3, 0),
-			Color = Color3.fromRGB(186, 42, 36),
-			Material = Enum.Material.Wood,
+	local barnRed = Color3.fromRGB(176, 40, 36)
+	local trim = Color3.fromRGB(250, 245, 235)
+	local gold = Color3.fromRGB(255, 200, 70)
+	local function block(name: string, size: Vector3, offset: CFrame, color: Color3, props: { [string]: any }?): Part
+		local fields: { [string]: any } = {
+			Name = name,
+			Size = size,
+			CFrame = at * offset,
+			Color = color,
 			CanQuery = false,
 			Parent = stand,
-		})
+		}
+		for key, value in props or {} do
+			fields[key] = value
+		end
+		return makePart(fields)
 	end
-	makePart({
-		Name = "Awning",
-		Size = Vector3.new(7.4, 0.4, 2.6),
-		CFrame = at * CFrame.new(0, 6.2, 0),
-		Color = Color3.fromRGB(200, 60, 50),
-		CanQuery = false,
+	-- A barn front over the walkway: two board posts with white X-braces, a gable roof, and
+	-- the next barn's name and price on a big hanging sign. Locked ghost pens stand behind it.
+	local half = GameConfig.SidewalkWidth / 2 + 1.2
+	for _, side in { -1, 1 } do
+		local x = side * half
+		block(
+			"Post",
+			Vector3.new(2.4, 11, 2.4),
+			CFrame.new(x, 5.5, 0),
+			barnRed,
+			{ Material = Enum.Material.WoodPlanks }
+		)
+		for _, tilt in { -1, 1 } do
+			block(
+				"Brace",
+				Vector3.new(0.35, 9.5, 0.3),
+				CFrame.new(x, 5.2, -1.25) * CFrame.Angles(0, 0, tilt * 0.22),
+				trim,
+				{ Material = Enum.Material.Wood }
+			)
+		end
+		block("PostCap", Vector3.new(2.8, 0.5, 2.8), CFrame.new(x, 11.2, 0), trim)
+	end
+	block(
+		"Beam",
+		Vector3.new(half * 2 + 2.4, 1.6, 2.4),
+		CFrame.new(0, 11.6, 0),
+		barnRed,
+		{ Material = Enum.Material.WoodPlanks }
+	)
+	for _, side in { -1, 1 } do
+		wedgeBlock(
+			stand,
+			"Roof",
+			Vector3.new(3.6, 3.6, half + 2.4),
+			-- Each half slopes down away from the ridge.
+			at * CFrame.new(side * (half + 1.2) / 2, 14.2, 0) * CFrame.Angles(0, -side * math.pi / 2, 0),
+			Color3.fromRGB(120, 30, 28)
+		)
+	end
+	-- The sign: a white board with gold edges, hanging under the beam on two chains.
+	local board = block("Sign", Vector3.new(half * 2 - 2, 3.4, 0.4), CFrame.new(0, 8.6, -0.2), trim)
+	block("SignEdge", Vector3.new(half * 2 - 1.4, 3.9, 0.3), CFrame.new(0, 8.6, 0), gold)
+	for _, side in { -1, 1 } do
+		block(
+			"Chain",
+			Vector3.new(0.2, 1.2, 0.2),
+			CFrame.new(side * (half - 2.5), 10.6, -0.2),
+			Color3.fromRGB(90, 90, 95)
+		)
+	end
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "BarnSign"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0
+	gui.Parent = board
+	stampDecor(gui, true)
+	local signText = Instance.new("TextLabel")
+	signText.Name = "NextLabel"
+	signText.Size = UDim2.fromScale(1, 1)
+	signText.BackgroundTransparency = 1
+	signText.Text = ""
+	signText.Parent = gui
+	UIStyle.text(signText, barnRed, Color3.new(1, 1, 1), 3)
+	-- Warm bulbs along the beam and a sparkle off the sign, so it reads from the plaza.
+	for i = -3, 3 do
+		local bulb = block(
+			"Bulb",
+			Vector3.new(0.5, 0.5, 0.5),
+			CFrame.new(i * (half / 3.2), 10.6, -1.3),
+			Color3.fromRGB(255, 225, 140)
+		)
+		bulb.Material = Enum.Material.Neon
+		bulb:SetAttribute("RestTransparency", 0)
+	end
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Name = "Sparkle"
+	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	sparkle.Rate = 6
+	sparkle.Lifetime = NumberRange.new(0.6, 1)
+	sparkle.Speed = NumberRange.new(0.5, 1.5)
+	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Size = NumberSequence.new(0.5, 0)
+	sparkle.Color = ColorSequence.new(gold)
+	sparkle.LightEmission = 1
+	sparkle.Shape = Enum.ParticleEmitterShape.Box
+	sparkle.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	sparkle.Parent = board
+	stampDecor(sparkle, true)
+	-- The counter you buy at, in front of the gate.
+	local counter = makePart({
+		Name = "ExpandCounter",
+		Size = Vector3.new(6, 3, 2),
+		CFrame = at * CFrame.new(0, 1.5, -2.6),
+		Color = Color3.fromRGB(120, 170, 80),
+		Material = Enum.Material.WoodPlanks,
 		Parent = stand,
 	})
-	local label = billboardLabel(counter, "", Vector3.new(0, 6, 0), Vector2.new(200, 56), Color3.fromRGB(255, 230, 120))
+	local label = billboardLabel(counter, "", Vector3.new(0, 3.2, 0), Vector2.new(200, 40), gold)
 	label.Name = "NextLabel"
 	label.TextWrapped = true
 	makePrompt("ExpandPrompt", "Expand Farm", 0.5, counter).ObjectText = "Farm Upgrade"
