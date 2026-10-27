@@ -708,7 +708,7 @@ end
 -- a Pick up card on it (ZooController). The grab comes back as the WalkPickup remote, since
 -- the server's copy of a walking model stays at the start of its walk (AnimalService).
 local WALK_PICKUP = "WalkPickupId"
-local WALK_REACH = 16 -- studs from where the animal is now, as clients see it
+local WALK_REACH = 36 -- studs from where the animal is now, as clients see it (card reach 30 + lag)
 
 local function markArriving(zoo: Zoo, record: CachedAnimal, model: Model)
 	zoo.Arriving[record.Id] = model

@@ -22,9 +22,14 @@ local player = Players.LocalPlayer
 
 local ZooController = {}
 
+-- Pick up on a cache animal (waiting, or still walking there) reaches much further than the
+-- other cards, so you can grab it from the wash without walking over. ZooService's
+-- WALK_REACH must stay above this.
+local PICKUP_REACH = 30
+
 local OWN_PROMPTS = {
 	PenPrompt = 10,
-	PickupPrompt = 10,
+	PickupPrompt = PICKUP_REACH,
 	SellPrompt = 10,
 	PenSellPrompt = 10,
 	PetPrompt = 10,
@@ -164,7 +169,7 @@ local function watchWalker(model: Instance)
 			prompt.ActionText = "Pick up"
 			prompt.HoldDuration = 0
 			prompt.RequiresLineOfSight = false
-			prompt.MaxActivationDistance = 10
+			prompt.MaxActivationDistance = PICKUP_REACH
 			prompt.Triggered:Connect(function()
 				local current = model:GetAttribute(WALK_PICKUP)
 				if typeof(current) == "string" then
