@@ -61,6 +61,9 @@ local offerText: TextLabel
 local offerBuy: TextButton
 local offerKey: string? = nil
 local offerToken = 0
+local passOffer: Frame
+local passOfferDim: TextButton
+local passOfferScale: UIScale
 local clickSound: Sound
 local buySound: Sound
 
@@ -275,6 +278,26 @@ local function showOffer(kind: string, key: string)
 	end)
 end
 
+-- The 2x Cash Forever early-access pop-up (CashPassOffer on the server: first Legendary wash).
+local PASS_OFFER_KEY = "DoubleCash"
+
+local function hidePassOffer()
+	passOffer.Visible = false
+	passOfferDim.Visible = false
+end
+
+local function showPassOffer()
+	if state.Passes[PASS_OFFER_KEY] or not MonetizationConfig.PassesByKey[PASS_OFFER_KEY] then
+		return
+	end
+	Modals.claim("CashPassOffer")
+	hideOffer()
+	passOfferDim.Visible = true
+	passOffer.Visible = true
+	pop(passOfferScale, 0.5, 0.45)
+	play(clickSound)
+end
+
 -- State -------------------------------------------------------------------------------------
 
 -- Kiosk icons: WorldBuilder leaves an empty KioskIcon billboard over each kiosk's sign.
@@ -318,6 +341,9 @@ local function applyState(value: any)
 	MonetizationShop.refresh(state)
 	MonetizationQuickBuy.refresh(state)
 	refreshKiosks()
+	if state.Passes[PASS_OFFER_KEY] and passOffer.Visible then
+		hidePassOffer()
+	end
 end
 
 local function requestState()
@@ -446,6 +472,102 @@ local function buildGui()
 		end
 	end)
 
+	-- Early-access 2x Cash pop-up: centre screen over a dimmer
+	local pass = MonetizationConfig.PassesByKey[PASS_OFFER_KEY]
+	passOfferDim = Modals.dim(gui, hidePassOffer)
+	passOfferDim.ZIndex = 20
+	Modals.bind("CashPassOffer", hidePassOffer)
+	passOffer = Instance.new("Frame")
+	passOffer.Name = "CashPassOffer"
+	passOffer.AnchorPoint = Vector2.new(0.5, 0.5)
+	passOffer.Position = UDim2.fromScale(0.5, 0.5)
+	passOffer.Size = UDim2.fromOffset(330, 260)
+	passOffer.BackgroundColor3 = Color3.new(1, 1, 1)
+	passOffer.ZIndex = 21
+	passOffer.Visible = false
+	passOffer.Parent = gui
+	Modals.holdCursor(passOffer)
+	UIStyle.border(passOffer, 4)
+	passOfferScale = Instance.new("UIScale")
+	passOfferScale.Parent = passOffer
+	local passGradient = Instance.new("UIGradient")
+	passGradient.Rotation = 90
+	passGradient.Color = ColorSequence.new(Color3.fromRGB(90, 220, 110), Color3.fromRGB(20, 120, 60))
+	passGradient.Parent = passOffer
+
+	local ribbon = Instance.new("TextLabel")
+	ribbon.Position = UDim2.fromOffset(12, 10)
+	ribbon.Size = UDim2.new(1, -64, 0, 26)
+	ribbon.TextXAlignment = Enum.TextXAlignment.Left
+	ribbon.Text = "EARLY ACCESS SPECIAL!"
+	ribbon.ZIndex = 22
+	ribbon.Parent = passOffer
+	UIStyle.text(ribbon, Color3.fromRGB(255, 240, 120), nil, 3)
+
+	local passIcon = Instance.new("Frame")
+	passIcon.AnchorPoint = Vector2.new(0.5, 0)
+	passIcon.Position = UDim2.new(0.5, 0, 0, 42)
+	passIcon.Size = UDim2.fromOffset(64, 64)
+	passIcon.BackgroundTransparency = 1
+	passIcon.ZIndex = 22
+	passIcon.Parent = passOffer
+	Icons.make(MonetizationShop.iconFor(PASS_OFFER_KEY), passIcon, { outline = 3 })
+
+	local passTitle = Instance.new("TextLabel")
+	passTitle.AnchorPoint = Vector2.new(0.5, 0)
+	passTitle.Position = UDim2.new(0.5, 0, 0, 110)
+	passTitle.Size = UDim2.new(1, -20, 0, 32)
+	passTitle.Text = "PERMANENT 2X CASH"
+	passTitle.ZIndex = 22
+	passTitle.Parent = passOffer
+	UIStyle.text(passTitle, nil, nil, 3)
+
+	local passText = Instance.new("TextLabel")
+	passText.AnchorPoint = Vector2.new(0.5, 0)
+	passText.Position = UDim2.new(0.5, 0, 0, 144)
+	passText.Size = UDim2.new(1, -24, 0, 44)
+	passText.TextWrapped = true
+	passText.Text = `{pass.Description} Only {pass.Robux} Robux!`
+	passText.ZIndex = 22
+	passText.Parent = passOffer
+	UIStyle.text(passText, nil, nil, 1.5)
+	local passTextLimit = Instance.new("UITextSizeConstraint")
+	passTextLimit.MaxTextSize = 18
+	passTextLimit.Parent = passText
+
+	local passClose = Instance.new("TextButton")
+	passClose.AnchorPoint = Vector2.new(1, 0)
+	passClose.Position = UDim2.new(1, -8, 0, 8)
+	passClose.Size = UDim2.fromOffset(40, 40)
+	passClose.BackgroundColor3 = UIStyle.Colors.Close
+	passClose.ZIndex = 23
+	passClose.Parent = passOffer
+	UIStyle.text(passClose)
+	UIStyle.border(passClose, 3)
+	passClose.Text = "X"
+	passClose.Activated:Connect(hidePassOffer)
+	UIPlatform.Feedback.button(passClose)
+
+	local passBuy = Instance.new("TextButton")
+	passBuy.AnchorPoint = Vector2.new(0.5, 1)
+	passBuy.Position = UDim2.new(0.5, 0, 1, -10)
+	passBuy.Size = UDim2.new(1, -24, 0, 48)
+	passBuy.BackgroundColor3 = UIStyle.Colors.Robux
+	passBuy.Text = `ONLY R$ {pass.Robux}`
+	passBuy.ZIndex = 22
+	passBuy.Parent = passOffer
+	UIStyle.text(passBuy)
+	UIStyle.border(passBuy, 3)
+	local passBuyPad = Instance.new("UIPadding")
+	passBuyPad.PaddingTop = UDim.new(0, 6)
+	passBuyPad.PaddingBottom = UDim.new(0, 6)
+	passBuyPad.Parent = passBuy
+	passBuy.Activated:Connect(function()
+		buy(PASS_OFFER_KEY)
+		hidePassOffer()
+	end)
+	UIPlatform.Feedback.button(passBuy)
+
 	MonetizationShop.build(gui, {
 		onBuy = buy,
 		onOpen = function()
@@ -488,6 +610,7 @@ function MonetizationController.init(_initial: Types.InitialState)
 			end
 		end
 	end)
+	Remotes.event("CashPassOffer").OnClientEvent:Connect(showPassOffer)
 	Remotes.event("MonetizationOffer").OnClientEvent:Connect(function(kind: any, key: any)
 		if typeof(kind) == "string" and typeof(key) == "string" then
 			showOffer(kind, key)

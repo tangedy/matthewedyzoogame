@@ -1,5 +1,5 @@
 -- Shows Roblox's "favourite this experience" dialog when the server asks (FavoritePrompt on
--- the server: right after the player's first Legendary wash, once ever).
+-- the server: right after the player's first barn upgrade, once ever).
 
 local AvatarEditorService = game:GetService("AvatarEditorService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
