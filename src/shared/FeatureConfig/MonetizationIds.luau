@@ -2,9 +2,8 @@
 -- The one place to paste ids: MonetizationConfig reads them from here. A 0 means "not on
 -- sale yet" (simulated in Studio and for the place owner, see MonetizationConfig).
 --
--- tools/create-products.ps1 creates the developer products through Open Cloud and rewrites
--- the Products table. Game passes are made by hand on the Creator Dashboard (Monetization >
--- Passes); paste the pass id below.
+-- tools/create-products.ps1 creates the developer products and game passes through Open Cloud
+-- and rewrites the Products and Passes tables. A new pass needs a line here and in the script.
 
 return {
 	Products = {
@@ -28,7 +27,7 @@ return {
 		HoseTier5 = 3722053246,
 	},
 	Passes = {
-		DoubleCash = 0,
-		VIPKeeper = 0,
+		DoubleCash = 2058754911,
+		VIPKeeper = 2058022884,
 	},
 }

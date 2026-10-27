@@ -223,13 +223,15 @@ local GameConfig = {
 	-- The auto-wash pad beside the spawn. While the owner stands on it, the animal on the
 	-- wash spot cleans itself: a Common takes BaseSeconds and each rarity above it doubles
 	-- that (3, 6, 12, ...). The Auto-Wash Speed upgrade (StatUpgrades) divides it. Animals the
-	-- player's gear cannot wash are let go automatically, and mud shakes don't knock the
+	-- player's gear cannot wash are let go after SkipUnwashableSeconds on the pad (Let Go
+	-- still works straight away), and mud shakes don't knock the
 	-- player off the pad (Tension skips anyone with the AutoWashing attribute).
 	AutoClean = {
 		BaseSeconds = 3,
 		RarityFactor = 2,
 		PadSize = 8, -- studs, square
 		TickSeconds = 0.2,
+		SkipUnwashableSeconds = 30,
 	},
 
 	-- Developer shortcuts (C / G). Honored in Studio and for the place owner only.

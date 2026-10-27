@@ -1,18 +1,16 @@
 -- Hose upgrade shop: opens from the station's ProximityPrompt, never automatically.
--- Shows the current and next step on the gear ladder (hoses and their sub-tiers, GearLadder),
--- the wash speed gain, perks and price; the server validates purchases.
+-- Shows the current and next step on the gear ladder (hoses and their sub-tiers, GearLadder)
+-- and its price; the server validates purchases.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local CleanPower = require(ReplicatedStorage.Shared.CleanPower)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local GearLadder = require(ReplicatedStorage.Shared.GearLadder)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
-local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local StatUpgrades = require(ReplicatedStorage.Shared.StatUpgrades)
 local UIStyle = require(ReplicatedStorage.Shared.UIStyle)
 local Modals = require(script.Parent.Parent.UI.Modals)
@@ -27,7 +25,7 @@ local ShopController = {}
 
 local FONT = UIStyle.Font
 local PANEL_COLOR = UIStyle.Colors.Panel
-local PANEL_HEIGHT = 464
+local PANEL_HEIGHT = 422
 local BUY_COLOR = UIStyle.Colors.Cash
 local ROBUX_COLOR = UIStyle.Colors.Robux
 local DISABLED_COLOR = UIStyle.Colors.Disabled
@@ -53,7 +51,6 @@ local lastSentAt = 0
 local panel: Frame
 local currentLabel: TextLabel
 local nextLabel: TextLabel
-local gainLabel: TextLabel
 local buyButton: TextButton
 local robuxButton: TextButton
 local messageLabel: TextLabel
@@ -85,28 +82,10 @@ local function label(props: { [string]: any }): TextLabel
 	return l
 end
 
--- Rarities the next step can wash that the current one could not.
-local function unlocksText(current: GearLadder.Step, nextStep: GearLadder.Step): string
-	local prevPower = current.CleaningPower
-	local groups = {}
-	for _, rarity in RarityConfig.List do
-		local need = rarity.RequiredCleaningPower
-		if need > prevPower + 1e-4 and CleanPower.canClean(nextStep.CleaningPower, rarity.Key) then
-			for _, def in AnimalConfig.Animals do
-				if def.Rarity == rarity.Key and not def.Limited and def.SpawnWeight > 0 then
-					table.insert(groups, rarity.DisplayName)
-					break
-				end
-			end
-		end
-	end
-	return if #groups > 0 then `\nUnlocks {table.concat(groups, ", ")}` else ""
-end
-
 -- The panel ends just under its last row; the Robux button only shows when cash is short, and
 -- the stat upgrade rows sit right under whichever button is last.
 local function fitPanel()
-	local rowsTop = if robuxButton.Visible then 416 else 366
+	local rowsTop = if robuxButton.Visible then 374 else 324
 	statFrame.Position = UDim2.fromOffset(18, rowsTop)
 	local bottom = rowsTop + STAT_ROWS_HEIGHT
 	messageLabel.Position = UDim2.fromOffset(18, bottom)
@@ -175,13 +154,7 @@ local function refresh()
 	showPreview(if nextStep then nextStep.Tier else current.Tier)
 	currentLabel.Text = `Now: {current.Label} · {CleanPower.format(current.Speed)}x`
 	if nextStep then
-		local gain = math.floor((nextStep.Speed / current.Speed - 1) * 100 + 0.5)
 		nextLabel.Text = `Next: {nextStep.Label}`
-		local reach = if nextStep.Range > current.Range then ` · Reach {nextStep.Range}` else ""
-		local perk = if nextStep.Perk then `\n{nextStep.Perk}` else ""
-		-- A new hose (or the Fire Hose's Titan Spec) raises clean power and unlocks rarer animals.
-		local unlocks = unlocksText(current, nextStep)
-		gainLabel.Text = `{CleanPower.format(nextStep.Speed)}x speed (+{gain}%){reach}{perk}{unlocks}`
 		buyButton.Visible = true
 		buyButton.Text = `BUY {UIStyle.formatMoney(nextStep.Price)}`
 		local affordable = coins >= nextStep.Price
@@ -196,7 +169,6 @@ local function refresh()
 		end
 	else
 		nextLabel.Text = "Max gear!"
-		gainLabel.Text = ""
 		buyButton.Visible = false
 		robuxButton.Visible = false
 	end
@@ -314,22 +286,15 @@ local function buildGui()
 	preview.CurrentCamera = previewCamera
 
 	nextLabel = label({ Position = UDim2.fromOffset(18, 212), Size = UDim2.new(1, -36, 0, 30), Parent = panel })
-	gainLabel = label({
-		Position = UDim2.fromOffset(18, 244),
-		Size = UDim2.new(1, -36, 0, 40),
-		TextColor3 = Color3.fromRGB(150, 220, 255),
-		TextWrapped = true,
-		Parent = panel,
-	})
 	currentLabel = label({
-		Position = UDim2.fromOffset(18, 288),
+		Position = UDim2.fromOffset(18, 246),
 		Size = UDim2.new(1, -36, 0, 20),
 		TextColor3 = Color3.fromRGB(190, 195, 215),
 		Parent = panel,
 	})
 
 	buyButton = Instance.new("TextButton")
-	buyButton.Position = UDim2.fromOffset(18, 316)
+	buyButton.Position = UDim2.fromOffset(18, 274)
 	buyButton.Size = UDim2.new(1, -36, 0, 44)
 	buyButton.BackgroundColor3 = BUY_COLOR
 	buyButton.Font = FONT
@@ -344,7 +309,7 @@ local function buildGui()
 
 	robuxButton = Instance.new("TextButton")
 	robuxButton.Name = "RobuxBuy"
-	robuxButton.Position = UDim2.fromOffset(18, 366)
+	robuxButton.Position = UDim2.fromOffset(18, 324)
 	robuxButton.Size = UDim2.new(1, -36, 0, 44)
 	robuxButton.BackgroundColor3 = ROBUX_COLOR
 	robuxButton.Font = FONT
@@ -423,7 +388,7 @@ local function buildGui()
 	end
 
 	messageLabel = label({
-		Position = UDim2.fromOffset(18, 416),
+		Position = UDim2.fromOffset(18, 374),
 		Size = UDim2.new(1, -36, 0, 36),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = "",

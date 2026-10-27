@@ -1,7 +1,7 @@
 -- The auto-wash pad across the wash spot from the walkway (WorldBuilder's AutoCleanPad). While the owner
 -- stands on it, the animal on the wash spot cleans itself over AutoClean.seconds (rarity and
--- the Auto-Wash Speed upgrade), and one their gear cannot wash is let go so the line keeps
--- moving. Off during the opening washes, which teach the hose. While on the pad the player
+-- the Auto-Wash Speed upgrade), and one their gear cannot wash is let go after
+-- AutoClean.SkipUnwashableSeconds (or sooner if they press Let Go) so the line keeps moving. Off during the opening washes, which teach the hose. While on the pad the player
 -- carries the AutoWashing attribute, which mud shakes and lunges respect (no knockout).
 
 local Players = game:GetService("Players")
@@ -19,6 +19,9 @@ local ZooService = require(script.Parent.ZooService)
 local AutoCleanService = {}
 
 local IDLE_TEXT = "Stand here to wash hands-free"
+
+-- The blocked job the pad is counting down on, and how long the owner has stood on it.
+local skipping: { [Player]: { job: any, waited: number } } = {}
 
 local function padOf(player: Player): BasePart?
 	local bay = BayService.getModel(player)
@@ -71,12 +74,25 @@ local function step(player: Player, dt: number)
 		setStatus(pad, "Waiting for the next animal...")
 		return
 	end
-	-- Gear too weak (or Super Soap missing): send it on its way.
+	-- Gear too weak (or Super Soap missing): give them time to buy Clean Now, then send it on its way.
 	if CleaningService.isBlocked(player) then
-		setStatus(pad, "Skipped an animal your gear can't wash")
-		BayService.abandonWash(player)
+		local wait = skipping[player]
+		if not wait or wait.job ~= job then
+			wait = { job = job, waited = 0 }
+			skipping[player] = wait
+		end
+		wait.waited += dt
+		local left = GameConfig.AutoClean.SkipUnwashableSeconds - wait.waited
+		if left <= 0 then
+			skipping[player] = nil
+			setStatus(pad, "Skipped an animal your gear can't wash")
+			BayService.abandonWash(player)
+		else
+			setStatus(pad, `Can't wash this one. Skipping in {math.ceil(left)}s`)
+		end
 		return
 	end
+	skipping[player] = nil
 	local data = PlayerDataService.get(player)
 	local seconds = AutoClean.seconds(job.Rarity, if data then data.AutoWashLevel else 0)
 	local rarity = RarityConfig.ByKey[job.Rarity]
@@ -87,6 +103,9 @@ local function step(player: Player, dt: number)
 end
 
 function AutoCleanService.init()
+	Players.PlayerRemoving:Connect(function(player)
+		skipping[player] = nil
+	end)
 	task.spawn(function()
 		local last = os.clock()
 		while true do

@@ -23,16 +23,16 @@ The helper modules have no `init`, so the feature autoloaders just require them.
 
 Every product and pass ships with id 0, which live servers treat as "Not on sale yet" (only the place owner gets a simulated purchase). To take real Robux:
 
-1. Creator Dashboard > Open Cloud > API Keys: make a key with `developer-product:read` and `developer-product:write`, limited to this experience.
+1. Creator Dashboard > Open Cloud > API Keys: make a key with `developer-product:read`, `developer-product:write`, `game-pass:read` and `game-pass:write`, limited to this experience.
 2. From the repo root, with the experience's **Universe** id (not the place id):
    ```
    $env:ROBLOX_API_KEY = "<key>"
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id> -DryRun
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id>
    ```
-   It creates the 23 developer products (reusing any that already exist by name) and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`.
-3. Make the VIP Keeper game pass (399) by hand under Monetization > Passes and paste its id into `MonetizationIds.Passes.VIPKeeper`.
-4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number. A re-run of the script never changes the price of a product that already exists: change it on the Creator Dashboard.
+   It creates the 23 developer products and the game passes (2x Cash Forever 3, VIP Keeper 399), reusing any that already exist by name, and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`. Passes are put on sale, so they show on the experience's Store page.
+3. Give each game pass an icon under Monetization > Passes (the script makes them without one).
+4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number. A plain re-run never changes a product that already exists; add `-Update` to push the script's names, prices and descriptions onto existing products (and put them on sale).
 5. Game Settings > Security: **Enable Studio Access to API Services** must be on (receipts save through DataStores).
 
 `MonetizationConfig` reads the ids from `MonetizationIds`; nothing else needs editing.

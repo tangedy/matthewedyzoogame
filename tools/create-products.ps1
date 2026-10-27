@@ -1,31 +1,58 @@
 <#
-Creates every Wash the Zoo developer product on Roblox through Open Cloud and writes the
-new ids into src/shared/FeatureConfig/MonetizationIds.luau.
+Creates every Wash the Zoo developer product and game pass on Roblox through Open Cloud and
+writes the new ids into src/shared/FeatureConfig/MonetizationIds.luau. Game passes made here
+are put on sale, so they show on the experience's Store page.
 
 Usage (from the repo root):
-  $env:ROBLOX_API_KEY = "<your Open Cloud key>"   # scopes: developer-product:read, developer-product:write
+  $env:ROBLOX_API_KEY = "<your Open Cloud key>"
+  # scopes: developer-product:read, developer-product:write, game-pass:read, game-pass:write
   powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId 1234567890
 
-  -DryRun     list what would be created, change nothing.
+  Or put ROBLOX_API_KEY=... and ROBLOX_UNIVERSE_ID=... in the repo's .env (gitignored) and
+  leave both out. A separate key for game passes can go in ROBLOX_GAMEPASS_API_KEY; without
+  one, ROBLOX_API_KEY is used for both.
 
-Safe to run again: products that already exist (same name) are reused, not duplicated.
-Their price is NOT changed on a re-run; change an existing product's price on the Creator
-Dashboard (Monetization > Developer Products).
+  -DryRun     list what would be created or updated, change nothing.
+  -Update     also push the name, price, description and for-sale flag below onto products
+              and passes that already exist, so they match this list.
+
+Safe to run again: products and passes that already exist (same name) are reused, not
+duplicated. Without -Update their price is left alone.
 Names, prices and descriptions below must match MonetizationConfig.luau; prices there are
 display-only, Roblox charges what is set here.
-
-Game passes (VIP Keeper, 399) are not covered: make it on the Creator Dashboard and paste the
-id into MonetizationIds.luau by hand.
+Passes are made without an icon; add one on the Creator Dashboard.
 #>
 param(
-	[Parameter(Mandatory = $true)][long]$UniverseId,
-	[switch]$DryRun
+	[long]$UniverseId,
+	[switch]$DryRun,
+	[switch]$Update
 )
 
 $ErrorActionPreference = "Stop"
+
+# NAME=value from the repo's .env (gitignored), or $null.
+$envFile = Join-Path $PSScriptRoot "..\.env"
+function Get-DotEnv([string]$name) {
+	if (-not (Test-Path $envFile)) { return $null }
+	$line = Get-Content $envFile | Where-Object { $_ -match "^\s*$name\s*=" } | Select-Object -First 1
+	if ($line) { return ($line -split '=', 2)[1].Trim() }
+	return $null
+}
+
 $apiKey = $env:ROBLOX_API_KEY
+if (-not $apiKey) { $apiKey = Get-DotEnv "ROBLOX_API_KEY" }
 if (-not $apiKey) {
-	throw "Set `$env:ROBLOX_API_KEY first (Creator Dashboard > Open Cloud > API Keys)."
+	throw "Set `$env:ROBLOX_API_KEY or put ROBLOX_API_KEY=<key> in .env (Creator Dashboard > Open Cloud > API Keys)."
+}
+$passKey = $env:ROBLOX_GAMEPASS_API_KEY
+if (-not $passKey) { $passKey = Get-DotEnv "ROBLOX_GAMEPASS_API_KEY" }
+if (-not $passKey) { $passKey = $apiKey }
+if (-not $UniverseId) {
+	$fromEnv = Get-DotEnv "ROBLOX_UNIVERSE_ID"
+	if ($fromEnv) { $UniverseId = [long]$fromEnv }
+}
+if (-not $UniverseId) {
+	throw "Pass -UniverseId or put ROBLOX_UNIVERSE_ID=<id> in .env."
 }
 
 # Key = MonetizationConfig key. Name must be unique in the universe.
@@ -55,62 +82,102 @@ $products = @(
 	@{ Key = "HoseTier5"; Name = "Foam Cannon"; Price = 249; Description = "Your next hose." }
 )
 
-$base = "https://apis.roblox.com/developer-products/v2/universes/$UniverseId/developer-products"
-$headers = @{ "x-api-key" = $apiKey }
-
-# What already exists, by name.
-$existing = @{}
-$token = $null
-do {
-	$url = "$base/creator?pageSize=50"
-	if ($token) { $url += "&pageToken=$([uri]::EscapeDataString($token))" }
-	$page = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
-	foreach ($p in $page.developerProducts) { $existing[$p.name] = [long]$p.productId }
-	$token = $page.nextPageToken
-	Start-Sleep -Milliseconds 400 # 3 requests per second
-} while ($token)
+# Game passes (MonetizationConfig passes). Every one is put on sale, so it's on the Store page.
+$passes = @(
+	@{ Key = "DoubleCash"; Name = "2x Cash Forever"; Price = 3; Description = "Double all cash you earn. Forever!" },
+	@{ Key = "VIPKeeper"; Name = "VIP Keeper"; Price = 399; Description = "+25% income forever and a VIP title." }
+)
 
 Add-Type -AssemblyName System.Net.Http
 $client = New-Object System.Net.Http.HttpClient
-$client.DefaultRequestHeaders.Add("x-api-key", $apiKey)
 
-$ids = @{}
-foreach ($product in $products) {
-	if ($existing.ContainsKey($product.Name)) {
-		$ids[$product.Key] = $existing[$product.Name]
-		Write-Host "exists   $($product.Name) -> $($ids[$product.Key])"
-		continue
-	}
-	if ($DryRun) {
-		Write-Host "create   $($product.Name) ($($product.Price) R$)"
-		$ids[$product.Key] = 0
-		continue
-	}
-	$form = New-Object System.Net.Http.MultipartFormDataContent
-	$form.Add((New-Object System.Net.Http.StringContent($product.Name)), "name")
-	$form.Add((New-Object System.Net.Http.StringContent($product.Description)), "description")
-	$form.Add((New-Object System.Net.Http.StringContent([string]$product.Price)), "price")
-	$form.Add((New-Object System.Net.Http.StringContent("true")), "isForSale")
-	$response = $client.PostAsync($base, $form).Result
-	$body = $response.Content.ReadAsStringAsync().Result
-	if (-not $response.IsSuccessStatusCode) {
-		throw "Creating $($product.Name) failed ($([int]$response.StatusCode)): $body"
-	}
-	$ids[$product.Key] = [long](($body | ConvertFrom-Json).productId)
-	Write-Host "created  $($product.Name) -> $($ids[$product.Key])"
-	Start-Sleep -Milliseconds 400
+# A POST or PATCH of $item's form, sent with $key.
+function Send-Form([string]$method, [string]$url, $item, [string]$key) {
+	$request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::new($method), $url)
+	$request.Headers.Add("x-api-key", $key)
+	$request.Content = New-Form $item
+	return $client.SendAsync($request).Result
 }
 
+function New-Form($item) {
+	$form = New-Object System.Net.Http.MultipartFormDataContent
+	$form.Add((New-Object System.Net.Http.StringContent($item.Name)), "name")
+	$form.Add((New-Object System.Net.Http.StringContent($item.Description)), "description")
+	$form.Add((New-Object System.Net.Http.StringContent([string]$item.Price)), "price")
+	$form.Add((New-Object System.Net.Http.StringContent("true")), "isForSale")
+	return , $form # the comma stops PowerShell unrolling the form into its parts
+}
+
+# Creates (or with -Update, updates) each item at $base with $key and returns its ids by key.
+# $listField / $idField are the list response's array and id names for this kind of item.
+function Sync-Items($items, [string]$base, [string]$listField, [string]$idField, [string]$key) {
+	$headers = @{ "x-api-key" = $key }
+	# What already exists, by name.
+	$existing = @{}
+	$token = $null
+	do {
+		$url = "$base/creator?pageSize=50"
+		if ($token) { $url += "&pageToken=$([uri]::EscapeDataString($token))" }
+		$page = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
+		foreach ($p in $page.$listField) { $existing[$p.name] = [long]$p.$idField }
+		$token = $page.nextPageToken
+		Start-Sleep -Milliseconds 400 # 3 requests per second
+	} while ($token)
+
+	$ids = @{}
+	foreach ($item in $items) {
+		if ($existing.ContainsKey($item.Name)) {
+			$ids[$item.Key] = $existing[$item.Name]
+			if (-not $Update) {
+				Write-Host "exists   $($item.Name) -> $($ids[$item.Key])"
+				continue
+			}
+			if ($DryRun) {
+				Write-Host "update   $($item.Name) -> $($ids[$item.Key]) ($($item.Price) R$)"
+				continue
+			}
+			$response = Send-Form "PATCH" "$base/$($ids[$item.Key])" $item $key
+			if (-not $response.IsSuccessStatusCode) {
+				$body = $response.Content.ReadAsStringAsync().Result
+				throw "Updating $($item.Name) failed ($([int]$response.StatusCode)): $body"
+			}
+			Write-Host "updated  $($item.Name) -> $($ids[$item.Key]) ($($item.Price) R$)"
+			Start-Sleep -Milliseconds 400
+			continue
+		}
+		if ($DryRun) {
+			Write-Host "create   $($item.Name) ($($item.Price) R$)"
+			$ids[$item.Key] = 0
+			continue
+		}
+		$response = Send-Form "POST" $base $item $key
+		$body = $response.Content.ReadAsStringAsync().Result
+		if (-not $response.IsSuccessStatusCode) {
+			throw "Creating $($item.Name) failed ($([int]$response.StatusCode)): $body"
+		}
+		$ids[$item.Key] = [long](($body | ConvertFrom-Json).$idField)
+		Write-Host "created  $($item.Name) -> $($ids[$item.Key])"
+		Start-Sleep -Milliseconds 400
+	}
+	return $ids
+}
+
+Write-Host "Developer products:"
+$ids = Sync-Items $products "https://apis.roblox.com/developer-products/v2/universes/$UniverseId/developer-products" "developerProducts" "productId" $apiKey
+Write-Host "Game passes:"
+$passIds = Sync-Items $passes "https://apis.roblox.com/game-passes/v1/universes/$UniverseId/game-passes" "gamePasses" "gamePassId" $passKey
+foreach ($key in $passIds.Keys) { $ids[$key] = $passIds[$key] }
+
 if ($DryRun) {
-	Write-Host "Dry run: nothing created, MonetizationIds.luau unchanged."
+	Write-Host "Dry run: nothing created or updated, MonetizationIds.luau unchanged."
 	return
 }
 
-# Rewrite each "Key = <number>," line inside the Products table.
+# Rewrite each "Key = <number>," line in the Products and Passes tables (keys are unique).
 $path = Join-Path $PSScriptRoot "..\src\shared\FeatureConfig\MonetizationIds.luau"
 $text = [IO.File]::ReadAllText($path)
 foreach ($key in $ids.Keys) {
 	$text = [regex]::Replace($text, "(?m)^(\t\t$key = )\d+,", "`${1}$($ids[$key]),")
 }
 [IO.File]::WriteAllText($path, $text)
-Write-Host "Wrote $($ids.Count) product ids to $path"
+Write-Host "Wrote $($ids.Count) product and pass ids to $path"
