@@ -22,7 +22,7 @@ local BUBBLE_COLOR = Color3.new(1, 1, 1)
 local TEXT_COLOR = Color3.fromRGB(40, 40, 55)
 
 local GENERIC =
-	{ "❤️", "😊", "🥰", "💖", "✨😄✨", "😍", "💕💕", "yay! 😁", "so fresh ✨", "🫧😌🫧" }
+	{ "❤️", "😊", "🥰", "💖", "✨😄✨", "😍", "💕💕", "yay! 😁", "so fresh ✨", "🧼😌🧼" }
 local NOISES: { [string]: { string } } = {
 	Cat = { "meow 😺", "purr ❤️" },
 	Dog = { "woof! 🐶", "arf arf 💖" },
