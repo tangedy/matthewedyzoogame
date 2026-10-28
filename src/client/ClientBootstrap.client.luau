@@ -2,6 +2,7 @@
 -- UIPlatform starts first so ScreenGuis are scaled as soon as they are created
 -- and action bindings see the real input mode.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -68,3 +69,6 @@ for _, module in script.Parent.Features:GetChildren() do
 		end
 	end
 end
+
+-- ReplicatedFirst.LoadingScreen stays up until this is set (or 20s pass). Local only.
+Players.LocalPlayer:SetAttribute("ProfileReady", true)
