@@ -107,10 +107,10 @@ local GameConfig = {
 		-- step's index is its UnlockSpot in WorldBuilder.
 		Expansions = {
 			-- The first barn is part of the first loop: right after the starter gear and stats.
-			{ Pens = 8, Price = 3000, Barn = "Small" }, -- 2 medium pens, one each side
-			{ Pens = 12, Price = 25000, Barn = "Medium" }, -- 4 medium pens, two each side
+			{ Pens = 8, Price = 2000, Barn = "Small" }, -- 2 medium pens, one each side
+			{ Pens = 12, Price = 10000, Barn = "Medium" }, -- 4 medium pens, two each side
 			{ Pens = 18, Price = 150000, Barn = "Grand" }, -- 6 medium pens, three each side
-			{ Pens = 20, Price = 1000000, Barn = "Large" }, -- a giant pen each side
+			{ Pens = 20, Price = 750000, Barn = "Large" }, -- a giant pen each side
 			{ Pens = 22, Price = 5000000, Barn = "Gargantuan" }, -- a gargantuan yard each side
 		} :: { { Pens: number?, RoadCages: boolean?, Price: number, Barn: string } },
 	},
@@ -168,8 +168,11 @@ local GameConfig = {
 		PayoutIncome = 2, -- what an auto-sold opener pays, whatever common it was
 		ShowcaseRarity = "Rare",
 		ShowcaseMutation = "Diamond",
-		-- On touch, a hand swipes over the mud with SWIPE THE DIRT! until this many lifetime washes.
+		-- For this many lifetime washes, a hand over the mud shows how to wash (swipe on touch,
+		-- click and hold on mouse, hold R2 on gamepad) once the animal has gone
+		-- ScrubHintIdleSeconds without getting any cleaner.
 		SwipeHintWashes = 3,
+		ScrubHintIdleSeconds = 5,
 	},
 
 	-- Spawn cutscene, in the real world: you sponge a muddy piglet at your own starter bay, the

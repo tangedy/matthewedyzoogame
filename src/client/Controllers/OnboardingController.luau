@@ -2,8 +2,11 @@
 -- and a "Wash me!" marker. Pens, the cache, and the hose stand stay quiet until those
 -- opening washes are done. Then the pen lesson (GuideStep Pen): the trail leads to the
 -- washed animal waiting in the cache, and once it's in hand, to an empty pen it fits. The
--- guide ends when it's placed. After that the trail only returns for a parked delivery
--- truck or a hose the player can already afford.
+-- guide ends when it's placed. After that the trail returns for an animal in hand (to a pen
+-- it fits, the pen glowing), gear the player can afford and hasn't looked at yet, the first
+-- barn once it's affordable (or any barn once the pens are full), and a parked delivery
+-- truck. With the starting stalls full and the first barn out of reach, the banner counts
+-- the cash toward it.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -62,8 +65,14 @@ local jobId: string? = nil
 local washing = false
 local progress = 0
 local animalName: string? = nil -- the washing animal, for "CLEAN THE CHICKEN"
-local shopVisitedForTier: { [number]: boolean } = {}
+local shopVisited: { [string]: boolean } = {} -- "tier:level" the gear shop was opened at
 local carrying: string? = nil -- label of the animal in hand
+local zooSize = GameConfig.Zoo.StartPens -- pens open
+local penned = 0 -- animals in pens
+local barnPrice: number? = nil -- the next barn, nil once every barn is bought
+local barnVisitedAt: number? = nil -- the barn price showing when its stand was last opened
+-- Text over the screen while carrying stops once this many animals are penned (the trail stays).
+local CARRY_TEXT_UNTIL = 3
 local lastWashAt = -math.huge
 -- After a wash, the animal takes a few seconds to walk from the wash to the cache.
 local CACHE_WALK_GRACE = 8
@@ -71,6 +80,8 @@ local CACHE_WALK_GRACE = 8
 local animalMarker: BillboardGui
 local stationMarker: BillboardGui
 local lessonMarker: BillboardGui
+local barnMarker: BillboardGui
+local penGlow: Highlight -- on the pen the trail leads an animal in hand to
 local trail: Folder
 local instruction: TextLabel
 local note: TextLabel
@@ -272,6 +283,39 @@ local function upgradeAffordable(): boolean
 	return nextStep ~= nil and coins >= nextStep.Price
 end
 
+-- Affordable gear the shop hasn't been opened for yet, and what the banner calls it.
+local function gearNudge(): string?
+	local nextStep = GearLadder.next(tier, level)
+	if not nextStep or coins < nextStep.Price or shopVisited[`{tier}:{level}`] then
+		return nil
+	end
+	if nextStep.Tier ~= tier then
+		return `BUY THE {string.upper(nextStep.Name)}! WASH FASTER`
+	end
+	return `UPGRADE YOUR {string.upper(nextStep.Name)}! WASH FASTER`
+end
+
+-- The barn stand's counter (it moves to the next locked group as barns are bought).
+local function barnCounter(): BasePart?
+	local bay = bayModel()
+	local zoo = bay and bay:FindFirstChild("Zoo")
+	local counter = zoo and zoo:FindFirstChild("ExpandCounter", true)
+	return if counter and counter:IsA("BasePart") then counter else nil
+end
+
+local function firstBarn(): boolean
+	return zooSize <= GameConfig.Zoo.StartPens
+end
+
+local function pensFull(): boolean
+	return penned >= zooSize
+end
+
+-- The next barn is worth a trail: affordable, and either the first one or the pens are full.
+local function barnWanted(): boolean
+	return barnPrice ~= nil and coins >= barnPrice and (firstBarn() or pensFull())
+end
+
 -- The parked delivery truck's bed while it still has an animal for sale.
 local function truckTarget(): BasePart?
 	local bay = bayModel()
@@ -315,25 +359,29 @@ local function cachedAnimalAt(slot: BasePart): Model?
 	return best
 end
 
+-- The nearest unlocked empty pen the animal in hand fits (its prompt says "Place"), by its gate.
+local function carryTarget(bay: Instance): BasePart?
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local zoo = bay:FindFirstChild("Zoo")
+	local best: BasePart?, bestDistance = nil, math.huge
+	for _, pen in if zoo then zoo:GetChildren() else {} do
+		local post = pen:FindFirstChild("GatePost")
+		local prompt = promptOn(post, "PenPrompt")
+		if post and post:IsA("BasePart") and prompt and prompt.ActionText == "Place" then
+			local distance = if root then (post.Position - root.Position).Magnitude else 0
+			if distance < bestDistance then
+				best, bestDistance = post, distance
+			end
+		end
+	end
+	return best
+end
+
 -- The pen lesson's target, its instruction, and what the marker over it says.
 local function penLesson(bay: Instance): (BasePart?, string?, string?)
 	if carrying then
-		-- The nearest unlocked empty pen this animal fits (its prompt says "Place").
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		local zoo = bay:FindFirstChild("Zoo")
-		local best: BasePart?, bestDistance = nil, math.huge
-		for _, pen in if zoo then zoo:GetChildren() else {} do
-			local post = pen:FindFirstChild("GatePost")
-			local prompt = promptOn(post, "PenPrompt")
-			if post and post:IsA("BasePart") and prompt and prompt.ActionText == "Place" then
-				local distance = if root then (post.Position - root.Position).Magnitude else 0
-				if distance < bestDistance then
-					best, bestDistance = post, distance
-				end
-			end
-		end
-		return best, `PUT YOUR {string.upper(carrying)} IN A PEN`, "Put it here!"
+		return carryTarget(bay), `PUT YOUR {string.upper(carrying)} IN A PEN`, "Put it here!"
 	end
 	local cache = bay:FindFirstChild("Cache")
 	for i = 1, GameConfig.Cache.Slots do
@@ -355,8 +403,9 @@ local function penLesson(bay: Instance): (BasePart?, string?, string?)
 	return washTarget(bay), "WASH AN ANIMAL FOR YOUR FARM", nil
 end
 
--- Where the trail leads right now, and the instruction shown at the top of the screen.
-local function guideTarget(): (BasePart?, string?)
+-- Where the trail leads right now, and the instruction shown at the top of the screen. The
+-- instruction only shows with a target, unless the third value says it stands alone.
+local function guideTarget(): (BasePart?, string?, boolean?)
 	if cutscenePlaying() then
 		return nil, nil
 	end
@@ -382,14 +431,40 @@ local function guideTarget(): (BasePart?, string?)
 		local target, text = penLesson(bay)
 		return target, text
 	end
-	-- The wash lesson is the only guided step. Afterwards, point at a truck or affordable gear.
+	local done = guideStep == "Done" and introLeft <= 0
+	-- After the lessons: an animal in hand goes to a pen it fits, or, with no room, to a barn.
+	if done and carrying then
+		local pen = carryTarget(bay)
+		if pen then
+			return pen, if penned < CARRY_TEXT_UNTIL then `PUT YOUR {string.upper(carrying)} IN A PEN` else nil
+		end
+		if pensFull() then
+			if barnPrice and coins >= barnPrice then
+				return barnCounter(), "PENS FULL! BUY A BARN FOR MORE ROOM"
+			end
+			return nil, "PENS FULL! SELL IT OR SAVE UP FOR A BARN", true
+		end
+	end
+	-- Gear the player can afford, until they open the shop for it.
+	local gear = gearNudge()
+	if gear then
+		return upgradeCounter(), gear
+	end
+	-- The barn, until its stand is opened at this price (the marker stays after that).
+	if done and barnWanted() and barnVisitedAt ~= barnPrice then
+		local text = if firstBarn()
+			then "BUY YOUR FIRST BARN! MORE PENS = MORE CASH"
+			else "PENS FULL! BUY A BARN FOR MORE ROOM"
+		return barnCounter(), text
+	end
 	-- The truck gets the trail only: no text over the screen while it drives by.
 	local truck = truckTarget()
 	if truck then
 		return truck, nil
 	end
-	if upgradeAffordable() and not shopVisitedForTier[tier] then
-		return upgradeCounter(), "YOU CAN AFFORD A GEAR UPGRADE!"
+	-- Starting stalls full and the first barn out of reach: count the cash toward it.
+	if done and firstBarn() and pensFull() and barnPrice and coins < barnPrice then
+		return nil, `PENS FULL! FIRST BARN: {UIStyle.formatMoney(coins)} / {UIStyle.formatMoney(barnPrice)}`, true
 	end
 	return nil, nil
 end
@@ -415,10 +490,10 @@ local function setInstruction(text: string?)
 end
 
 local function updateTrail(dt: number)
-	local target, text = guideTarget()
+	local target, text, standalone = guideTarget()
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	setInstruction(if target then text else nil)
+	setInstruction(if target or standalone then text else nil)
 	if not target or not root or not character then
 		hideTrail()
 		return
@@ -499,7 +574,8 @@ local function refreshLessonMarker()
 	local bay = bayModel()
 	local adornee: BasePart? = nil
 	local text: string? = nil
-	if bay and guideStep == "Pen" and introLeft <= 0 and not cutscenePlaying() then
+	local lesson = guideStep == "Pen" or (guideStep == "Done" and carrying ~= nil)
+	if bay and lesson and introLeft <= 0 and not cutscenePlaying() then
 		local target, _, label = penLesson(bay)
 		if target and label then
 			text = label
@@ -517,6 +593,10 @@ local function refreshLessonMarker()
 	end
 	lessonMarker.Adornee = adornee
 	lessonMarker.Enabled = adornee ~= nil
+	-- The pen it goes in glows through walls, so it can be found from anywhere on the farm.
+	local pen = if adornee and adornee.Name == "GatePost" then adornee.Parent else nil
+	penGlow.Adornee = pen
+	penGlow.Enabled = pen ~= nil
 end
 
 local function refreshAnimalMarker()
@@ -559,9 +639,25 @@ local function refreshStationMarker()
 		stationMarker.Enabled = false
 		return
 	end
+	local nextStep = GearLadder.next(tier, level)
 	local counter = if upgradeAffordable() then upgradeCounter() else nil
+	local markerLabel = stationMarker:FindFirstChildOfClass("TextLabel")
+	if markerLabel and nextStep then
+		markerLabel.Text = if nextStep.Tier ~= tier then `NEW {string.upper(nextStep.Name)}!` else "UPGRADE!"
+	end
 	stationMarker.Adornee = counter :: any
 	stationMarker.Enabled = counter ~= nil
+end
+
+local function refreshBarnMarker()
+	local counter = if guideStep == "Done"
+			and introLeft <= 0
+			and barnWanted()
+			and not cutscenePlaying()
+		then barnCounter()
+		else nil
+	barnMarker.Adornee = counter
+	barnMarker.Enabled = counter ~= nil
 end
 
 local function applyBay(bay: Types.BaySnapshot?)
@@ -639,6 +735,16 @@ local function buildGui()
 	animalMarker = makeMarker("Clean the pig!", Color3.fromRGB(150, 230, 255))
 	stationMarker = makeMarker("UPGRADE!", Color3.fromRGB(255, 220, 90))
 	lessonMarker = makeMarker("Pick me up!", Color3.fromRGB(140, 255, 150))
+	barnMarker = makeMarker("BUY A BARN!", Color3.fromRGB(255, 170, 90))
+
+	penGlow = Instance.new("Highlight")
+	penGlow.Name = "PenGlow"
+	penGlow.FillColor = Color3.fromRGB(140, 255, 150)
+	penGlow.FillTransparency = 0.7
+	penGlow.OutlineColor = Color3.fromRGB(140, 255, 150)
+	penGlow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	penGlow.Enabled = false
+	penGlow.Parent = trail
 end
 
 local function showNote(text: string)
@@ -689,9 +795,20 @@ function OnboardingController.init(initial: Types.InitialState)
 		tier = value
 		level = newLevel or 0
 	end)
+	local function applyZoo(summary: Types.ZooSummary?)
+		if summary then
+			zooSize = summary.ZooSize
+			penned = summary.Count
+			barnPrice = summary.NextExpansionPrice
+		end
+	end
+	applyZoo(initial.Zoo)
+	Remotes.event("ZooChanged").OnClientEvent:Connect(applyZoo)
 	ProximityPromptService.PromptTriggered:Connect(function(prompt)
 		if prompt.Name == "UpgradePrompt" then
-			shopVisitedForTier[tier] = true
+			shopVisited[`{tier}:{level}`] = true
+		elseif prompt.Name == "ExpandPrompt" then
+			barnVisitedAt = barnPrice
 		end
 	end)
 
@@ -704,6 +821,8 @@ function OnboardingController.init(initial: Types.InitialState)
 		bobMarker(animalMarker, Vector3.new(0, 4, 0))
 		refreshStationMarker()
 		bobMarker(stationMarker, Vector3.new(0, 6, 0))
+		refreshBarnMarker()
+		bobMarker(barnMarker, Vector3.new(0, 6, 0))
 		refreshLessonMarker()
 		bobMarker(lessonMarker, Vector3.new(0, 4, 0))
 		updateTrail(dt)

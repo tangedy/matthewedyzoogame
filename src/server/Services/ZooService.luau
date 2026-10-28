@@ -4,7 +4,8 @@
 --     waits as an overflow until the owner keeps it (carries it to a pen) or auto-sells it.
 --   * The owner picks one up (it rides above their head) and carries it to a pen: an empty
 --     pen takes it, an occupied pen swaps (the old animal comes out into their hands).
---     A washed animal can be grabbed while it is still walking to the cache.
+--     A washed animal can be grabbed while it is still walking to the cache, and walking
+--     onto an empty pen it fits puts it in.
 --   * The first three washes of a new profile auto-sell, and the pens stay hidden until then.
 --   * Animals in pens earn cash every second into the pen's collect pad; stepping on the
 --     pad collects it. Animals can also be sold from the cache or a pen.
@@ -875,17 +876,21 @@ local function pickUp(player: Player, slotIndex: number)
 	end
 end
 
--- The owner grabbed a washed animal on its way to the cache. It must still be walking there,
--- and the player must be standing near where it is now.
+-- The owner grabbed a washed animal on its way to the cache (its Pick up card), or walked up
+-- to one on the way or standing in its slot (ZooController's auto-pickup). The player must be
+-- standing near where it is now.
 local function pickUpWalking(player: Player, id: string)
 	local zoo = zoos[player]
 	local data = PlayerDataService.get(player)
-	local model = zoo and zoo.Arriving[id]
+	local model = zoo and (zoo.Arriving[id] or zoo.CacheModels[id])
 	local record = data and (findCached(data, id))
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not zoo or not model or not model.Parent or not record or not root or zoo.CarriedId then
 		return
+	end
+	if not zoo.Arriving[id] and zoo.Bay:GetAttribute("YardRevealed") ~= true then
+		return -- the same rule as the slot's Pick up prompt
 	end
 	local at = AnimalService.currentPivot(model).Position
 	local offset = at - root.Position
@@ -1071,6 +1076,59 @@ local function nearestCacheDistance(zoo: Zoo, from: Vector3): number
 		end
 	end
 	return best
+end
+
+-- Walk-in placing: stepping onto an empty pen's floor with an animal in hand puts it in, when
+-- it fits. Only stepping on counts, so lifting an animal out of a pen while standing in it
+-- doesn't drop it straight back. FLOOR_MARGIN lets the gate opening count.
+local FLOOR_MARGIN = 1
+local standingOn: { [Player]: number } = {} -- the pen floor each player was last on, 0 for none
+
+local function penUnderFoot(zoo: Zoo, at: Vector3): number
+	for i = 1, LAST_PEN do
+		local pen = penOf(zoo, i)
+		local floor = pen and pen:FindFirstChild("Floor")
+		if floor and floor:IsA("BasePart") then
+			local offset = floor.CFrame:PointToObjectSpace(at)
+			local size = floor.Size
+			if
+				math.abs(offset.X) <= size.X / 2 + FLOOR_MARGIN
+				and math.abs(offset.Z) <= size.Z / 2 + FLOOR_MARGIN
+				and offset.Y > -2
+				and offset.Y < 12
+			then
+				return i
+			end
+		end
+	end
+	return 0
+end
+
+local function walkInPlace(player: Player)
+	local zoo = zoos[player]
+	local data = PlayerDataService.get(player)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not zoo or not data or not root then
+		standingOn[player] = nil
+		return
+	end
+	local penIndex = penUnderFoot(zoo, root.Position)
+	local stepped = penIndex ~= 0 and standingOn[player] ~= penIndex
+	standingOn[player] = penIndex
+	local record = carriedRecord(player)
+	if not stepped or not record or zoo.Bay:GetAttribute("YardRevealed") ~= true then
+		return
+	end
+	if not penOpen(data, penIndex) or animalInPen(data, penIndex) then
+		return
+	end
+	local pen = penOf(zoo, penIndex)
+	local penClassAttr = pen and pen:GetAttribute("PenClass")
+	local penClass = if typeof(penClassAttr) == "string" then penClassAttr else "Standard"
+	if AnimalConfig.fits(AnimalConfig.Animals[record.Species].BodyClass, penClass) then
+		placeCarried(player, penIndex)
+	end
 end
 
 -- Put Down: into the nearest free pen it fits, or back into the cache when that is closer
@@ -1986,7 +2044,20 @@ function ZooService.init()
 	choiceJanitor:Add(Players.PlayerRemoving:Connect(function(player)
 		lastAction[player] = nil
 		pendingConfirm[player] = nil
+		standingOn[player] = nil
 	end))
+	-- Walk-in placing: which pen floor each player stands on, checked a few times a second.
+	task.spawn(function()
+		while true do
+			task.wait(0.2)
+			for player in zoos do
+				local ok, err = pcall(walkInPlace, player)
+				if not ok then
+					warn(`[Zoo] Walk-in place failed for {player.Name}: {err}`)
+				end
+			end
+		end
+	end)
 	-- Income: every tick, each penned animal adds its income to its pen's pad.
 	task.spawn(function()
 		while true do

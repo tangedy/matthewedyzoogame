@@ -201,6 +201,94 @@ local function refreshWalkPrompts()
 	end
 end
 
+-- Auto-pickup: with empty hands, coming within AUTO_REACH of your washed animal (walking to
+-- the cache or waiting in it) picks it up, so a fresh wash lands straight in your hands. It
+-- goes up as WalkPickup and the server checks the distance. After you put one down, nothing
+-- is grabbed again until you have stepped clear of every waiting animal, so Put Down by the
+-- cache sticks. With every pen taken there's nowhere to put it, so nothing is grabbed.
+local AUTO_REACH = 6 -- studs from the animal's edge
+local AUTO_CHECK = 0.15
+local pensFull = false
+local autoHold = false
+local autoNextAt = 0
+local autoSentUntil = 0
+local animalRadius: { [Model]: number } = {}
+
+local function autoCandidates(mine: Instance): { Model }
+	local list: { Model } = {}
+	for model in walkPrompts do
+		if model.Parent and typeof(model:GetAttribute(WALK_PICKUP)) == "string" then
+			table.insert(list, model)
+		end
+	end
+	local cache = mine:FindFirstChild("Cache")
+	if cache and mine:GetAttribute("YardRevealed") == true then
+		for _, child in cache:GetChildren() do
+			if
+				child:IsA("Model")
+				and child.Name == "CachedAnimal"
+				and typeof(child:GetAttribute("AnimalId")) == "string"
+			then
+				table.insert(list, child)
+			end
+		end
+	end
+	return list
+end
+
+local function autoPickup()
+	local now = os.clock()
+	if now < autoNextAt then
+		return
+	end
+	autoNextAt = now + AUTO_CHECK
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local bays = Workspace:FindFirstChild("WashBays")
+	local mine = bays and myBay and bays:FindFirstChild(myBay)
+	if
+		carrying
+		or pensFull
+		or not root
+		or not mine
+		or player:GetAttribute("InCutscene") == true
+		or now < autoSentUntil
+	then
+		return
+	end
+	local best: Model?, bestGap = nil, math.huge
+	for _, model in autoCandidates(mine) do
+		local radius = animalRadius[model]
+		if not radius then
+			local size = model:GetExtentsSize()
+			radius = math.max(size.X, size.Z) * 0.5
+			animalRadius[model] = radius
+			model.AncestryChanged:Connect(function()
+				if not model.Parent then
+					animalRadius[model] = nil
+				end
+			end)
+		end
+		local offset = model:GetPivot().Position - root.Position
+		local gap = Vector2.new(offset.X, offset.Z).Magnitude - radius
+		if gap <= AUTO_REACH and gap < bestGap then
+			best, bestGap = model, gap
+		end
+	end
+	if not best then
+		autoHold = false
+		return
+	end
+	if autoHold then
+		return
+	end
+	local id = best:GetAttribute(WALK_PICKUP) or best:GetAttribute("AnimalId")
+	if typeof(id) == "string" then
+		autoSentUntil = now + 1
+		walkPickup:FireServer(id)
+	end
+end
+
 local function buildGui()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Zoo"
@@ -273,6 +361,10 @@ local function buildGui()
 end
 
 local function onCarry(info: Types.CarryInfo?)
+	if carrying and not info then
+		autoHold = true -- just put one down (or placed / sold it): wait until clear
+	end
+	autoSentUntil = 0
 	carrying = info ~= nil
 	applyPenPrompts()
 	refreshWalkPrompts()
@@ -350,6 +442,15 @@ function ZooController.init(initial: Types.InitialState)
 		end)
 		return set
 	end
+	local function applyZoo(summary: Types.ZooSummary?)
+		if summary then
+			pensFull = summary.Count >= summary.ZooSize
+		end
+	end
+	applyZoo(initial.Zoo)
+	Remotes.event("ZooChanged").OnClientEvent:Connect(applyZoo)
+	RunService.Heartbeat:Connect(autoPickup)
+
 	local gradients = tracked(UIStyle.RainbowTag)
 	local rings = tracked(UIStyle.RainbowRingTag)
 	RunService.RenderStepped:Connect(function()

@@ -5,8 +5,8 @@
 -- Touch: scrub. Put a finger on the free screen over an animal being washed and rub it, like
 -- a car wash game. The camera stays locked while that finger is down and the water goes
 -- wherever the finger is. A drag that starts off an animal turns the camera as usual. For a
--- new player's first few washes (GameConfig.Intro.SwipeHintWashes) a hand swipes over the
--- mud to show how.
+-- new player's first few washes (GameConfig.Intro.SwipeHintWashes), a hand over the mud shows
+-- how on every device once the animal has gone a few seconds without getting cleaner.
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -207,12 +207,21 @@ local bristles: ParticleEmitter
 local dribbleAttachment: Attachment?
 local fallbackNozzle: Attachment? = nil
 local reticle: Frame
--- Swipe hint: a hand rubbing over the mud, for a new player's first few washes on touch.
+-- Scrub hint: a hand over the mud, for a new player's first few washes, once the animal has
+-- sat ScrubHintIdleSeconds without getting cleaner.
 local swipeHint: Frame
 local swipeHand: TextLabel
+local swipeLabel: TextLabel
 local swipePatch: BasePart? = nil -- the patch it sits on, kept until it is clean
 local washesDone = 0 -- lifetime completed washes
 local SWIPE_SWING = 46 -- px each way
+local lastCleanAt = os.clock() -- the current animal last got cleaner (or its wash began)
+local lastProgress = 0
+local HINT_LOOK: { [string]: { Hand: string, Text: string } } = {
+	Touch = { Hand = "\u{1F446}", Text = "SWIPE THE DIRT!" },
+	KeyboardMouse = { Hand = "\u{1F446}", Text = "CLICK & HOLD ON THE DIRT!" },
+	Gamepad = { Hand = "\u{1F3AE}", Text = "AIM AT THE DIRT & HOLD R2!" },
+}
 
 type Drop = { frame: Frame, pos: Vector2, vel: Vector2, age: number, life: number, size: number }
 local dropLayer: Frame
@@ -641,7 +650,7 @@ local function buildReticle()
 	swipeHint = Instance.new("Frame")
 	swipeHint.Name = "SwipeHint"
 	swipeHint.AnchorPoint = Vector2.new(0.5, 0)
-	swipeHint.Size = UDim2.fromOffset(240, 120)
+	swipeHint.Size = UDim2.fromOffset(300, 120)
 	swipeHint.BackgroundTransparency = 1
 	swipeHint.Visible = false
 	swipeHint.Parent = gui
@@ -653,7 +662,7 @@ local function buildReticle()
 	swipeHand.Text = "\u{1F446}" -- pointing finger; its tip is the top edge
 	swipeHand.TextScaled = true
 	swipeHand.Parent = swipeHint
-	local swipeLabel = Instance.new("TextLabel")
+	swipeLabel = Instance.new("TextLabel")
 	swipeLabel.Name = "Label"
 	swipeLabel.AnchorPoint = Vector2.new(0.5, 1)
 	swipeLabel.Position = UDim2.fromScale(0.5, 1)
@@ -910,16 +919,21 @@ local function swipeTarget(camera: Camera, animal: Model): BasePart?
 	return best
 end
 
--- Over the mud while a new player's early wash waits on touch, until a finger is on it. The
--- fingertip rubs across the patch, the way the scrub works.
+-- Over the mud during a new player's early washes, once the animal has gone
+-- ScrubHintIdleSeconds without getting cleaner, until a finger is on it. Time in the cutscene
+-- or with the hose too weak doesn't count. On touch the fingertip rubs across the patch, the
+-- way the scrub works; on mouse and gamepad the hand taps on it.
 local function updateSwipeHint(locked: boolean)
+	local now = os.clock()
+	if locked or not washing or player:GetAttribute("CleanBlocked") == true then
+		lastCleanAt = now
+	end
 	local camera = Workspace.CurrentCamera
 	local animal = if washing and jobId and not locked and scrubTouch == nil then currentAnimal() else nil
 	local show = animal ~= nil
 		and camera ~= nil
-		and touchMode
 		and washesDone < GameConfig.Intro.SwipeHintWashes
-		and player:GetAttribute("CleanBlocked") ~= true
+		and now - lastCleanAt >= GameConfig.Intro.ScrubHintIdleSeconds
 	local patch = if show and animal and camera then swipeTarget(camera, animal) else nil
 	swipePatch = patch
 	local point = if patch and camera then camera:WorldToViewportPoint(patch.Position) else nil
@@ -927,11 +941,21 @@ local function updateSwipeHint(locked: boolean)
 	if not point then
 		return
 	end
+	local mode = UIPlatform.get().inputMode
+	local look = HINT_LOOK[mode] or HINT_LOOK.Touch
+	swipeHand.Text = look.Hand
+	swipeLabel.Text = look.Text
 	-- The fingertip (top of the hand) lands on the mud; the label sits below.
 	swipeHint.Position = UDim2.fromOffset(point.X, point.Y)
-	local swing = math.sin(os.clock() * 5)
-	swipeHand.Position = UDim2.new(0.5, swing * SWIPE_SWING, 0, 0)
-	swipeHand.Rotation = swing * 12
+	if mode == "Touch" then
+		local swing = math.sin(now * 5)
+		swipeHand.Position = UDim2.new(0.5, swing * SWIPE_SWING, 0, 0)
+		swipeHand.Rotation = swing * 12
+	else
+		local tap = math.abs(math.sin(now * 4))
+		swipeHand.Position = UDim2.new(0.5, 0, 0, tap * 14)
+		swipeHand.Rotation = 0
+	end
 end
 
 local function onHeartbeat()
@@ -1098,6 +1122,10 @@ local function applyBay(bay: Types.BaySnapshot?)
 	bayName = bay.BayName
 	if bay.JobId ~= jobId then
 		setHint(false)
+		lastProgress = 0
+	end
+	if bay.JobId ~= jobId or (bay.State == "Washing") ~= washing then
+		lastCleanAt = os.clock()
 	end
 	jobId = bay.JobId
 	washing = bay.State == "Washing"
@@ -1158,9 +1186,13 @@ function CleaningController.init(initial: Types.InitialState)
 		washesDone += 1
 	end)
 	Remotes.event("CleaningProgressChanged").OnClientEvent
-		:Connect(function(id: string, _progress: number, showHint: boolean)
+		:Connect(function(id: string, progress: number, showHint: boolean)
 			if id == jobId then
 				setHint(showHint)
+				if progress > lastProgress then
+					lastCleanAt = os.clock()
+				end
+				lastProgress = progress
 			end
 		end)
 	RunService.Heartbeat:Connect(onHeartbeat)
