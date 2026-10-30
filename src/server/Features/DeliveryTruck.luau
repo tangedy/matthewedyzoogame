@@ -1,6 +1,7 @@
 -- Delivery truck (TruckConfig): once the player owns the Garden Hose, every few minutes a truck
 -- drives down the dirt road, parks at the player's zoo for ParkSeconds carrying one animal a
--- rarity above what their hose can wash (fixed odds at the top tiers), then drives on.
+-- rarity above the rarest they own or their hose can wash (fixed odds at the top tiers), then
+-- drives on.
 -- Holding the prompt on the truck buys the animal for Robux through the Monetization feature:
 --   * when the truck parks, the offer is written to data.Extra.Truck.Offer (server-chosen),
 --   * the prompt fires Hooks "TruckBuyRequested" (player); Monetization prompts the product,
@@ -8,6 +9,7 @@
 --     Hooks "TruckPurchased" (player), which takes the animal off the truck and sends it away.
 -- Only the zoo's owner can buy from their truck.
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -60,10 +62,32 @@ local function hosePower(player: Player): number
 	return if data then GearLadder.power(data.ToolTier, data.ToolUpgrade) else GearLadder.power(1)
 end
 
--- The truck's rarity: one above the rarest this hose can wash, or the high-tier roll once
--- that is Farm God or better.
+-- The rarest tier the player has ever owned (data.Index records every species they have
+-- discovered, sold ones included), as a RarityConfig order. 0 when the index is empty.
+local function rarestOwnedOrder(player: Player): number
+	local data = PlayerDataService.get(player)
+	local best = 0
+	if not data then
+		return best
+	end
+	for key in data.Index do
+		local species = string.match(key, "^([^:]+)")
+		local def = species and AnimalConfig.Animals[species]
+		local rarity = def and RarityConfig.ByKey[def.Rarity]
+		if rarity and rarity.Order > best then
+			best = rarity.Order
+		end
+	end
+	return best
+end
+
+-- The truck's rarity: one above the higher of the rarest animal the player has ever owned and
+-- the rarest their hose can wash (capped at the top tier), or the high-tier roll once that is
+-- HighTierFrom or better.
 local function pickRarity(player: Player): string
-	local above = CleanPower.rarityAbove(hosePower(player))
+	local washable = CleanPower.maxWashable(hosePower(player))
+	local base = math.max(if washable then RarityConfig.ByKey[washable].Order else 0, rarestOwnedOrder(player))
+	local above = RarityConfig.List[math.clamp(base + 1, 1, #RarityConfig.List)].Key
 	if RarityConfig.ByKey[above].Order < RarityConfig.ByKey[TruckConfig.HighTierFrom].Order then
 		return above
 	end
@@ -465,6 +489,8 @@ local function visit(player: Player, bay: Model)
 	end
 	prompt.Enabled = true
 	truck.LeaveAt = os.clock() + TruckConfig.ParkSeconds
+	local visitId = HttpService:GenerateGUID(false)
+	Hooks.fire("TruckArrived", player, visitId)
 	-- No screen banner: the truck's own sign and the guide trail point the player at it.
 	local flash = false
 	while os.clock() < truck.LeaveAt and model.Parent do
@@ -482,6 +508,7 @@ local function visit(player: Player, bay: Model)
 		saved.Offer = nil
 	end
 	timer.Text = "BYE!"
+	Hooks.fire("TruckLeft", player, visitId, truck.Animal == nil)
 	driveTo(model, truckParts, park, leave, TruckConfig.DriveSeconds)
 	model:Destroy()
 	if trucks[player] == truck then

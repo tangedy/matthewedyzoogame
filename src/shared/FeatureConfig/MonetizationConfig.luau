@@ -4,7 +4,7 @@
 --
 -- Permanent skips are gone: no Forever auto-collect, no Fire-Hose game pass, no forever
 -- speed. Speed and Incredible Luck are consumables with absolute expiry timestamps.
--- The one permanent boost is 2x Cash Forever, priced as an impulse buy (3 Robux).
+-- The one permanent boost is 2x Cash Forever, priced as a premium pass (49 Robux).
 --
 -- Ids live in MonetizationIds (0 until the product exists). Robux prices here are for display only: Roblox charges whatever
 -- the product is set to on the website, so keep the two in sync when the real ids go in.
@@ -89,7 +89,7 @@ local products: { Product } = {
 	{
 		Key = "AutoCollect2h",
 		Id = 0,
-		Robux = 49,
+		Robux = 3,
 		DisplayName = "Auto-Collect",
 		Description = "Pens pay you for 30 min. Stacks.",
 		Tab = "Boosts",
@@ -113,7 +113,7 @@ local products: { Product } = {
 	{
 		Key = "CashSmall",
 		Id = 0,
-		Robux = 7, -- the cheapest buy in the game; one minute keeps bigger packs the better value
+		Robux = 7, -- the cheapest cash pack; one minute keeps bigger packs the better value
 		DisplayName = "Pile of Cash",
 		Description = "1 min of farm income.",
 		Tab = "Cash",
@@ -156,7 +156,7 @@ local products: { Product } = {
 	{
 		Key = "CleanNow",
 		Id = 0,
-		Robux = 39,
+		Robux = 49,
 		DisplayName = "Clean Now",
 		Description = "Wash a too-dirty animal now.",
 		Tab = "Boosts",
@@ -214,7 +214,7 @@ local passes: { Pass } = {
 	{
 		Key = "DoubleCash",
 		Id = 0,
-		Robux = 3,
+		Robux = 49,
 		DisplayName = "2x Cash Forever",
 		Description = "Double all cash you earn. Forever!",
 		Order = 1,
@@ -234,7 +234,7 @@ local passes: { Pass } = {
 -- One hidden product per step above the cheapest unwashable rarity. Roblox charges a
 -- fixed catalog price, so each step is its own developer product. Ids stay 0 until published.
 -- Epic through Secret is at most 4 steps above the next animal a hose cannot wash.
-local CLEAN_NOW_ROBUX = { 79, 149, 249, 399 } -- steps 1..4; step 0 is the CleanNow product above
+local CLEAN_NOW_ROBUX = { 99, 189, 299, 499 } -- steps 1..4; step 0 is the CleanNow product above
 for steps, robux in CLEAN_NOW_ROBUX do
 	table.insert(products, {
 		Key = `CleanNow{steps}`,

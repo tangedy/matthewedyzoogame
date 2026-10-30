@@ -2,7 +2,8 @@
 -- parks for a short while carrying one high-rarity animal, sold for Robux (MonetizationConfig
 -- product "TruckAnimal"). The animal goes to the cache as a paid animal (never pushed out).
 -- Trucks start after the second hose upgrade. Each one carries an animal one rarity above the
--- rarest the player's hose can wash; once that would be Farm God or better, the truck rolls
+-- higher of the rarest the player has ever owned (their index) and the rarest their hose can
+-- wash, capped at the top tier; once that would be HighTierFrom or better, the truck rolls
 -- HighTierChances instead and anything left over is HighTierFallback.
 
 return {

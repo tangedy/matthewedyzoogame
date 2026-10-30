@@ -62,17 +62,17 @@ $products = @(
 	@{ Key = "SuperSoapLarge"; Name = "Super Soap x3"; Price = 25; Description = "2x clean power for 30 min. Stacks." },
 	@{ Key = "CalmTreat"; Name = "Calm Treat"; Price = 15; Description = "Freeze patience for 60s." },
 	@{ Key = "LuckySoap"; Name = "Lucky Soap"; Price = 29; Description = "Next 5 walk-ins: rarer, more mutations." },
-	@{ Key = "AutoCollect2h"; Name = "Auto-Collect"; Price = 49; Description = "Pens pay you for 30 min. Stacks." },
+	@{ Key = "AutoCollect2h"; Name = "Auto-Collect"; Price = 3; Description = "Pens pay you for 30 min. Stacks." },
 	@{ Key = "SpeedBoost"; Name = "2x Speed"; Price = 16; Description = "Run 2x faster for 10 min. Stacks." },
 	@{ Key = "IncredibleLuck"; Name = "Incredible Luck"; Price = 79; Description = "Rare+ walk-ins far likelier for 10 min." },
 	@{ Key = "CashSmall"; Name = "Pile of Cash"; Price = 7; Description = "1 min of farm income." },
 	@{ Key = "CashMedium"; Name = "Bag of Cash"; Price = 75; Description = "20 min of farm income." },
 	@{ Key = "CashLarge"; Name = "Vault of Cash"; Price = 149; Description = "60 min of farm income." },
-	@{ Key = "CleanNow"; Name = "Clean Now"; Price = 39; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow1"; Name = "Clean Now +1"; Price = 79; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow2"; Name = "Clean Now +2"; Price = 149; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow3"; Name = "Clean Now +3"; Price = 249; Description = "Wash a too-dirty animal now." },
-	@{ Key = "CleanNow4"; Name = "Clean Now +4"; Price = 399; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow"; Name = "Clean Now"; Price = 49; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow1"; Name = "Clean Now +1"; Price = 99; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow2"; Name = "Clean Now +2"; Price = 189; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow3"; Name = "Clean Now +3"; Price = 299; Description = "Wash a too-dirty animal now." },
+	@{ Key = "CleanNow4"; Name = "Clean Now +4"; Price = 499; Description = "Wash a too-dirty animal now." },
 	@{ Key = "TruckAnimal"; Name = "Delivery Truck Animal"; Price = 199; Description = "The animal on your truck." },
 	@{ Key = "LimitedAxolotl"; Name = "Limited Axolotl"; Price = 1000; Description = "Limited Mythic. Only 1,000 ever." },
 	@{ Key = "OfflineDouble"; Name = "2x Offline"; Price = 25; Description = "Double your away earnings." },
@@ -84,7 +84,7 @@ $products = @(
 
 # Game passes (MonetizationConfig passes). Every one is put on sale, so it's on the Store page.
 $passes = @(
-	@{ Key = "DoubleCash"; Name = "2x Cash Forever"; Price = 3; Description = "Double all cash you earn. Forever!" },
+	@{ Key = "DoubleCash"; Name = "2x Cash Forever"; Price = 49; Description = "Double all cash you earn. Forever!" },
 	@{ Key = "VIPKeeper"; Name = "VIP Keeper"; Price = 399; Description = "+25% income forever and a VIP title." }
 )
 

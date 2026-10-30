@@ -70,5 +70,5 @@ for _, module in script.Parent.Features:GetChildren() do
 	end
 end
 
--- ReplicatedFirst.LoadingScreen stays up until this is set (or 20s pass). Local only.
+-- ReplicatedFirst.LoadingScreen (src/first) stays up until this is set (or 20s pass). Local only.
 Players.LocalPlayer:SetAttribute("ProfileReady", true)

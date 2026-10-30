@@ -5,13 +5,15 @@
 --   -> three gargantuan yards across the back.
 --
 -- Each bay exposes:
---   Approach, TurnIn, WashCorner, WashPosition, Queue2, Queue3, RoadReturn, Exit, StreetEnd
+--   Approach, TurnIn, DriveMouth, WashCorner, WashPosition, Queue2, Queue3, RoadReturn, Exit, StreetEnd
+--   (Queue2/Queue3 stand on Main Street's curb beside the driveway mouth)
 --   Spawn                          the owner's SpawnLocation
 --   Showcase.SignPost.Sign.BayLabel   owner name over the podium (Income.IncomeLabel, ShowcaseSlot)
 --   UpgradeStation.Counter         hose shop prompt
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
+--                                  (every tier's spot is the arch behind the wash spot)
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
 --   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
 --   RobuxKiosk{Key}[Gear].Counter  single-item Robux stands around the plot (RobuxKioskPrompt)
@@ -47,10 +49,13 @@ local ROAD_D = -8
 local DRIVE_ARM = 14
 local YARD_D = 38
 -- The wash spot is dead centre on the cross piece, in line with the walkway, the spawn and
--- the auto-wash pad. The line waits up the wash arm and only the front animal walks round
--- the corner (WashCorner) onto it. 2 and 3 are the queue's depths on the arm.
-local QUEUE_DEPTH = { YARD_D, 24, 8 }
-local WASH_LAT = -DRIVE_ARM -- the wash arm, where the line waits
+-- the auto-wash pad. The line waits on Main Street's curb beside the driveway mouth, facing
+-- along the street toward it; the front animal walks in at DriveMouth, up the wash arm and
+-- round the corner (WashCorner) onto the spot.
+local QUEUE_DEPTH = { YARD_D }
+local CURB_D = -3 -- just off the road edge, clear of the running lane (ROAD_D)
+local QUEUE_STEP = 14 -- curb slot to curb slot, the same gap arrivals spawn at on the street
+local WASH_LAT = -DRIVE_ARM -- the wash arm, the way in to the wash
 local WASH_SPOT_LAT = 0
 local CACHE_LAT = DRIVE_ARM
 local SOLD_LAT = CACHE_LAT
@@ -72,8 +77,11 @@ local WALK_HALF = GameConfig.SidewalkWidth / 2
 local PEN_SETBACK = 4
 local PEN_INNER = WALK_HALF + PEN_SETBACK
 local PEN_GAP = 2 -- between pens on one side
-local GROUP_GAP = 6 -- between unlock groups; the next group's unlock stand stands in it
+local GROUP_GAP = 6 -- between unlock groups
 local FIRST_PEN = PLAZA_DEPTH + PLAZA_HALF_DEPTH + 2
+-- The barn-upgrade arch spans the plaza mouth between the wash spot and the spawn; its counter
+-- faces the wash from the cross piece's back edge.
+local UNLOCK_DEPTH = YARD_D + 9
 
 -- Pen sizes by class: depth along the walkway, lateral away from it.
 local STALL = Vector2.new(10, 10)
@@ -870,8 +878,8 @@ local function inwardLook(plot: PlotLayout.PlotFrame, lateral: number): Vector3
 	return if lateral >= 0 then -plot.Right else plot.Right
 end
 
--- An unlock stand: a counter across the walkway in front of the next locked group, with the
--- price over it. ZooService moves it to that group's UnlockSpot after every purchase.
+-- An unlock stand: an arch over the plaza mouth behind the wash with a counter facing the wash,
+-- and the next upgrade's price over it. ZooService pivots it to that tier's UnlockSpot.
 local function buildExpandStand(zoo: Folder, at: CFrame)
 	local stand = Instance.new("Model")
 	stand.Name = "ExpandStand"
@@ -1037,15 +1045,17 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		return cursor
 	end
 
-	local function unlockSpot(tier: number, depth: number)
-		local pos = PlotLayout.point(plot, depth, 0, 0)
+	-- Every tier's stand spot is the same arch over the plaza mouth, right behind the wash spot,
+	-- so the next upgrade's price is in view after every wash.
+	local function unlockSpot(tier: number)
+		local pos = PlotLayout.point(plot, UNLOCK_DEPTH, 0, 0)
 		makeMarker("UnlockSpot" .. tier, CFrame.lookAt(pos, pos + plot.Look), zoo)
 	end
 
 	local cursor = FIRST_PEN
 	for _, group in PEN_GROUPS do
 		if group.Tier > 0 then
-			unlockSpot(group.Tier, cursor - GROUP_GAP / 2)
+			unlockSpot(group.Tier)
 		end
 		local left = row(cursor, 1, group.Left)
 		local right = row(cursor, -1, group.Right)
@@ -1147,15 +1157,20 @@ local function buildWash(plot: PlotLayout.PlotFrame, bay: Model)
 	makeMarker("Approach", CFrame.lookAt(startPos, startPos + plot.Right), bay)
 	local endPos = Vector3.new(lane.X, FLOOR_Y, -inZ)
 	makeMarker("StreetEnd", CFrame.lookAt(endPos, endPos + plot.Right), bay)
-	-- On the street in line with the wash arm, in the same lane as Approach: arrivals run
-	-- along the road, turn here, and go straight up the arm instead of cutting the corner.
-	local turn = PlotLayout.point(plot, ROAD_D, WASH_LAT, FLOOR_Y)
-	makeMarker("TurnIn", CFrame.lookAt(turn, turn + plot.Back), bay)
+	-- The line waits on the curb upstream of the driveway mouth, facing along the street toward
+	-- it. Arrivals run the lane like Approach, step out at TurnIn (one slot behind the back of
+	-- the line) and walk forward along the curb to their slot.
+	local turn = PlotLayout.point(plot, ROAD_D, WASH_LAT - 3 * QUEUE_STEP, FLOOR_Y)
+	makeMarker("TurnIn", CFrame.lookAt(turn, turn + plot.Right), bay)
+	local mouth = PlotLayout.point(plot, CURB_D, WASH_LAT, FLOOR_Y)
+	makeMarker("DriveMouth", CFrame.lookAt(mouth, mouth + plot.Back), bay)
 	local corner = PlotLayout.point(plot, YARD_D, WASH_LAT, FLOOR_Y)
 	makeMarker("WashCorner", CFrame.lookAt(corner, corner - plot.Right * WASH_LAT), bay)
 	makeMarker("WashPosition", PlotLayout.inbound(plot, QUEUE_DEPTH[1], WASH_SPOT_LAT, FLOOR_Y), bay)
-	makeMarker("Queue2", PlotLayout.inbound(plot, QUEUE_DEPTH[2], WASH_LAT, FLOOR_Y), bay)
-	makeMarker("Queue3", PlotLayout.inbound(plot, QUEUE_DEPTH[3], WASH_LAT, FLOOR_Y), bay)
+	for slot = 2, 3 do
+		local pos = PlotLayout.point(plot, CURB_D, WASH_LAT - (slot - 1) * QUEUE_STEP, FLOOR_Y)
+		makeMarker("Queue" .. slot, CFrame.lookAt(pos, pos + plot.Right), bay)
+	end
 	makeMarker("Entrance", alongRoad(ROAD_D, 0), bay)
 	-- Where the cross piece meets the cache arm. Animals leaving the wash turn here.
 	local cacheTurn = PlotLayout.point(plot, YARD_D, CACHE_LAT, FLOOR_Y)
@@ -1265,7 +1280,7 @@ local function buildShowcase(plot: PlotLayout.PlotFrame, bay: Model)
 end
 
 -- Robux kiosks: single-item stands beside the two plaza booths, all facing the plaza.
--- The ROBUX SHOP row is on the wash side, so 2x Cash (the 3 Robux impulse buy) stands at its
+-- The ROBUX SHOP row is on the wash side, so 2x Cash (the one forever boost) stands at its
 -- road end, the kiosk nearest the wash where players spend most of their time. The gear-shop
 -- side gets cash where players come to afford a hose, and 2x Cash again at the walkway end,
 -- seen on every trip to the pens. Everything else stays in the shop panel.

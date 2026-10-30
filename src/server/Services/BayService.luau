@@ -1,8 +1,9 @@
 -- Bay assignment, ownership, and the per-bay animal lifecycle:
 --   Empty -> Arriving -> Washing -> Completing -> Departing -> Empty
 -- Bays are built when a player is given a random free plot and destroyed when they leave.
--- Three animals stand on the U: two wait up the wash arm and the front one walks round the
--- corner (WashCorner) to the wash spot in the middle of the drive. Only that one is washed. When its wash finishes it
+-- Three animals in line: two wait on Main Street's curb beside the driveway mouth and the front
+-- one walks in (DriveMouth), up the wash arm and round the corner (WashCorner) to the wash spot
+-- in the middle of the drive. Only that one is washed. When its wash finishes it
 -- celebrates and walks into the cache on its own while the line steps forward, and a new
 -- animal joins at the back.
 --
@@ -71,6 +72,7 @@ type Bay = {
 	QueueMarks: { BasePart },
 	Approach: BasePart,
 	TurnIn: BasePart,
+	DriveMouth: BasePart?,
 	WashCorner: BasePart?,
 	RoadReturn: BasePart,
 	Line: { Arrival },
@@ -238,11 +240,19 @@ local function rollArrival(bay: Bay, owner: Player): Arrival
 	}
 end
 
--- The walk to line spot `index`: the wash spot is round the corner from the arm, so the
--- front animal goes by WashCorner instead of across the grass.
+-- The walk to line spot `index`: the rest of the line waits on the curb, so the front animal
+-- turns in at DriveMouth, goes up the wash arm and round WashCorner instead of across the grass.
 local function routeTo(bay: Bay, index: number, target: CFrame): { CFrame }
-	if index == 1 and bay.WashCorner then
-		return { bay.WashCorner.CFrame, target }
+	if index == 1 then
+		local route = {}
+		if bay.DriveMouth then
+			table.insert(route, bay.DriveMouth.CFrame)
+		end
+		if bay.WashCorner then
+			table.insert(route, bay.WashCorner.CFrame)
+		end
+		table.insert(route, target)
+		return route
 	end
 	return { target }
 end
@@ -251,7 +261,7 @@ local function reveal(bay: Bay, arrival: Arrival)
 	AnimalService.revealArrival(arrival.Model, arrival.AnimalKey, arrival.Mutation, bay.Model)
 end
 
--- Runs a new animal down Main Street to the driveway, turns in, and up the wash arm to
+-- Runs a new animal down Main Street, steps it onto the curb at TurnIn, and walks it to
 -- arrival.Target. The line can move the target while it is still on the street (stepLine).
 local function runIn(bay: Bay, owner: Player, arrival: Arrival)
 	arrival.Token += 1
@@ -316,7 +326,7 @@ local function stepLine(bay: Bay, owner: Player)
 		if arrival.OnStreet then
 			continue
 		end
-		arrival.Token += 1 -- an unfinished run-in up the arm stops; this walk takes over
+		arrival.Token += 1 -- an unfinished run-in stops; this walk takes over
 		table.insert(moves, function()
 			AnimalService.walkCorners(arrival.Model, routeTo(bay, index, target), 1.2)
 		end)
@@ -455,7 +465,7 @@ local function runOneJob(bay: Bay, owner: Player)
 	-- An animal this hose can't wash (or a soap-only one without Super Soap): the "too dirty"
 	-- prompt is up. Analytics counts a player's first encounters.
 	if not front.Scripted and (needsPurchase or CleaningService.isBlocked(owner)) then
-		Hooks.fire("TooDirtyEncounter", owner, animalKey)
+		Hooks.fire("TooDirtyEncounter", owner, animalKey, info)
 	end
 	-- Clean Now bought ahead of this animal: it's already paid for, so skip the wait.
 	-- The bay thread hasn't yielded, so the finish must not try to resume it.
@@ -589,6 +599,7 @@ local function makeBay(index: number): Bay
 		QueueMarks = { wash, queue2, queue3 },
 		Approach = model:FindFirstChild("Approach") :: BasePart,
 		TurnIn = model:FindFirstChild("TurnIn") :: BasePart,
+		DriveMouth = model:FindFirstChild("DriveMouth") :: BasePart?,
 		WashCorner = model:FindFirstChild("WashCorner") :: BasePart?,
 		RoadReturn = model:FindFirstChild("RoadReturn") :: BasePart,
 		Line = {},

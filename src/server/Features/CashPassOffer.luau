@@ -1,4 +1,4 @@
--- Pops the 2x Cash Forever early-access offer (3 Robux) right after the player washes their
+-- Pops the 2x Cash Forever early-access offer right after the player washes their
 -- first Legendary (or rarer) animal, when a doubled payout feels best. Once per player, ever:
 -- the flag lives in data.Extra.CashPassOffered. Owners of the pass never see it. The client
 -- (MonetizationController) draws the pop-up; buying goes through MonetizationBuy as usual.

@@ -14,7 +14,10 @@
 --   "CashCollected"  (player, amount)                  pen cash collected from a pad
 --   "YardRevealed"   (player)                          the opening washes are done; pens and cache appear
 --   "CutsceneFinished" (player)                        the spawn cutscene ended and was saved as seen
---   "TooDirtyEncounter" (player, species)              a walk-in the player's gear can't wash reached the wash
+--   "TooDirtyEncounter" (player, species, info: WashInfo) a walk-in the player's gear can't wash reached the wash
+--   "CleanNowBought" (player)                          a Clean Now product was granted (before it cleans anything)
+--   "TruckArrived"   (player, visitId)                 the delivery truck parked with its offer
+--   "TruckLeft"      (player, visitId, sold)           the truck drove off; sold = its animal was bought
 --   "AnimalSold"     (player, species, mutation, value)
 --   "IncomeTick"     (player, amount)                  cash added to pads this tick
 --   "ToolPurchased"  (player, tier, name)              the next hose was bought (cash or Robux)

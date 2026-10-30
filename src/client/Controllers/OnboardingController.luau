@@ -295,7 +295,7 @@ local function gearNudge(): string?
 	return `UPGRADE YOUR {string.upper(nextStep.Name)}! WASH FASTER`
 end
 
--- The barn stand's counter (it moves to the next locked group as barns are bought).
+-- The barn stand's counter, on the arch behind the wash spot.
 local function barnCounter(): BasePart?
 	local bay = bayModel()
 	local zoo = bay and bay:FindFirstChild("Zoo")

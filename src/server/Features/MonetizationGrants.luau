@@ -286,6 +286,7 @@ function MonetizationGrants.product(
 		return true, `Auto-Collect · {clock(left)}`
 	elseif kind == "CleanNow" then
 		local paidSteps = product.CleanSteps or 0
+		Hooks.fire("CleanNowBought", player) -- before the grant, which may finish the wash
 		if CleaningService.grantCleanNow(player, paidSteps) then
 			return true, "Cleaned!"
 		end

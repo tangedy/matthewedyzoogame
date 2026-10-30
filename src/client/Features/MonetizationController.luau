@@ -527,7 +527,7 @@ local function buildGui()
 	passText.Position = UDim2.new(0.5, 0, 0, 144)
 	passText.Size = UDim2.new(1, -24, 0, 44)
 	passText.TextWrapped = true
-	passText.Text = `{pass.Description} Only {pass.Robux} Robux!`
+	passText.Text = `{pass.Description} Every wash, every pen.`
 	passText.ZIndex = 22
 	passText.Parent = passOffer
 	UIStyle.text(passText, nil, nil, 1.5)
@@ -553,7 +553,7 @@ local function buildGui()
 	passBuy.Position = UDim2.new(0.5, 0, 1, -10)
 	passBuy.Size = UDim2.new(1, -24, 0, 48)
 	passBuy.BackgroundColor3 = UIStyle.Colors.Robux
-	passBuy.Text = `ONLY R$ {pass.Robux}`
+	passBuy.Text = `BUY R$ {pass.Robux}`
 	passBuy.ZIndex = 22
 	passBuy.Parent = passOffer
 	UIStyle.text(passBuy)
