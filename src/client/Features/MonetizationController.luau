@@ -118,17 +118,6 @@ local function pill(order: number, color: Color3): TextLabel
 	return label
 end
 
-local function setPill(label: TextLabel, text: string?)
-	local wasVisible = label.Visible
-	label.Visible = text ~= nil
-	if text then
-		label.Text = text
-		if not wasVisible then
-			pop(label:FindFirstChildOfClass("UIScale") :: UIScale, 0.5, 0.4)
-		end
-	end
-end
-
 local function buffGroup(key: string): Janitor.Janitor
 	local janitor = buffJanitors[key]
 	if not janitor then
@@ -303,27 +292,27 @@ end
 -- Kiosk icons: WorldBuilder leaves an empty KioskIcon billboard over each kiosk's sign.
 local kioskIcons: { [BillboardGui]: string } = {}
 
-local function fillKioskIcon(gui: BillboardGui)
-	local key = gui:GetAttribute("ProductKey")
-	if typeof(key) ~= "string" or kioskIcons[gui] then
+local function fillKioskIcon(billboard: BillboardGui)
+	local key = billboard:GetAttribute("ProductKey")
+	if typeof(key) ~= "string" or kioskIcons[billboard] then
 		return
 	end
-	kioskIcons[gui] = key
-	Icons.make(MonetizationShop.iconFor(key), gui, { outline = 3 })
-	gui.Enabled = not state.Passes[key]
-	gui.AncestryChanged:Connect(function()
-		if not gui:IsDescendantOf(Workspace) then
-			kioskIcons[gui] = nil
+	kioskIcons[billboard] = key
+	Icons.make(MonetizationShop.iconFor(key), billboard, { outline = 3 })
+	billboard.Enabled = not state.Passes[key]
+	billboard.AncestryChanged:Connect(function()
+		if not billboard:IsDescendantOf(Workspace) then
+			kioskIcons[billboard] = nil
 		end
 	end)
 end
 
 -- An owned pass's kiosks go quiet: no icon, no prompt.
 local function refreshKiosks()
-	for gui, key in kioskIcons do
+	for billboard, key in kioskIcons do
 		local owned = state.Passes[key] == true
-		gui.Enabled = not owned
-		local station = gui:FindFirstAncestorOfClass("Model")
+		billboard.Enabled = not owned
+		local station = billboard:FindFirstAncestorOfClass("Model")
 		local counter = station and station:FindFirstChild("Counter")
 		local prompt = counter and counter:FindFirstChild("RobuxKioskPrompt")
 		if prompt and prompt:IsA("ProximityPrompt") then

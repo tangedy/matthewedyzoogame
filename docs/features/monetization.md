@@ -30,7 +30,7 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id> -DryRun
    powershell -ExecutionPolicy Bypass -File tools/create-products.ps1 -UniverseId <id>
    ```
-   It creates the 23 developer products and the game passes (2x Cash Forever 3, VIP Keeper 399), reusing any that already exist by name, and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`. Passes are put on sale, so they show on the experience's Store page.
+   It creates the 23 developer products and the game passes (2x Cash Forever 49, VIP Keeper 399), reusing any that already exist by name, and writes their ids into `src/shared/FeatureConfig/MonetizationIds.luau`. Passes are put on sale, so they show on the experience's Store page.
 3. Give each game pass an icon under Monetization > Passes (the script makes them without one).
 4. Publish. Roblox charges the price set on the product; keep `Robux` in `MonetizationConfig` matching so the shop shows the right number. A plain re-run never changes a product that already exists; add `-Update` to push the script's names, prices and descriptions onto existing products (and put them on sale).
 5. Game Settings > Security: **Enable Studio Access to API Services** must be on (receipts save through DataStores).
@@ -42,10 +42,10 @@ Every product and pass ships with id 0, which live servers treat as "Not on sale
 | Key | Type | Robux | Effect |
 | --- | --- | --- | --- |
 | `CalmTreat` | Product | 15 | `Hooks.fire("CalmTreat", player, 60)`. The Tension feature freezes patience. Only sold while a wash is in progress (otherwise it would do nothing). |
-| `AutoCollect2h` | Product | 49 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Also sold at its own kiosk in the Robux row. |
+| `AutoCollect2h` | Product | 3 | Pens collect themselves for 30 minutes of play. Time stacks up to 2 hours. Also sold at its own kiosk in the Robux row. |
 | `SpeedBoost` | Product | 16 | 2x walk speed for 10 minutes. Stacks up to 4 hours. |
 | `CashSmall` / `CashMedium` / `CashLarge` | Product | 7 / 75 / 149 | `max(Floor, income/s * 60 * Minutes)` with Minutes 1 / 20 / 60, capped at `CapFraction` (3% / 35% / 75%) of the next hose's price, so a pack can never skip a tool tier. Bigger packs are better value per Robux. The shop shows the current amount. |
-| `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 39 / 79 / 149 / 249 / 399 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
+| `CleanNow`, `CleanNow1`–`CleanNow4` | Product, hidden | 49 / 99 / 189 / 299 / 499 | Washes an animal the hose can't, priced by how many rarity steps it is above the hose. Offered on the "too dirty" prompt. |
 | `HoseTier2`–`HoseTier5` | Product, hidden | 19 / 29 / 99 / 249 | Exactly the next hose (Scrub Brush, Garden Hose, Power Washer, Foam Cannon). Never a skip. The Foam Cannon costs more than Vault of Cash so the cash packs stay worth buying. |
 | `TruckAnimal` | Product, hidden | 199 | The animal on the Delivery Truck (DeliveryTruck feature). |
 | `OfflineDouble` | Product, hidden | 25 | Welcome-back only: doubles the offline payout already on the pads. |

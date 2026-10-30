@@ -377,6 +377,7 @@ local function unwashableResolved(player: Player, info: Hooks.WashInfo?, outcome
 		return
 	end
 	open[info.JobId] = nil
+	cleanNowPaid[player] = nil -- a skipped encounter must not carry its purchase to the next one
 	encounterStep(player, UNWASHABLE, encounter.Id, 2, "Resolved")
 	local ok, err = pcall(function()
 		AnalyticsService:LogCustomEvent(player, "UnwashableOutcome", 1, {
@@ -547,7 +548,6 @@ function Analytics.init()
 		local open = encounters[player]
 		if open and typeof(info) == "table" and open[info.JobId] then
 			unwashableResolved(player, info, if cleanNowPaid[player] then "Bought" else "GearUp")
-			cleanNowPaid[player] = nil
 		end
 		logStep(player, 4)
 		checkFirstSession(player)

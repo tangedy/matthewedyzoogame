@@ -1867,8 +1867,8 @@ function ZooService.attach(player: Player, bay: Model)
 				if who ~= player or zoo.CarriedId then
 					return
 				end
-				local data = PlayerDataService.get(player)
-				local occupants = data and animalsInPen(data, i)
+				local current = PlayerDataService.get(player)
+				local occupants = current and animalsInPen(current, i)
 				local occupant = occupants and occupants[slot]
 				if occupant then
 					social().togglePet(player, occupant.Id)

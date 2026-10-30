@@ -69,7 +69,6 @@ local PINK = Color3.fromRGB(255, 90, 200)
 local BLUE = Color3.fromRGB(80, 190, 255)
 local GREEN = Color3.fromRGB(90, 220, 110)
 local GOLD = Color3.fromRGB(255, 200, 40)
-local PURPLE = Color3.fromRGB(170, 90, 255)
 local RED = Color3.fromRGB(255, 80, 80)
 local ORANGE = Color3.fromRGB(255, 140, 40)
 

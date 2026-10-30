@@ -123,13 +123,13 @@ local STAT_DETAIL = {
 
 local function refreshStats()
 	for kind, row in statRows do
-		local level = statLevels[kind] or 0
+		local statLevel = statLevels[kind] or 0
 		local max = StatUpgrades.maxLevel(kind)
-		local now = StatUpgrades.multiplier(kind, level)
-		local price = StatUpgrades.nextPrice(kind, level)
-		row.Title.Text = `{StatUpgrades.Tracks[kind].Name} · Lv {level}/{max}`
+		local now = StatUpgrades.multiplier(kind, statLevel)
+		local price = StatUpgrades.nextPrice(kind, statLevel)
+		row.Title.Text = `{StatUpgrades.Tracks[kind].Name} · Lv {statLevel}/{max}`
 		if price then
-			local nextMult = StatUpgrades.multiplier(kind, level + 1)
+			local nextMult = StatUpgrades.multiplier(kind, statLevel + 1)
 			row.Detail.Text = `{CleanPower.format(now)}x → {CleanPower.format(nextMult)}x {STAT_DETAIL[kind]}`
 			row.Buy.Text = UIStyle.formatMoney(price)
 			local affordable = coins >= price

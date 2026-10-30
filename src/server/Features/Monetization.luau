@@ -23,7 +23,6 @@ local Workspace = game:GetService("Workspace")
 
 local AnimalConfig = require(ReplicatedStorage.Shared.AnimalConfig)
 local MonetizationConfig = require(ReplicatedStorage.Shared.FeatureConfig.MonetizationConfig)
-local RarityConfig = require(ReplicatedStorage.Shared.RarityConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Services = script.Parent.Parent.Services
 local CleaningService = require(Services.CleaningService)
