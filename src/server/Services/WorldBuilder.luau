@@ -13,7 +13,7 @@
 --   Cache.Slot{i}                  where washed animals wait (PickupPrompt, SellPrompt)
 --   Zoo.Pen{i}                     Floor, Slot, GatePost.PenPrompt, CollectPad (+ Cash label)
 --   Zoo.ExpandStand.ExpandCounter  barn upgrade; ZooService moves it to Zoo.UnlockSpot{tier}
---                                  (every tier's spot is the arch behind the wash spot)
+--   Zoo.ExpandStand.BuyPad         step-on pad that buys the same upgrade
 --   GearSpot / TruckSpot           where StationProps parks the tier's gear and the fire truck
 --   RobuxShop.Counter              Robux shop prompt (opens the shop panel, Monetization)
 --   RobuxKiosk{Key}[Gear].Counter  single-item Robux stands around the plot (RobuxKioskPrompt)
@@ -77,11 +77,8 @@ local WALK_HALF = GameConfig.SidewalkWidth / 2
 local PEN_SETBACK = 4
 local PEN_INNER = WALK_HALF + PEN_SETBACK
 local PEN_GAP = 2 -- between pens on one side
-local GROUP_GAP = 6 -- between unlock groups
+local GROUP_GAP = 6 -- between unlock groups; the next group's unlock stand stands in it
 local FIRST_PEN = PLAZA_DEPTH + PLAZA_HALF_DEPTH + 2
--- The barn-upgrade arch spans the plaza mouth between the wash spot and the spawn; its counter
--- faces the wash from the cross piece's back edge.
-local UNLOCK_DEPTH = YARD_D + 9
 
 -- Pen sizes by class: depth along the walkway, lateral away from it.
 local STALL = Vector2.new(10, 10)
@@ -878,8 +875,8 @@ local function inwardLook(plot: PlotLayout.PlotFrame, lateral: number): Vector3
 	return if lateral >= 0 then -plot.Right else plot.Right
 end
 
--- An unlock stand: an arch over the plaza mouth behind the wash with a counter facing the wash,
--- and the next upgrade's price over it. ZooService pivots it to that tier's UnlockSpot.
+-- An unlock stand: a counter across the walkway in front of the next locked group, with the
+-- price over it. ZooService moves it to that group's UnlockSpot after every purchase.
 local function buildExpandStand(zoo: Folder, at: CFrame)
 	local stand = Instance.new("Model")
 	stand.Name = "ExpandStand"
@@ -1004,6 +1001,17 @@ local function buildExpandStand(zoo: Folder, at: CFrame)
 	label.Name = "NextLabel"
 	label.TextWrapped = true
 	makePrompt("ExpandPrompt", "Expand Farm", 0.5, counter).ObjectText = "Farm Upgrade"
+	-- Stepping on the pad in front of the counter buys the upgrade too (ZooService).
+	local pad = makePart({
+		Name = "BuyPad",
+		Size = Vector3.new(6, 0.3, 3.5),
+		CFrame = at * CFrame.new(0, 0.3, -5.6),
+		Color = gold,
+		Material = Enum.Material.Neon,
+		CanCollide = false,
+		Parent = stand,
+	})
+	billboardLabel(pad, "STEP TO BUY", Vector3.new(0, 1.6, 0), Vector2.new(150, 30), gold)
 	stand.PrimaryPart = counter
 	stand.WorldPivot = at
 	stand.Parent = zoo
@@ -1045,17 +1053,15 @@ local function buildZoo(plot: PlotLayout.PlotFrame, bay: Model)
 		return cursor
 	end
 
-	-- Every tier's stand spot is the same arch over the plaza mouth, right behind the wash spot,
-	-- so the next upgrade's price is in view after every wash.
-	local function unlockSpot(tier: number)
-		local pos = PlotLayout.point(plot, UNLOCK_DEPTH, 0, 0)
+	local function unlockSpot(tier: number, depth: number)
+		local pos = PlotLayout.point(plot, depth, 0, 0)
 		makeMarker("UnlockSpot" .. tier, CFrame.lookAt(pos, pos + plot.Look), zoo)
 	end
 
 	local cursor = FIRST_PEN
 	for _, group in PEN_GROUPS do
 		if group.Tier > 0 then
-			unlockSpot(group.Tier)
+			unlockSpot(group.Tier, cursor - GROUP_GAP / 2)
 		end
 		local left = row(cursor, 1, group.Left)
 		local right = row(cursor, -1, group.Right)

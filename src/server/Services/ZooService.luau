@@ -57,6 +57,7 @@ type Zoo = {
 	ShowcaseModel: Model?,
 	Cleaner: Janitor.Janitor,
 	PadDebounce: { [number]: number },
+	BuyPadDebounce: number,
 }
 
 local ZooService = {}
@@ -1786,6 +1787,7 @@ function ZooService.attach(player: Player, bay: Model)
 		CarryModel = nil,
 		Cleaner = Janitor.new(),
 		PadDebounce = {},
+		BuyPadDebounce = 0,
 	}
 	zoos[player] = zoo
 	local data = PlayerDataService.get(player)
@@ -1900,6 +1902,19 @@ function ZooService.attach(player: Player, bay: Model)
 	if expandPrompt then
 		connect(expandPrompt.Triggered, function(who: Player)
 			if who == player then
+				expand(player)
+			end
+		end)
+	end
+	-- Touched keeps firing while the player walks about on the pad, so one try every 2s; a
+	-- player short on cash gets one "Need $X" per step, not a stream of them.
+	local buyPad = zooFolder and zooFolder:FindFirstChild("BuyPad", true) :: BasePart?
+	if buyPad then
+		connect(buyPad.Touched, function(hit: BasePart)
+			local character = player.Character
+			local now = os.clock()
+			if character and hit:IsDescendantOf(character) and zoo.BuyPadDebounce <= now then
+				zoo.BuyPadDebounce = now + 2
 				expand(player)
 			end
 		end)
